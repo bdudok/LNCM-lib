@@ -1,5 +1,7 @@
 import os
 from matplotlib import pyplot as plt
+import numpy as np
+import pandas as pd
 from TreadmillRead import data_import, session_plot, Treadmill
 
 drive = '/Users/u247640/Library/CloudStorage/OneDrive-BaylorCollegeofMedicine/_RawData/'
@@ -24,4 +26,5 @@ prefix = 'Test_move_full_laps-2023-04-17-184123'
 #
 # session_plot.play_session(path + prefix + '.txt')
 
-t = Treadmill(path, prefix)
+self = t = Treadmill(path, prefix)
+d = t.d
