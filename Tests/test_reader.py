@@ -2,7 +2,7 @@ import os
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
-from TreadmillRead import data_import, session_plot, Treadmill
+from Proc2P.Treadmill.TreadmillRead import data_import, session_plot, Treadmill
 
 drive = '/Users/u247640/Library/CloudStorage/OneDrive-BaylorCollegeofMedicine/_RawData/'
 
