@@ -1,15 +1,12 @@
 import copy
 from sklearn.metrics import mutual_info_score
-from BehaviorSession import BehaviorSession
-from LoadPolys import FrameDisplay, LoadPolys
-from Firing import Firing
-from Quad import SplitQuad
-from Batch_Utils import mad_based_outlier
-from Ripples import Ripples
-import time
-from EyeTracking import load_mikko_trace
-from scipy import stats
+from .LoadPolys import FrameDisplay
+from .Batch_Utils import mad_based_outlier
 
+import time
+
+# very legacy
+# from EyeTracking import load_mikko_trace
 
 class ImagingSession(object):
     def __init__(self, prefix, tag=None, norip=False, no_tdml=False, opath='.', ch=0, ephys_channels=(1, 1),
@@ -1422,44 +1419,3 @@ class ImagingSession(object):
             return [self.timetoframe(t) for t in self.bdat.get_events(pin=pin)]
         else:
             return []
-
-
-class F(object):
-    def __init__(self, basepath, name, vs, dumpy=True):
-        '''Creates tab separated output file. Provide column names separated by comma.
-        If dumpy, force writes each line to disk, otherwise writes everything at closing.'''
-        self.dumpy = dumpy
-        if not '.' in name:
-            name += '.txt'
-        self.f = open(basepath + name, 'w')
-        self.fields = vs.split(',')
-        self.header = vs.replace(',', '\t')
-        self.f.write(self.header + '\n')
-        self.s = ''
-
-    def w(self, vs):
-        '''Adds a tab separated line from list of values'''
-        self.s += '\t'.join(str(v) for v in vs) + '\n'
-        if self.dumpy:
-            self.dump()
-
-    def dump(self):
-        self.f.write(self.s)
-        self.f.flush()
-        os.fsync(self.f.fileno())
-        self.s = ''
-
-    def cl(self):
-        '''Write to disc and close'''
-        self.f.write(self.s)
-        self.f.close()
-
-
-class f(F):
-    pass
-
-
-if __name__ == '__main__':
-    os.chdir('G://Barna//ecb//')
-    prefix = 'ecb_122_101'
-    a = ImagingSession(prefix, norip=True, ch='Both')

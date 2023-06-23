@@ -1,10 +1,7 @@
-import numpy, scipy, os, pandas
-from matplotlib import pyplot as plt
 from scipy.signal import bessel, hilbert, filtfilt, decimate, sosfiltfilt
 from scipy.io import savemat
 from datetime import datetime
 from matplotlib.widgets import RectangleSelector
-from Batch_Utils import strip_ax
 from sklearn import cluster
 
 class Event(object):

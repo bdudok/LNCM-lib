@@ -8,4 +8,4 @@ from matplotlib import pyplot as plt
 import pandas as pd
 from scipy import stats
 
-from Legacy.MyColorLib import get_color
+from .Legacy.MyColorLib import get_color

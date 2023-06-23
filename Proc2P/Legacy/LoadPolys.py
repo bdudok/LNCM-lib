@@ -1,12 +1,8 @@
 import matplotlib.path as mplpath
-from sbxreader import *
-import numpy
-import scipy
 import cv2
 import copy, math
 from tifffile import imsave, TiffFile
 import h5py
-
 
 class LoadPolys(object):
     def __init__(self, prefix, tag=None):
