@@ -3,9 +3,11 @@ matplotlib.use('TkAgg')
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import os
-import numpy as np
+import numpy
+np = numpy
 from matplotlib import pyplot as plt
-import pandas as pd
+import pandas
+pd = pandas
 from scipy import stats
 
 from .Legacy.MyColorLib import get_color

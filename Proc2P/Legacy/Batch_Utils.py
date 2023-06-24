@@ -1,3 +1,6 @@
+import os
+import numpy
+
 ''''Don't import any Core files here (dependency loop). Use CommonFunc for that.'''
 
 def split_ephys(path, n_channels):

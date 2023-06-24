@@ -1,9 +1,13 @@
 import copy
 from sklearn.metrics import mutual_info_score
-from .LoadPolys import FrameDisplay
+from .BehaviorSession import BehaviorSession
+from .LoadPolys import FrameDisplay, LoadPolys
+from .Firing import Firing
+from .Quad import SplitQuad
 from .Batch_Utils import mad_based_outlier
-
+from .Ripples import Ripples
 import time
+from scipy import stats
 
 # very legacy
 # from EyeTracking import load_mikko_trace

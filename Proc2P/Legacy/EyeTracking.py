@@ -1,3 +1,5 @@
+import numpy, os
+from matplotlib import pyplot as plt
 from matplotlib.widgets import RectangleSelector, Button
 import h5py
 import json

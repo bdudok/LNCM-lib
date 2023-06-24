@@ -2,7 +2,9 @@ from scipy.signal import bessel, hilbert, filtfilt, decimate, sosfiltfilt
 from scipy.io import savemat
 from datetime import datetime
 from matplotlib.widgets import RectangleSelector
-from sklearn import cluster
+# from sklearn import cluster
+import numpy
+import os
 
 class Event(object):
     def __init__(self, ripples, p1, p2):

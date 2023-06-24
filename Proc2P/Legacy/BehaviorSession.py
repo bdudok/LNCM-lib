@@ -1,3 +1,7 @@
+import numpy
+import matplotlib.pyplot as plt
+
+
 class BehaviorSession(object):
     def __init__(self, f, silent=False, show=False):
         with open(f, 'r') as df:
