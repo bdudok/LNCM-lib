@@ -70,5 +70,5 @@ class Detect:
         add_peaks.extend(AMPpeaks)
         ra = numpy.array(add_peaks)
         ra.sort()
-        return ra
+        return ra / self.fs
 

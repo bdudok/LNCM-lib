@@ -2,6 +2,7 @@ import os
 
 from Proc2P import *
 from LFP.SpikeDet import SpikesPower
+from LFP.SzDet import InstRate
 import pandas
 
 #open example data
@@ -16,3 +17,9 @@ y = r.trace
 
 
 d = SpikesPower.Detect(r.trace, fs=10000)
+t = d.get_spikes()
+
+sz_burden, sz_times = InstRate.SpikeTrace(t, framesize=64)
+X = numpy.arange(0, len(sz_burden)*64*2, 64*2)
+plt.plot(d.trace)
+plt.plot(X, sz_burden)
