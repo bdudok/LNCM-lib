@@ -1,4 +1,5 @@
 import numpy
+import pandas
 
 from .sbxreader import loadmat
 

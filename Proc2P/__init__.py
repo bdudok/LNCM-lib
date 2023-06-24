@@ -9,3 +9,7 @@ import pandas as pd
 from scipy import stats
 
 from .Legacy.MyColorLib import get_color
+
+def read_excel(*args, **kwargs):
+    return pd.read_excel(*args, **kwargs, engine='openpyxl')
+
