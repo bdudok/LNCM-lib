@@ -1,6 +1,9 @@
+import os
 import sys
 from pyqtgraph import Qt
 from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
+from pyqtgraph.Qt.QtWidgets import (QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QGroupBox, QListWidget,
+QAbstractItemView)
 
 class GUI_main(QtWidgets.QMainWindow):
     def __init__(self, app):
@@ -11,53 +14,87 @@ class GUI_main(QtWidgets.QMainWindow):
 
         #variables
         self.wdir = None
-        self.separator = QtWidgets.QLabel("<hr>")
+        self.separator = QLabel("<hr>")
 
-        # self.filelist_groupbox = QtWidgets.QGroupBox('File list')
-        # self.filelist_Vlayout = QtWidgets.QVBoxLayout(self.filelist_groupbox)
-        # self.filelist_Hlayout_1 = QtWidgets.QHBoxLayout()
+        #main groupbox (horizonal)
+        self.filelist_groupbox = self.make_filelist_groupbox()
+        self.display_traces_groupbox = self.make_traces_groupbox()
 
-        #file selector dock
-        # self.fileselector = self.FileSelectorDockWidget()
+        #central widget
+        centralwidget = QWidget(self)
+        horizontal_layout = QHBoxLayout()
+        # vertical_layout_files = QtWidgets.QVBoxLayout()
 
 
-        #compose box
-        # self.filelist_Vlayout.addLayout(self.filelist_Hlayout_1)
-        # self.filelist_Vlayout.addWidget(self.separator)
 
-        #add main layouts
-        select_path_button = QtWidgets.QPushButton('Select folder',)
-        # self.filelist_Hlayout_1.addWidget(self.select_path_button)
-        select_path_button.clicked.connect(self.select_path)
-        vertical_layout = QtWidgets.QVBoxLayout()
-        # self.vertical_layout.addWidget(self.filelist_groupbox)
 
-        vertical_layout.addWidget(select_path_button)
-        self.setCentralWidget(QtWidgets.QWidget(self))
-        self.centralWidget().setLayout(vertical_layout)
-        # self.setLayout(vertical_layout)
-        print(self.children())
+        # add main layouts
+        horizontal_layout.addWidget(self.filelist_groupbox)
+        horizontal_layout.addWidget(self.display_traces_groupbox)
+        self.setCentralWidget(centralwidget)
+        self.centralWidget().setLayout(horizontal_layout)
+
         self.show()
 
-    def select_path(self):
-        self.wdir = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
-        print(self.wdir)
+    def make_filelist_groupbox(self):
+        groupbox = QGroupBox('File list')
+        vbox = QtWidgets.QVBoxLayout()
+        groupbox.setLayout(vbox)
 
-    # def FileSelectorDockWidget(self):
-    #     dockWidgetContents = QtWidgets.QWidget()
-    #
-    #     #select path
-    #     self.select_path_button = QtWidgets.QPushButton('Select folder', )
-    #     # self.filelist_Hlayout_1.addWidget(self.select_path_button)
-    #     self.select_path_button.clicked.connect(self.select_path)
-    #     dockWidgetContents.addWidget(self.select_path_button)
-    #
-    #     dockWidget = QtWidgets.QDockWidget(QtWidgets.tr("Dock Widget"), self)
-    #     dockWidget.setAllowedAreas(Qt.LeftDockWidgetArea |
-    #                                Qt.RightDockWidgetArea)
-    #     dockWidget.setWidget(dockWidgetContents)
-    #     QtWidgets.addDockWidget(Qt.LeftDockWidgetArea, dockWidget)
-    #     return dockWidget
+        #select button
+        select_path_button = QPushButton('Select folder', )
+        vbox.addWidget(select_path_button)
+        select_path_button.clicked.connect(self.select_path_callback)
+
+        vbox.addWidget(self.separator)
+
+        #label
+        self.path_label = QLabel('...', )
+        self.path_label.setWordWrap(True)
+        vbox.addWidget(self.path_label)
+
+        #list
+        self.prefix_list = QListWidget(self)
+        self.prefix_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        vbox.addWidget(self.prefix_list)
+
+        return groupbox
+
+    def make_traces_groupbox(self):
+        groupbox = QGroupBox('Traces')
+        vbox = QtWidgets.QVBoxLayout()
+        groupbox.setLayout(vbox)
+
+        #horizontal layout for buttons
+        horizontal_layout = QHBoxLayout()
+        #load button
+        select_path_button = QPushButton('Open', )
+        horizontal_layout.addWidget(select_path_button)
+        select_path_button.clicked.connect(self.load_file_callback)
+
+        vbox.addLayout(horizontal_layout)
+
+        vbox.addWidget(self.separator)
+        #raw
+
+        return groupbox
+
+    def select_path_callback(self):
+        #get a folder
+        self.wdir = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
+        self.path_label.setText(self.wdir)
+
+        #get prefix list
+        suffix = '.ephys'
+        prefix_list = [fn[:-len(suffix)] for fn in os.listdir(self.wdir) if fn.endswith(suffix)]
+
+        #set list widget
+        self.prefix_list.clear()
+        self.prefix_list.addItems(prefix_list)
+
+    def load_file_callback(self):
+        prefix = self.prefix_list.selectedItems()[0].text()
+        print(prefix)
 
 
 def launch_GUI():
@@ -69,4 +106,5 @@ def launch_GUI():
     sys.exit(app.exec())
 
 if __name__ == '__main__':
+    # pass
     launch_GUI()
