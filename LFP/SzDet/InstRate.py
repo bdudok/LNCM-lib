@@ -1,13 +1,15 @@
 import numpy
 from sklearn.neighbors import KernelDensity
 
-def SpikeTrace(spiketimes, framesize:int, length=None):
+def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2):
     '''
     Take a list of spike times (assuming sorted) and convert to a time series of inst spike rate
     :param spiketimes: array (s)
     :param fs: sampling rate (s)
     :param framesize: rate of the continuous output (ms)
     :param length: length of the output time series. if none, 1 s after last spike.
+    :param cleanup: length of minimum sz duration (s) for inclusion
+    :param gap: duration between seizures for merging (s)
     :return: array
     '''
     spk_times = spiketimes
@@ -46,7 +48,7 @@ def SpikeTrace(spiketimes, framesize:int, length=None):
         # find sz ON
         if spk_counter[s]:
             # first spike
-            s = s + numpy.argmax(spk_n[s:int(s + fs)])
+            s = s + numpy.searchsorted(spk_n[s:int(s + fs)], 1)
             s1 = s
             while spk_counter[s1 + 1]:
                 s1 += 1
@@ -61,15 +63,38 @@ def SpikeTrace(spiketimes, framesize:int, length=None):
                         s1 += int(fs)
                     else:
                         s1 += 1
-                sz.append(((s-1) / fs, s1 / fs))
-                sz_burden[s-1:s1] = inst_rate[s-1:s1]
+                sz.append([s / fs, s1 / fs])
+                sz_burden[s:s1] = inst_rate[s:s1]
             s = s1 + 1
         else:
             s += 1
 
+
+    #merge seizures
+    merged_sz = []
+    i = 0
+    while i < (len(sz)-1):
+        # print(f'checking sz {i}: {sz[i]}')
+        j = i + 1
+        t0 = sz[i][0]
+        t1 = sz[i][1]
+        while j < len(sz) and sz[j][0] - sz[j-1][1] < gap:
+            # print(f'Within gap: sz {j}: {sz[j]}')
+            t1 = sz[j][1]
+            j += 1
+        if t1 - t0 > cleanup:
+            #merge if any of the cluster members longer
+            for k in range(i, j+1):
+                if sz[k][1] - sz[k][0] > cleanup:
+                    merged_sz.append([t0,t1])
+                    break
+            # print(f'merging {i} to {j-1}')
+        i = j
+
+
     # add seizures to an array
-    sz_times = numpy.empty((len(sz), 2), dtype='int32')
-    for i, szt in enumerate(sz):
+    sz_times = numpy.empty((len(merged_sz), 2), dtype='int32')
+    for i, szt in enumerate(merged_sz):
         sz_times[i] = szt
 
-    return sz_burden, sz_times * fs
+    return sz_burden, sz_times

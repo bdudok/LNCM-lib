@@ -31,10 +31,11 @@ class Detect:
 
 
 
-    def get_spikes(self, tr1=3, tr2=5, dur=10, dist=50):
+    def get_spikes(self, tr1=3, tr2=5, trdiff=2, dur=10, dist=50):
         '''
         :param tr1: lower threshold (for duration)
         :param tr2: higher threshold (for inclusion)
+        :param trdiff: threshold for differential-based inclusion (std)
         :param dur: HF duration (ms)
         :param dist: peak separation (ms)
         :return: peak times (s)
@@ -44,7 +45,7 @@ class Detect:
         diff2 = numpy.abs(numpy.diff(self.trace, 2))
         d2s = gaussian_filter(diff2, dur*ms/self.fs)
         peakdet_trace = numpy.zeros(len(self.trace))
-        d2tr = diff2.mean() + diff2.std()
+        d2tr = diff2.mean() + diff2.std() * trdiff
         wh = numpy.where(d2s>d2tr)
         peakdet_trace[wh] = numpy.abs(self.trace[wh])
         AMPpeaks, _ = signal.find_peaks(peakdet_trace, height=self.stdev_trace*tr1, distance=dist * self.fs / ms)
