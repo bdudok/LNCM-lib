@@ -41,7 +41,7 @@ class Detect:
         :return: peak times (s)
         '''
 
-        print(f'get_spikes called with {tr1}, {tr2}, {trdiff}')
+        # print(f'get_spikes called with {tr1}, {tr2}, {trdiff}')
 
         #get LFP amplitude peaks
         diff2 = numpy.abs(numpy.diff(self.trace, 2))
@@ -57,6 +57,7 @@ class Detect:
         HFO_amp_thresh2 = self.stdev_env * tr2
 
         HFOpeaks, _ = signal.find_peaks(self.env, height=HFO_amp_thresh1, distance=dist * self.fs / ms)
+        HFOpeaks = HFOpeaks[self.env[HFOpeaks] > HFO_amp_thresh2]
         HFO_duration, _, _, _ = signal.peak_widths(numpy.clip(self.env, HFO_amp_thresh2, max(self.env)),
                                                        peaks=HFOpeaks, rel_height=1)
 

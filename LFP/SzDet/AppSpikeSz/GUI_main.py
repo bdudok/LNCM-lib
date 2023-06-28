@@ -27,13 +27,13 @@ class GUI_main(QtWidgets.QMainWindow):
         super().__init__()
 
         self.setWindowTitle(f'Detect spikes and seizures')
-        self.setGeometry(10, 30, 3200, 1600) # Left, top, width, height.
+        self.setGeometry(30, 60, 3200, 1600) # Left, top, width, height.
         self.app = app
 
         #peristent settings
         self.wdir = path
-        self.settings = QtCore.QSettings("pyqt_settings.ini", QtCore.QSettings.IniFormat)
-        self.settings.value("LastFile")
+        # self.settings = QtCore.QSettings("pyqt_settings.ini", QtCore.QSettings.IniFormat)
+        # self.settings.value("LastFile")
 
         #variables
         self.set_defaults()
@@ -43,7 +43,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.display_traces_groupbox = self.make_traces_groupbox()
         self.options_groupbox = self.make_options_groupbox()
         self.controls_groupbox = self.make_controls_groupbox()
-        # self.results_groupbox = self.make_results_gropubox()
+        self.results_groupbox = self.make_results_groupbox()
 
         #central widget
         centralwidget = QWidget(self)
@@ -59,6 +59,7 @@ class GUI_main(QtWidgets.QMainWindow):
         vertical_options_layout.addWidget(self.options_groupbox)
         vertical_options_layout.addWidget(self.separator)
         vertical_options_layout.addWidget(self.controls_groupbox)
+        vertical_options_layout.addWidget(self.results_groupbox)
         horizontal_layout.addLayout(vertical_options_layout)
 
 
@@ -74,6 +75,8 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.param = {}
         self.param_fields = {}
+        self.result_fields = {}
+        self.res_keys_sorted = ('Prefix', 'Spikes', 'Seizures', 'Sz.Duration')
         self.param_keys_sorted = ('Tr1', 'Tr2', 'TrDiff', 'Sz.MinDur', 'Sz.Gap', 'SzDet.Framesize', 'fs')
         self.param['Tr1'] = 3
         self.param['Tr2'] = 5
@@ -154,6 +157,9 @@ class GUI_main(QtWidgets.QMainWindow):
     def get_field(self, label):
         return self.param_fields[label].text()
 
+    def set_field(self, label, value):
+        self.result_fields[label].setText(str(value))
+
     def make_options_groupbox(self):
         groupbox = QGroupBox('Options')
         vbox = QtWidgets.QVBoxLayout()
@@ -174,9 +180,27 @@ class GUI_main(QtWidgets.QMainWindow):
         reload_button.clicked.connect(self.update_plot1)
         vbox.addWidget(self.separator)
 
-        save_button = QPushButton('Save', )
+        return groupbox
+
+
+    def make_result(self, label):
+        hbox = QtWidgets.QHBoxLayout()
+        hbox.addWidget(QLabel(label))
+        self.result_fields[label] = QLabel('')
+        hbox.addWidget(self.result_fields[label])
+        return hbox
+    def make_results_groupbox(self):
+        groupbox = QGroupBox('Results')
+        vbox = QtWidgets.QVBoxLayout()
+        groupbox.setLayout(vbox)
+
+        for label in self.res_keys_sorted:
+            vbox.addLayout(self.make_result(label))
+        vbox.addWidget(self.separator)
+
+        save_button = QPushButton('Save settings', )
         vbox.addWidget(save_button)
-        reload_button.clicked.connect(self.save_output_callback)
+        save_button.clicked.connect(self.save_output_callback)
         return groupbox
 
 
@@ -184,7 +208,7 @@ class GUI_main(QtWidgets.QMainWindow):
         #get a folder
         if path is None:
             self.wdir = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
-            self.settings.setValue("LastFile", self.wdir)
+            # self.settings.setValue("LastFile", self.wdir)
         self.path_label.setText(self.wdir)
         os.chdir(self.wdir)
         self.current_selected_i = None
@@ -227,12 +251,12 @@ class GUI_main(QtWidgets.QMainWindow):
         #plot data
         ax[0].plot(time_xvals, self.spikedet.trace, color='black', zorder=1, linewidth=1)
         ax[0].scatter(time_xvals[tx], self.spikedet.trace[tx], color='red',
-                      marker='x', s=10, markeredgewidth=1, zorder=2, alpha=0.6)
+                      marker='x', s=5, linewidth=0.5, zorder=2, alpha=0.6)
         ax[0].set_ylabel('LFP')
 
         ax[1].plot(time_xvals, self.spikedet.env, color='orange', zorder=1, linewidth=1)
         ax[1].scatter(time_xvals[tx], self.spikedet.env[tx], color='red',
-                      marker='x', s=10, markeredgewidth=1, zorder=2, alpha=0.6)
+                      marker='x', s=5, linewidth=0.5, zorder=2, alpha=0.6)
         for hv in ('Tr1', 'Tr2'):
             v = float(self.get_field(hv))
             ax[1].axhline(self.spikedet.stdev_env * v, color='black', linewidth=0.5)
@@ -252,9 +276,13 @@ class GUI_main(QtWidgets.QMainWindow):
         ax[2].set_xlabel('Time (s)')
         ax[2].set_ylabel('Seizure')
 
-
         self.FigCanvas1.draw()
         plt.tight_layout()
+
+        #('Spikes', 'Seizures', 'Sz.Duration')
+        self.set_field('Spikes', len(t))
+        self.set_field('Seizures', len(sz_times))
+        self.set_field('Sz.Duration', f'{numpy.mean([sz[1]-sz[0] for sz in sz_times]):.2f}')
 
     def load_file_callback(self):
         current_item = self.prefix_list.selectedItems()[0]
@@ -282,6 +310,7 @@ class GUI_main(QtWidgets.QMainWindow):
         if len(trace) > t_want:
             trace = trace[int(len(trace)/2 - t_want/2):int(len(trace)/2 + t_want/2)]
         self.spikedet = SpikesPower.Detect(trace, fs=fs)
+        self.set_field('Prefix', self.active_prefix)
         self.update_plot1()
 
 
