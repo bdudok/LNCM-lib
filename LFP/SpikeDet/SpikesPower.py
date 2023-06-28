@@ -26,7 +26,7 @@ class Detect:
         #filter
         self.HF = butter_bandpass_filter(trace, lo, hi, fs,)
         self.env = numpy.abs(signal.hilbert(self.HF))
-        self.stdev_env = numpy.std(self.HF)
+        self.stdev_env = numpy.std(self.env)
         self.stdev_trace = numpy.std(self.trace)
 
 
@@ -41,6 +41,8 @@ class Detect:
         :return: peak times (s)
         '''
 
+        print(f'get_spikes called with {tr1}, {tr2}, {trdiff}')
+
         #get LFP amplitude peaks
         diff2 = numpy.abs(numpy.diff(self.trace, 2))
         d2s = gaussian_filter(diff2, dur*ms/self.fs)
@@ -48,7 +50,7 @@ class Detect:
         d2tr = diff2.mean() + diff2.std() * trdiff
         wh = numpy.where(d2s>d2tr)
         peakdet_trace[wh] = numpy.abs(self.trace[wh])
-        AMPpeaks, _ = signal.find_peaks(peakdet_trace, height=self.stdev_trace*tr1, distance=dist * self.fs / ms)
+        AMPpeaks, _ = signal.find_peaks(peakdet_trace, height=self.stdev_trace*2, distance=dist * self.fs / ms)
 
         #get additional HF
         HFO_amp_thresh1 = self.stdev_env * tr1
@@ -64,7 +66,7 @@ class Detect:
         #filter for overlap:
         add_peaks = []
         for t in HFOpeaks:
-            if numpy.any(numpy.abs(AMPpeaks-t) < (dur / ms)):
+            if numpy.min(numpy.abs(AMPpeaks-t) > dur):
                 add_peaks.append(t)
 
         #return sorted
