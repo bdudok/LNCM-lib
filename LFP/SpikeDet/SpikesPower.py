@@ -43,7 +43,27 @@ class Detect:
 
         # print(f'get_spikes called with {tr1}, {tr2}, {trdiff}')
 
-        #get LFP amplitude peaks
+
+        #get additional HF
+        HFO_amp_thresh1 = self.stdev_env * tr1
+        HFO_amp_thresh2 = self.stdev_env * tr2
+
+        HFOpeaks, _ = signal.find_peaks(self.env, height=HFO_amp_thresh2, distance=dist * self.fs / ms)
+        # HFOpeaks = HFOpeaks[self.env[HFOpeaks] > HFO_amp_thresh2]
+        HFO_duration, _, left_ips, right_ips = signal.peak_widths(numpy.clip(self.env, HFO_amp_thresh1, max(self.env)),
+                                                       peaks=HFOpeaks, rel_height=1)
+
+        # return HFO_duration, left_ips, right_ips, self.env
+
+        #filter for short peaks
+        HFOpeaks = HFOpeaks[HFO_duration / self.fs * ms > dur]
+
+        #generate trace for checking overlap
+        overlap = numpy.zeros(len(self.env), dtype='bool')
+        for t1, t2 in zip(left_ips.astype('uint64'), right_ips.astype('uint64')):
+            overlap[t1:t2] = True
+
+        #detect amplitude swings
         diff2 = numpy.abs(numpy.diff(self.trace, 2))
         d2s = gaussian_filter(diff2, dur*ms/self.fs)
         peakdet_trace = numpy.zeros(len(self.trace))
@@ -52,26 +72,17 @@ class Detect:
         peakdet_trace[wh] = numpy.abs(self.trace[wh])
         AMPpeaks, _ = signal.find_peaks(peakdet_trace, height=self.stdev_trace*2, distance=dist * self.fs / ms)
 
-        #get additional HF
-        HFO_amp_thresh1 = self.stdev_env * tr1
-        HFO_amp_thresh2 = self.stdev_env * tr2
-
-        HFOpeaks, _ = signal.find_peaks(self.env, height=HFO_amp_thresh1, distance=dist * self.fs / ms)
-        HFOpeaks = HFOpeaks[self.env[HFOpeaks] > HFO_amp_thresh2]
-        HFO_duration, _, _, _ = signal.peak_widths(numpy.clip(self.env, HFO_amp_thresh2, max(self.env)),
-                                                       peaks=HFOpeaks, rel_height=1)
-
-        #filter for short peaks
-        HFOpeaks = HFOpeaks[HFO_duration / self.fs * ms > dur]
 
         #filter for overlap:
         add_peaks = []
-        for t in HFOpeaks:
-            if numpy.min(numpy.abs(AMPpeaks-t) > dur):
+        for t in AMPpeaks:
+            if overlap[t]:
+                continue
+            if numpy.min(numpy.abs(HFOpeaks-t) > dur):
                 add_peaks.append(t)
 
         #return sorted
-        add_peaks.extend(AMPpeaks)
+        add_peaks.extend(HFOpeaks)
         ra = numpy.array(add_peaks)
         ra.sort()
         return ra / self.fs
