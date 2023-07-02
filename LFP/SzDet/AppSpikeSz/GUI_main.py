@@ -1,4 +1,5 @@
 import os
+import json
 
 #plotting
 import matplotlib
@@ -14,7 +15,7 @@ import sys
 from pyqtgraph import Qt
 from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
 from pyqtgraph.Qt.QtWidgets import (QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QGroupBox, QListWidget,
-QAbstractItemView, QLineEdit)
+QAbstractItemView, QLineEdit, QCheckBox)
 
 #Workflow Specific functions
 from LFP.SpikeDet import SpikesPower
@@ -23,7 +24,7 @@ from Proc2P.Legacy.Loaders import load_ephys
 
 
 class GUI_main(QtWidgets.QMainWindow):
-    def __init__(self, app, path=None):
+    def __init__(self, app, path=None, savepath=None, prefix_list=None,):
         super().__init__()
 
         self.setWindowTitle(f'Detect spikes and seizures')
@@ -32,6 +33,9 @@ class GUI_main(QtWidgets.QMainWindow):
 
         #peristent settings
         self.wdir = path
+
+        self.savepath = savepath
+        self.input_prefix = prefix_list
         # self.settings = QtCore.QSettings("pyqt_settings.ini", QtCore.QSettings.IniFormat)
         # self.settings.value("LastFile")
 
@@ -72,6 +76,9 @@ class GUI_main(QtWidgets.QMainWindow):
     def set_defaults(self):
         self.active_prefix = None
         self.separator = QLabel("<hr>")
+        if self.savepath is None:
+            self.savepath = './'
+        self.suffix = '_SpikeSzDet'
 
         self.param = {}
         self.param_fields = {}
@@ -80,7 +87,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.param_keys_sorted = ('Tr1', 'Tr2', 'TrDiff', 'Sz.MinDur', 'Sz.Gap', 'SzDet.Framesize', 'fs')
         self.param['Tr1'] = 3
         self.param['Tr2'] = 5
-        self.param['TrDiff'] = 2
+        self.param['TrDiff'] = 3
         self.param['Sz.MinDur'] = 5
         self.param['Sz.Gap'] = 3
         self.param['SzDet.Framesize'] = 64
@@ -136,7 +143,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         vbox.addWidget(self.separator)
         #raw
-        self.FigCanvas1 = SubplotsCanvas(nrows=3, sharex=True, dpi=600) #figsize=(12, 9), dpi=450,
+        self.FigCanvas1 = SubplotsCanvas(nrows=3, sharex=True, figsize=(12, 9))
         self.format_plot(self.FigCanvas1)
         toolbar = NavigationToolbar2QT(self.FigCanvas1, self)
         vbox.addWidget(toolbar)
@@ -198,6 +205,10 @@ class GUI_main(QtWidgets.QMainWindow):
             vbox.addLayout(self.make_result(label))
         vbox.addWidget(self.separator)
 
+        self.is_sz_checkbox = QCheckBox('Include')
+        self.is_sz_checkbox.setChecked(True)
+        vbox.addWidget(self.is_sz_checkbox)
+
         save_button = QPushButton('Save settings', )
         vbox.addWidget(save_button)
         save_button.clicked.connect(self.save_output_callback)
@@ -213,13 +224,23 @@ class GUI_main(QtWidgets.QMainWindow):
         os.chdir(self.wdir)
         self.current_selected_i = None
 
+        flist = os.listdir(self.wdir)
         #get prefix list
         suffix = '.ephys'
-        prefix_list = [fn[:-len(suffix)] for fn in os.listdir(self.wdir) if fn.endswith(suffix)]
+        if self.input_prefix is None:
+            prefix_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
+        else:
+            prefix_list = [prefix for prefix in self.input_prefix if prefix+suffix in flist]
 
         #set list widget
         self.prefix_list.clear()
         self.prefix_list.addItems(prefix_list)
+
+        #check if input exist
+        flist = os.listdir(self.savepath)
+        for pi, prefix in enumerate(prefix_list):
+            if prefix+self.suffix+'.json' in flist:
+                self.mark_complete(pi, color='#fcaf38')
 
     def format_plot(self, plot):
         for ca in plot.ax:
@@ -231,6 +252,12 @@ class GUI_main(QtWidgets.QMainWindow):
         print([self.get_field(field) for field in self.param_keys_sorted])
         #clear plot
         ax = self.FigCanvas1.ax
+        if not self.new_plot:
+            ylims = []
+            xlims = []
+            for ca in ax:
+                ylims.append(ca.get_ylim())
+                xlims.append(ca.get_xlim())
         for ca in ax:
             ca.cla()
 
@@ -250,13 +277,13 @@ class GUI_main(QtWidgets.QMainWindow):
 
         #plot data
         ax[0].plot(time_xvals, self.spikedet.trace, color='black', zorder=1, linewidth=1)
-        ax[0].scatter(time_xvals[tx], self.spikedet.trace[tx], color='red',
-                      marker='x', s=5, linewidth=0.5, zorder=2, alpha=0.6)
+        ax[0].scatter(time_xvals[tx], self.spikedet.trace[tx], color='lime',
+                      marker='x', s=20, linewidth=0.7, zorder=2, alpha=0.8)
         ax[0].set_ylabel('LFP')
 
         ax[1].plot(time_xvals, self.spikedet.env, color='orange', zorder=1, linewidth=1)
         ax[1].scatter(time_xvals[tx], self.spikedet.env[tx], color='red',
-                      marker='x', s=5, linewidth=0.5, zorder=2, alpha=0.6)
+                      marker='x', s=20, linewidth=0.7, zorder=2, alpha=0.8)
         for hv in ('Tr1', 'Tr2'):
             v = float(self.get_field(hv))
             ax[1].axhline(self.spikedet.stdev_env * v, color='black', linewidth=0.5)
@@ -267,12 +294,11 @@ class GUI_main(QtWidgets.QMainWindow):
             for ca in (0, 2):
                 ax[ca].axvspan(sz[0], sz[1], color='red', alpha=0.4, zorder=0)
 
-        #set X axis
-        # min_unit = fs
-        # minutes = numpy.arange(0, len(self.spikedet.trace) / min_unit, min_unit)
-        # minlabels = numpy.arange(0, len(minutes), 1)
-        # ax[2].set_xticks(minutes)
-        # ax[2].set_xticklabels(minlabels)
+        if not self.new_plot:
+            for ca, xlim, ylim in zip(ax, xlims, ylims):
+                ca.set_xlim(xlim)
+                ca.set_ylim(ylim)
+        self.new_plot = False
         ax[2].set_xlabel('Time (s)')
         ax[2].set_ylabel('Seizure')
 
@@ -288,15 +314,37 @@ class GUI_main(QtWidgets.QMainWindow):
         current_item = self.prefix_list.selectedItems()[0]
         self.active_prefix = current_item.text()
         self.current_selected_i = self.prefix_list.currentRow()
+        self.new_plot = True
         self.refresh_data()
 
     def save_output_callback(self):
-        pass
+
+        #save settings
+        output_fn = self.savepath + self.active_prefix + self.suffix
+        op_dict = {}
+        for key in self.param_keys_sorted:
+            op_dict[key] = self.get_field(key)
+        op_dict['Included'] = self.is_sz_checkbox.isChecked()
+        with open(output_fn+ '.json', 'w') as fp:
+            json.dump(op_dict, fp)
+
+        #save plot
+        for ca in self.FigCanvas1.ax:
+            ca.autoscale()
+        self.FigCanvas1.fig.savefig(output_fn+ '.png', dpi=300)
+
+        self.mark_complete(self.current_selected_i)
+        self.load_next_callback()
+
+    def mark_complete(self, i, color='#50a3a4'):
+        self.prefix_list.item(i).setBackground(QtGui.QColor(color))
 
     def load_next_callback(self):
         self.current_selected_i += 1
         current_item = self.prefix_list.item(self.current_selected_i)
         self.active_prefix = current_item.text()
+        self.prefix_list.setCurrentItem(current_item)
+        self.new_plot=True
         self.refresh_data()
 
     def refresh_data(self):
@@ -321,12 +369,12 @@ class SubplotsCanvas(FigureCanvasQTAgg):
         self.fig, self.ax = plt.subplots(*args, **kwargs)
         super(SubplotsCanvas, self).__init__(self.fig)
 
-def launch_GUI(path=None):
+def launch_GUI(*args, **kwargs):
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle('Fusion')
     font = QtGui.QFont()
     app.setFont(font)
-    gui_main = GUI_main(app, path)
+    gui_main = GUI_main(app, *args, **kwargs)
     sys.exit(app.exec())
 
 if __name__ == '__main__':

@@ -78,7 +78,7 @@ class Detect:
         for t in AMPpeaks:
             if overlap[t]:
                 continue
-            if numpy.min(numpy.abs(HFOpeaks-t) > dur):
+            if numpy.min(numpy.abs(HFOpeaks-t) > dist):
                 add_peaks.append(t)
 
         #return sorted
