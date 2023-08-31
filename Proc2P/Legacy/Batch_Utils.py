@@ -97,15 +97,16 @@ def mad_based_outlier(points, thresh=3.5):
     return numpy.where(modified_z_score < thresh)[0]
 
 
-def strip_ax(ca):
+def strip_ax(ca, full=True):
     ca.spines['right'].set_visible(False)
     ca.spines['top'].set_visible(False)
-    ca.spines['bottom'].set_visible(False)
-    ca.spines['left'].set_visible(False)
-    ca.tick_params(axis='x', which='both', bottom='on', top='off', labelbottom='off')
-    ca.tick_params(axis='y', which='both', right='off', left='off', labelright='off')
-    ca.xaxis.set_visible(False)
-    ca.yaxis.set_visible(False)
+    if full:
+        ca.spines['bottom'].set_visible(False)
+        ca.spines['left'].set_visible(False)
+        ca.tick_params(axis='x', which='both', bottom='on', top='off', labelbottom='off')
+        ca.tick_params(axis='y', which='both', right='off', left='off', labelright='off')
+        ca.xaxis.set_visible(False)
+        ca.yaxis.set_visible(False)
 
 
 def gapless(trace, gap=5):

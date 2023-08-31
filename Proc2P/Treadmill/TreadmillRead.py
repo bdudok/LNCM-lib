@@ -4,7 +4,7 @@ import numpy
 import numpy as np
 import pandas as pd
 from _Dependencies.PyControl.code.tools import data_import, session_plot
-from ConfigVars import TR
+from .ConfigVars import TR
 
 
 class Treadmill:
@@ -17,6 +17,15 @@ class Treadmill:
         :param prefix: session name (ending with timestamp)
         '''
         self.path = path
+        #find pycontrol filename
+        ext = '.txt'
+        if not os.path.exists(path+prefix+ext):
+            longest = 0
+            for fn in os.listdir(path):
+                if prefix in fn and fn.endswith(ext) and '.log.' not in fn:
+                    if longest < len(fn):
+                        prefix = fn[:-len(ext)]
+                        longest = len(fn)
         self.prefix = prefix
         self.flist = os.listdir(path)
         self.d = d = data_import.Session(self.path + self.prefix + '.txt')

@@ -1,1 +1,1 @@
-from TreadmillRead import Treadmill
+from .TreadmillRead import Treadmill
