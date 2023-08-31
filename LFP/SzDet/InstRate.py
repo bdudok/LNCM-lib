@@ -1,6 +1,7 @@
 import numpy
 from sklearn.neighbors import KernelDensity
 
+
 def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2):
     '''
     Take a list of spike times (assuming sorted) and convert to a time series of inst spike rate
@@ -10,7 +11,7 @@ def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2):
     :param length: length of the output time series. if none, 1 s after last spike.
     :param cleanup: length of minimum sz duration (s) for inclusion
     :param gap: duration between seizures for merging (s)
-    :return: array
+    :return: tuple of (array of seizure burden, array of seizure times in framesize)
     '''
     spk_times = spiketimes
     if length is None:
@@ -84,7 +85,7 @@ def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2):
             j += 1
         if t1 - t0 > cleanup:
             #merge if any of the cluster members longer
-            for k in range(i, j+1):
+            for k in range(i, min(len(sz)-1, j+1)):
                 if sz[k][1] - sz[k][0] > cleanup:
                     merged_sz.append([t0,t1])
                     break
@@ -93,7 +94,7 @@ def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2):
 
 
     # add seizures to an array
-    sz_times = numpy.empty((len(merged_sz), 2), dtype='int32')
+    sz_times = numpy.empty((len(merged_sz), 2), )#dtype='int32')
     for i, szt in enumerate(merged_sz):
         sz_times[i] = szt
 

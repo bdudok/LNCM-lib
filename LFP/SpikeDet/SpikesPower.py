@@ -1,3 +1,4 @@
+import pandas
 from scipy import signal
 import numpy
 from LFP.EphysFunctions import butter_bandpass_filter
@@ -85,5 +86,14 @@ class Detect:
         add_peaks.extend(HFOpeaks)
         ra = numpy.array(add_peaks)
         ra.sort()
-        return ra / self.fs
+
+        self.spiketimes = ra / self.fs
+        self.spikepower = self.env[ra]
+        self.spikeamp = self.trace[ra]
+        return self.spiketimes
+
+    def spiketimes_to_excel(self, path, prefix):
+        op = pandas.DataFrame({'SpikeTimes(s)': self.spiketimes, 'SpikeApmlitudes': self.spikeamp,
+                               'SpikePower': self.spikepower})
+        op.to_excel(path+prefix+'_spiketimes.xlsx')
 

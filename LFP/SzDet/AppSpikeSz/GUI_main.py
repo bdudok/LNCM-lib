@@ -270,6 +270,7 @@ class GUI_main(QtWidgets.QMainWindow):
                                                   # length=int(len(self.spikedet.trace/framesize)),
                                                   cleanup=float(self.get_field('Sz.MinDur')),
                                                   gap=float(self.get_field('Sz.Gap')))
+        sz_times = sz_times.astype('int32')
         tx = (t*fs).astype('int64')
         Xrate = framesize/1000
         X = numpy.arange(0, len(sz_burden) * Xrate, Xrate)

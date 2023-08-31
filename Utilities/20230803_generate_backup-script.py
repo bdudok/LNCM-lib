@@ -1,6 +1,9 @@
 import os
 
-'''Back up raw data folders to onedrive'''
+'''Back up raw data folders to onedrive
+The script is scheduled to run on the server nightly.
+update to include/exclude folders inthe backup.
+'''
 script_handle = 'C:/Users/u247640/OneDriveBackup.cmd'
 
 dest_path = 'OneDrive:_RawData/'
@@ -13,7 +16,7 @@ def get_cmd(folder):
 
 script_s = ''
 
-dlist = ['Confocal', 'Widefield']
+dlist = ['Confocal', 'Widefield', 'Bruker']
 
 for d in dlist:
     script_s += get_cmd(d)
