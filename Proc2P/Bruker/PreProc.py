@@ -1,7 +1,4 @@
 import json
-
-import Core
-import matplotlib.pyplot as plt
 import numpy
 import os
 import pandas
@@ -27,6 +24,11 @@ class PreProc:
         if not os.path.exists(self.procpath):
             os.mkdir(self.procpath)
 
+        #init sessioninfo, preprocess if empty
+        self.si = SessionInfo(self.procpath, prefix)
+        if not self.si.load():
+            self.skip_analysis = False
+            self.preprocess()
 
 
     def preprocess(self):
@@ -36,6 +38,7 @@ class PreProc:
         '''
         self.parse_frametimes()
         self.parse_TTLs()
+        #TODO parse recorder log
         self.save_metadata()
 
     def parse_frametimes(self):
@@ -46,15 +49,21 @@ class PreProc:
         sequence = root.find('Sequence')
 
         #get 2P info
-        f1 = sequence.find('Frame').find('PVStateShard')
         sdict = {}
         get_keys = ('framePeriod', 'scanLinePeriod')
-        for child in f1.getchildren():
+        for child in list(sequence.find('Frame').find('PVStateShard')):
             key = child.attrib['key']
             if key in get_keys:
                 sdict[key] = child.attrib['value']
         self.framerate = 1/float(sdict['framePeriod'])
-        self.linetime = float(sdict['scanLinePeriod'])
+        if 'scanLinePeriod' in sdict:
+            self.linetime = float(sdict['scanLinePeriod']) #not in 2channel files.
+        else:
+            self.linetime = numpy.nan
+            self.skip_analysis = True
+            print(self.prefix, 'XML parse error.')
+        #later include number of channels
+
 
         #get voltage info
         voltage = sequence.find('VoltageRecording')
@@ -119,7 +128,6 @@ class PreProc:
         '''
         Create a SessionInfo, add all the relevant attrs, and save to json in the output path.
         '''
-        self.si = SessionInfo(self.procpath, prefix)
         for key in self.md_keys:
             self.si[key] = self.__getattribute__(key)
         self.si.save()
@@ -134,6 +142,9 @@ class SessionInfo:
         if os.path.exists(self.filehandle):
             with open(self.filehandle, 'r') as f:
                 self.info = json.load(f)
+            return self.info
+        else:
+            return None
 
     def save(self):
         with open(self.filehandle, 'w') as f:
@@ -154,8 +165,8 @@ if __name__ == '__main__':
     prefix = 'PVTot6_2023-08-31_opto_019'
     btag = '000'
 
-    md = MetaData(dpath, procpath, prefix,)
-    md.preprocess()
+    md = PreProc(dpath, procpath, prefix,)
+    # md.preprocess()
 
     # si = SessionInfo(procpath+prefix+'/', prefix)
     # si.load()
