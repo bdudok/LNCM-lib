@@ -42,7 +42,7 @@ for drive_letter in drive_list:
 #processed data forders to LNCM1
 ext_drive_name = 'LNCM1'
 if ext_drive_name in drive_names:
-    dest_path = f'E:\ExtDrives/{ext_drive_name}/_RawData/'
+    dest_path = f'E:\ExtDrives/{ext_drive_name}/_Processed/'
     source_path = 'D:\Shares\Data\_Processed/'
     dlist = ['2P/PVTot']
     for d in dlist:
