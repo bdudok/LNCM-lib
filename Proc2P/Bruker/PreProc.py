@@ -10,7 +10,7 @@ PreProcess: load xml files, save all frame times, sync signals and metadata into
 
 class PreProc:
     def __init__(self, dpath, procpath, prefix, btag = '000'):
-        self.dpath = dpath + prefix + f'-{btag}/'#raw data
+        self.dpath = os.path.join(dpath, prefix + f'-{btag}/')#raw data
         self.procpath = procpath + prefix + '/' #output processed data
         self.prefix = prefix #recorder prefix tag
         self.btag = btag #tag appended by bruker (000 by default)
@@ -43,7 +43,7 @@ class PreProc:
 
     def parse_frametimes(self):
         #find xml filename
-        xfn = self.dpath+self.prefix+f'-{self.btag}.xml'
+        xfn = os.path.join(self.dpath, self.prefix+f'-{self.btag}.xml')
         tree = ET.parse(xfn)
         root = tree.getroot()
         sequence = root.find('Sequence')
