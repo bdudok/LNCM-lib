@@ -19,6 +19,7 @@ class LoadRegistered():
         self.shape = (self.n_frames, self.Ly, self.Lx)
         #instead of loading the dimensttions, this could be passed from parent
         self.data = numpy.memmap(bp, mode='r+', dtype='int16', shape=self.shape)
+        self.bitdepth = pow(2, 12)
 
     def load(self):
         self.data = numpy.array(self.data[...])

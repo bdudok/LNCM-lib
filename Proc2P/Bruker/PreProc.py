@@ -113,6 +113,7 @@ class PreProc:
         led_op = pandas.DataFrame({'Intensity': trace[pos]/vmax, 'ImgFrame': stimframes}, index=[pos])
         led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
         numpy.save(self.dpath+'bad_frames.npy', stimframes)
+        numpy.save(self.procpath + self.prefix + '_bad_frames.npy', stimframes)
 
         #rsync times
         trace = vdat[f' Input {self.led_channel}'].values
