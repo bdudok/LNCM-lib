@@ -29,6 +29,7 @@ class Treadmill:
         self.prefix = prefix
         self.flist = os.listdir(path)
         self.d = d = data_import.Session(self.path + self.prefix + '.txt')
+
         d.analog = {}
         for f in self.flist:
             if self.prefix in f and f.endswith('.pca'):
@@ -71,9 +72,19 @@ class Treadmill:
                 self.laps[e_idx - 1:] += 1
             self.relpos = np.minimum(1, self.pos/self.laplen)
         else:
+            self.pos = self.abspos - self.abspos.min()
             self.relpos = self.pos / TR.beltlen
 
     def get_startstop(self):
         pass
+
+    def get_Rsync_times(self):
+        t = []
+        for event in self.d.events:
+            if event.name == 'rsync':
+                t.append(event.time)
+        return numpy.array(t)
+
+
 
 

@@ -3,11 +3,11 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 from Proc2P.Treadmill.TreadmillRead import data_import, session_plot, Treadmill
+from Proc2P.Treadmill import rsync
+from Proc2P.Bruker.PreProc import PreProc
 
-drive = '/Users/u247640/Library/CloudStorage/OneDrive-BaylorCollegeofMedicine/_RawData/'
-
-path = drive + 'Treadmill-test/'
-prefix = 'Test_move_full_laps-2023-04-17-184123'
+path = 'D:\Shares\Data\_RawData\Bruker\PVTot\PVTot5_2023-09-04_opto_023-000/'
+prefix = 'PVTot5_2023-09-04_opto_023'
 # prefix = 'Test_move_1m-2023-04-17-183859'
 
 # flist = os.listdir(path)
@@ -28,3 +28,21 @@ prefix = 'Test_move_full_laps-2023-04-17-184123'
 
 self = t = Treadmill(path, prefix)
 d = t.d
+
+dpath = 'D:\Shares\Data\_RawData\Bruker\PVTot/'
+procpath = 'D:\Shares\Data\_Processed/2P\PVTot\Opto/'
+
+md = PreProc(dpath, procpath, prefix, )
+md.preprocess()
+
+tm = t
+spd = tm.smspd
+pos = tm.pos
+ptime = tm.pos_tX
+tm_rsync = tm.get_Rsync_times()
+sc_rsync = (md.ttl_times * 1000).astype('int')
+l = min(len(tm_rsync), len(sc_rsync))
+# plt.scatter(tm_rsync[:l], sc_rsync[:l])
+
+align = rsync.Rsync_aligner(tm_rsync, sc_rsync, units_A='auto', units_B='auto',
+                 chunk_size=5, plot=True, raise_exception=True)

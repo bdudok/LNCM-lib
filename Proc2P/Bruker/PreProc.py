@@ -3,6 +3,7 @@ import numpy
 import os
 import pandas
 import xml.etree.ElementTree as ET
+from Proc2P.Treadmill import TreadmillRead, rsync
 
 '''
 PreProcess: load xml files, save all frame times, sync signals and metadata into the analysis folder
@@ -38,8 +39,8 @@ class PreProc:
         '''
         self.parse_frametimes()
         self.parse_TTLs()
-        #TODO parse recorder log
-        self.save_metadata()
+        # self.parse_treadmill()
+        # self.save_metadata()
 
     def parse_frametimes(self):
         #find xml filename
@@ -116,7 +117,7 @@ class PreProc:
         numpy.save(self.procpath + self.prefix + '_bad_frames.npy', stimframes)
 
         #rsync times
-        trace = vdat[f' Input {self.led_channel}'].values
+        trace = vdat[f' Input {self.rsync_channel}'].values
         vmax = 3.3
         pos = numpy.where(numpy.convolve(trace > vmax*0.5, [1, -1]) == 1)[0]
         self.ttl_times = pos / self.fs
@@ -124,6 +125,29 @@ class PreProc:
 
         ##append metadata attribs
         self.md_keys.append('fs')
+
+    def parse_treadmill(self):
+        tm = TreadmillRead(self.dpath, self.prefix)
+        # read rSync
+        spd = tm.smspd
+        pos = tm.pos
+        ptime = tm.pos_tX
+        tm_rsync = tm.get_Rsync_times()
+        sc_rsync = (self.ttl_times * 1000).astype('int')
+        align = rsync.Rsync_aligner(tm_rsync, sc_rsync)
+        self.frame_at_treadmill = align.B_to_A(self.frametimes*1000)
+        numpy.save(self.procpath + self.prefix + '_frame_tm_times.npy', self.frame_at_treadmill)
+
+        #resample speed, pos to scope frames
+        # for Y, tag in zip((), ()):
+
+
+
+
+
+
+
+
 
     def save_metadata(self):
         '''
