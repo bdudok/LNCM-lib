@@ -27,7 +27,8 @@ class PreProc:
 
         #init sessioninfo, preprocess if empty
         self.si = SessionInfo(self.procpath, prefix)
-        if not self.si.load():
+        self.is_processed = self.si.load()
+        if not self.is_processed:
             self.skip_analysis = False
             self.preprocess()
 
@@ -127,7 +128,7 @@ class PreProc:
         self.md_keys.append('fs')
 
     def parse_treadmill(self):
-        tm = TreadmillRead(self.dpath, self.prefix)
+        tm = TreadmillRead.Treadmill(self.dpath, self.prefix)
         # read rSync
         tm_rsync = tm.get_Rsync_times()
         sc_rsync = (self.ttl_times * 1000).astype('int')
@@ -135,7 +136,7 @@ class PreProc:
         self.frame_at_treadmill = align.B_to_A(self.frametimes*1000)
         numpy.save(self.procpath + self.prefix + '_frame_tm_times.npy', self.frame_at_treadmill)
         #resample speed, pos to scope frames
-        indices = self.get_frame_tm_x(self.frame_at_treadmill*1000, tm.pos_tX)
+        indices = self.get_frame_tm_x(self.frame_at_treadmill, tm.pos_tX*1000)
         for Y, tag in zip((tm.smspd, tm.pos), ('smspd', 'pos')):
             op = numpy.empty(len(self.frame_at_treadmill))
             op[:] = numpy.nan
@@ -155,6 +156,8 @@ class PreProc:
         for i, ft in enumerate(frametime):
             if not numpy.isnan(ft):
                 ix += numpy.searchsorted(tX[ix:], ft)
+                if not ix < len(tX):
+                    break
                 indices[i] = ix
         return indices
 
