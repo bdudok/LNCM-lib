@@ -31,3 +31,50 @@ def outlier_indices(values, thresh=3.5):
     med_abs_deviation = numpy.median(diff[not_nan])
     modified_z_score = 0.6745 * diff / med_abs_deviation
     return numpy.where(modified_z_score > thresh)[0]
+
+def startstop(speed, duration=50, gap=150, ret_loc='actual', span=None, speed_threshold=0.05):
+    '''
+    :param mov: binary gapless trace (length of frames) whether animal is running
+    :param duration: of run, in samples
+    :param gap: of stop, in samples
+    :param ret_loc: 'actual' gives frame with zero speed. need to specify speed for this
+    :param span: slice of recording to analyze
+    :return:
+    '''
+    mov = gapless(speed, threshold=speed_threshold)
+    if gap is None:
+        gap = 150
+    if span is None:
+        span = gap, len(mov) - gap
+    # collect stops
+    stops, starts = [], []
+    t = span[0] + duration
+    while t < span[1] - gap:
+        if not numpy.any(mov[t:t + gap]) and numpy.all(mov[t - duration:t]):
+            t0 = t
+            if ret_loc == 'peak':
+                while speed[t0] < speed[t0 - 1]:
+                    t0 -= 1
+                stops.append(t0)
+                while mov[t0]:
+                    t0 -= 1
+                starts.append(t0)
+            elif ret_loc == 'stopped':
+                stops.append(t)
+                while mov[t0 - 1]:
+                    t0 -= 1
+                starts.append(t0)
+            elif ret_loc == 'actual':
+                # go back while raw speed is zero
+                while speed[t - 1] < speed_threshold and t > 100:
+                    t -= 1
+                if t > 100:
+                    stops.append(t)
+                    while mov[t0 - 1] and t0 > 100:
+                        t0 -= 1
+                    while speed[t0] < speed_threshold:
+                        t0 += 1
+                    starts.append(t0)
+            t += gap
+        t += 1
+    return starts, stops
