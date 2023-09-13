@@ -39,8 +39,8 @@ class PreProc:
         '''
         self.parse_frametimes()
         self.parse_TTLs()
-        # self.parse_treadmill()
-        # self.save_metadata()
+        self.parse_treadmill()
+        self.save_metadata()
 
     def parse_frametimes(self):
         #find xml filename
@@ -129,24 +129,34 @@ class PreProc:
     def parse_treadmill(self):
         tm = TreadmillRead(self.dpath, self.prefix)
         # read rSync
-        spd = tm.smspd
-        pos = tm.pos
-        ptime = tm.pos_tX
         tm_rsync = tm.get_Rsync_times()
         sc_rsync = (self.ttl_times * 1000).astype('int')
         align = rsync.Rsync_aligner(tm_rsync, sc_rsync)
         self.frame_at_treadmill = align.B_to_A(self.frametimes*1000)
         numpy.save(self.procpath + self.prefix + '_frame_tm_times.npy', self.frame_at_treadmill)
-
         #resample speed, pos to scope frames
-        # for Y, tag in zip((), ()):
+        indices = self.get_frame_tm_x(self.frame_at_treadmill*1000, tm.pos_tX)
+        for Y, tag in zip((tm.smspd, tm.pos), ('smspd', 'pos')):
+            op = numpy.empty(len(self.frame_at_treadmill))
+            op[:] = numpy.nan
+            mask = indices > -1
+            op[mask] = Y[indices[mask]]
+            numpy.save(self.procpath + self.prefix + f'_{tag}.npy', op)
+        #add lap and reward number to output
+        self.laps = len(tm.laptimes)
+        self.rewards = 'not implemented'
+        self.md_keys.extend(['laps', 'rewards'])
 
-
-
-
-
-
-
+    def get_frame_tm_x(self, frametime, tX):
+        '''for each frametime, find index in treadmill analog signal'''
+        indices = numpy.empty(len(frametime), dtype='int')
+        indices[:] = -1
+        ix = 0
+        for i, ft in enumerate(frametime):
+            if not numpy.isnan(ft):
+                ix += numpy.searchsorted(tX[ix:], ft)
+                indices[i] = ix
+        return indices
 
 
     def save_metadata(self):

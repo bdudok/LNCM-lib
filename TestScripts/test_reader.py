@@ -1,6 +1,6 @@
 import os
 from matplotlib import pyplot as plt
-import numpy as np
+import numpy
 import pandas as pd
 from Proc2P.Treadmill.TreadmillRead import data_import, session_plot, Treadmill
 from Proc2P.Treadmill import rsync
@@ -46,3 +46,14 @@ l = min(len(tm_rsync), len(sc_rsync))
 
 align = rsync.Rsync_aligner(tm_rsync, sc_rsync, units_A='auto', units_B='auto',
                  chunk_size=5, plot=True, raise_exception=True)
+
+frametime = align.B_to_A(md.frametimes * 1000)
+
+tX = tm.pos_tX
+indices = numpy.empty(len(frametime), dtype='int')
+indices[:] = -1
+ix = 0
+for i, ft in enumerate(frametime):
+    if not numpy.isnan(ft):
+        ix += numpy.searchsorted(tX[ix:], ft/1000)
+        indices[i] = ix
