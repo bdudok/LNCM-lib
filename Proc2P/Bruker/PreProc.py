@@ -4,6 +4,7 @@ import os
 import pandas
 import xml.etree.ElementTree as ET
 from Proc2P.Treadmill import TreadmillRead, rsync
+from Proc2P.utils import lprint
 
 '''
 PreProcess: load xml files, save all frame times, sync signals and metadata into the analysis folder
@@ -11,17 +12,18 @@ PreProcess: load xml files, save all frame times, sync signals and metadata into
 
 class PreProc:
     __name__ = 'PreProc'
-    def __init__(self, dpath, procpath, prefix, btag = '000'):
+    def __init__(self, dpath, procpath, prefix, btag = '000', rsync_channel=0, lfp_channels=None, led_channel=1, ):
         self.dpath = os.path.join(dpath, prefix + f'-{btag}/')#raw data
         self.procpath = procpath + prefix + '/' #output processed data
         self.prefix = prefix #recorder prefix tag
         self.btag = btag #tag appended by bruker (000 by default)
 
         #setup config
-        self.led_channel = 1
-        self.rsync_channel = 0
+        self.led_channel = led_channel
+        self.rsync_channel = rsync_channel
+        self.lfp_channels = lfp_channels
 
-        self.md_keys = ['led_channel', 'rsync_channel', 'btag', 'dpath']
+        self.md_keys = ['led_channel', 'rsync_channel', 'lfp_channels', 'btag', 'dpath']
 
         if not os.path.exists(self.procpath):
             os.mkdir(self.procpath)
@@ -39,10 +41,13 @@ class PreProc:
         Convert the XML and voltage outputs to frametimes, timestamped events
         Saves bad_frames, FrameTimes, StimFrames, 2pTTLtimes, and sessiondata
         '''
+        lprint(self, 'Pre-processing ' + self.prefix)
         self.parse_frametimes()
         self.parse_TTLs()
+        self.convert_ephys()
         self.parse_treadmill()
         self.save_metadata()
+
 
     def parse_frametimes(self):
         #find xml filename
@@ -100,7 +105,7 @@ class PreProc:
 
     def parse_TTLs(self):
         vdat = pandas.read_csv(self.dpath+self.voltage_data)
-
+        self.vdat = vdat
         #get fs
         tree = ET.parse(self.dpath + self.voltage_config)
         root = tree.getroot()
@@ -109,24 +114,45 @@ class PreProc:
         self.fs = int(rate.text)
 
         #LED pulses
-        trace = vdat[f' Input {self.led_channel}'].values
-        vmax = 5.0 #5V command is 100%LED
-        pos = numpy.where(numpy.convolve(trace > vmax*0.05, [1, -1]) == 1)[0]
-        stimframes = numpy.searchsorted(self.frametimes*self.fs, pos)-1 #convert to 0 indexing
-        led_op = pandas.DataFrame({'Intensity': trace[pos]/vmax, 'ImgFrame': stimframes}, index=[pos])
-        led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
-        numpy.save(self.dpath+'bad_frames.npy', stimframes)
-        numpy.save(self.procpath + self.prefix + '_bad_frames.npy', stimframes)
+        if self.led_channel is not None:
+            trace = vdat[f' Input {self.led_channel}'].values
+            vmax = 5.0 #5V command is 100%LED
+            pos = numpy.where(numpy.convolve(trace > vmax*0.05, [1, -1]) == 1)[0]
+            stimframes = numpy.searchsorted(self.frametimes*self.fs, pos)-1 #convert to 0 indexing
+            led_op = pandas.DataFrame({'Intensity': trace[pos]/vmax, 'ImgFrame': stimframes}, index=[pos])
+            led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
+            numpy.save(self.dpath+'bad_frames.npy', stimframes)
+            numpy.save(self.procpath + self.prefix + '_bad_frames.npy', stimframes)
 
         #rsync times
-        trace = vdat[f' Input {self.rsync_channel}'].values
-        vmax = 3.3
-        pos = numpy.where(numpy.convolve(trace > vmax*0.5, [1, -1]) == 1)[0]
-        self.ttl_times = pos / self.fs
-        numpy.save(self.procpath+self.prefix+'_2pTTLtimes.npy', self.ttl_times)
+        if self.rsync_channel is not None:
+            trace = vdat[f' Input {self.rsync_channel}'].values
+            vmax = 3.3
+            pos = numpy.where(numpy.convolve(trace > vmax*0.5, [1, -1]) == 1)[0]
+            self.ttl_times = pos / self.fs
+            numpy.save(self.procpath+self.prefix+'_2pTTLtimes.npy', self.ttl_times)
 
         ##append metadata attribs
         self.md_keys.append('fs')
+
+    def convert_ephys(self):
+        if self.lfp_channels is not None:
+            trace = [self.vdat[f' Input {ch}'].values for ch in self.lfp_channels]
+            #get the frame for each sample
+            #use int for this. data range is +-10 V, 1000x gain. data*1000 is in microvolt (raw). int16 range is 32k
+            ephys = - numpy.ones((len(self.lfp_channels)+1, len(trace[0])), dtype='int16')
+            #get the frame number for each sample
+            for ti, t in enumerate(self.frametimes):
+                ephys[0, int(t * self.fs):int((t+1)*self.fs)] = ti
+            for ci in range(len(self.lfp_channels)):
+                ephys[ci+1] = trace[ci] * 1000
+            self.ephys =  ephys
+            numpy.save(self.procpath + self.prefix + '_ephys.npy', ephys)
+
+        ##append metadata attribs
+        self.lfp_units = 'microvolts'
+        self.md_keys.append('lfp_units')
+
 
     def parse_treadmill(self):
         tm = TreadmillRead.Treadmill(self.dpath, self.prefix)
@@ -201,14 +227,11 @@ class SessionInfo:
 if __name__ == '__main__':
 
     dpath = 'D:\Shares\Data\_RawData\Bruker\PVTot/'
-    procpath = 'D:\Shares\Data\_Processed/2P\PVTot\Opto/'
-    prefix = 'PVTot6_2023-08-31_opto_019'
+    procpath = 'D:\Shares\Data\_Processed/2P\PVTot\LFP/'
+    prefix = 'PVTot5_2023-09-15_LFP_026'
     btag = '000'
 
-    md = PreProc(dpath, procpath, prefix,)
-    # md.preprocess()
-
-    # si = SessionInfo(procpath+prefix+'/', prefix)
-    # si.load()
+    s = PreProc(dpath, procpath, prefix, btag, lfp_channels=(2,))
+    e = s.ephys
 
 
