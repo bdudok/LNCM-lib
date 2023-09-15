@@ -21,10 +21,11 @@ QAbstractItemView, QLineEdit, QCheckBox)
 from LFP.SpikeDet import SpikesPower
 from LFP.SzDet import InstRate
 from Proc2P.Legacy.Loaders import load_ephys
+from Proc2P.Bruker import LoadEphys
 
 
 class GUI_main(QtWidgets.QMainWindow):
-    def __init__(self, app, path=None, savepath=None, prefix_list=None,):
+    def __init__(self, app, path=None, savepath=None, prefix_list=None, setupID='Soltesz'):
         super().__init__()
 
         self.setWindowTitle(f'Detect spikes and seizures')
@@ -36,6 +37,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.savepath = savepath
         self.input_prefix = prefix_list
+        self.setup = setupID #'LNCM' or "Soltesz'
         # self.settings = QtCore.QSettings("pyqt_settings.ini", QtCore.QSettings.IniFormat)
         # self.settings.value("LastFile")
 
@@ -90,8 +92,12 @@ class GUI_main(QtWidgets.QMainWindow):
         self.param['TrDiff'] = 3
         self.param['Sz.MinDur'] = 5
         self.param['Sz.Gap'] = 3
-        self.param['SzDet.Framesize'] = 64
-        self.param['fs'] = 10000
+        if self.setup == 'Soltesz':
+            self.param['fs'] = 10000
+            self.param['SzDet.Framesize'] = 64
+        elif self.setup == 'LNCM':
+            self.param['fs'] = 2000
+            self.param['SzDet.Framesize'] = 50
 
     def make_filelist_groupbox(self):
         groupbox = QGroupBox('File list')
@@ -196,6 +202,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.result_fields[label] = QLabel('')
         hbox.addWidget(self.result_fields[label])
         return hbox
+
     def make_results_groupbox(self):
         groupbox = QGroupBox('Results')
         vbox = QtWidgets.QVBoxLayout()
@@ -226,21 +233,40 @@ class GUI_main(QtWidgets.QMainWindow):
 
         flist = os.listdir(self.wdir)
         #get prefix list
-        suffix = '.ephys'
-        if self.input_prefix is None:
-            prefix_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
-        else:
-            prefix_list = [prefix for prefix in self.input_prefix if prefix+suffix in flist]
-
+        if self.setup == 'Soltesz':
+            suffix = '.ephys'
+            if self.input_prefix is None:
+                prefix_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
+            else:
+                prefix_list = [prefix for prefix in self.input_prefix if prefix+suffix in flist]
+        elif self.setup == 'LNCM':
+            suffix = '_ephys.npy'
+            self.dirpaths = {}
+            prefix_list = []
+            for fn in flist:
+                dirpath = self.wdir+fn
+                if os.path.isdir(dirpath):
+                    dflist = os.listdir(dirpath)
+                    for dfn in dflist:
+                        if suffix in dfn:
+                            self.dirpaths[fn] = dirpath
+                            prefix_list.append(fn)
+            if self.input_prefix is not None:
+                prefix_list = [prefix for prefix in self.input_prefix if prefix in self.dirpaths]
         #set list widget
         self.prefix_list.clear()
         self.prefix_list.addItems(prefix_list)
 
-        #check if input exist
+        #check if output exist
         flist = os.listdir(self.savepath)
-        for pi, prefix in enumerate(prefix_list):
-            if prefix+self.suffix+'.json' in flist:
-                self.mark_complete(pi, color='#fcaf38')
+        if self.setup == 'Soltesz':
+            for pi, prefix in enumerate(prefix_list):
+                if prefix+self.suffix+'.json' in flist:
+                    self.mark_complete(pi, color='#fcaf38')
+        elif self.setup == 'LNCM':
+            for pi, prefix in enumerate(prefix_list):
+                if os.path.exists(os.path.join(self.dirpaths[prefix], prefix+'.json')):
+                    self.mark_complete(pi, color='#fcaf38')
 
     def format_plot(self, plot):
         for ca in plot.ax:
@@ -321,18 +347,21 @@ class GUI_main(QtWidgets.QMainWindow):
     def save_output_callback(self):
 
         #save settings
-        output_fn = self.savepath + self.active_prefix + self.suffix
+        if self.setup == 'Soltesz':
+            output_fn = self.savepath + self.active_prefix + self.suffix
+        elif self.setup == 'LNCM':
+            output_fn = os.path.join(self.savepath, self.active_prefix, self.active_prefix + self.suffix)
         op_dict = {}
         for key in self.param_keys_sorted:
             op_dict[key] = self.get_field(key)
         op_dict['Included'] = self.is_sz_checkbox.isChecked()
-        with open(output_fn+ '.json', 'w') as fp:
+        with open(output_fn + '.json', 'w') as fp:
             json.dump(op_dict, fp)
 
         #save plot
         for ca in self.FigCanvas1.ax:
             ca.autoscale()
-        self.FigCanvas1.fig.savefig(output_fn+ '.png', dpi=300)
+        self.FigCanvas1.fig.savefig(output_fn + '.png', dpi=300)
 
         self.mark_complete(self.current_selected_i)
         self.load_next_callback()
@@ -350,7 +379,10 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def refresh_data(self):
         print(self.active_prefix)
-        r = load_ephys(self.active_prefix)
+        if self.setup == 'Soltesz':
+            r = load_ephys(self.active_prefix)
+        elif self.setup == 'LNCM':
+            r = LoadEphys.Ephys(self.savepath, self.active_prefix)
 
         #get example trace
         fs = int(self.get_field('fs'))
