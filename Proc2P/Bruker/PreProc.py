@@ -10,6 +10,7 @@ PreProcess: load xml files, save all frame times, sync signals and metadata into
 '''
 
 class PreProc:
+    __name__ = 'PreProc'
     def __init__(self, dpath, procpath, prefix, btag = '000'):
         self.dpath = os.path.join(dpath, prefix + f'-{btag}/')#raw data
         self.procpath = procpath + prefix + '/' #output processed data
@@ -171,6 +172,7 @@ class PreProc:
         self.si.save()
 
 class SessionInfo:
+    __name__ = 'SessionInfo'
     def __init__(self, procpath, prefix):
         self.procpath = procpath
         self.prefix = prefix

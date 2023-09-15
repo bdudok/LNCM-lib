@@ -1,5 +1,7 @@
 import datetime
 import numpy
+import pandas
+
 def lprint(obj, message):
     '''Add timestamp and object name to print calls'''
     ts = datetime.datetime.now().isoformat(timespec='seconds')
@@ -78,3 +80,7 @@ def startstop(speed, duration=50, gap=150, ret_loc='actual', span=None, speed_th
             t += gap
         t += 1
     return starts, stops
+
+
+def read_excel(*args, **kwargs):
+   return pandas.read_excel(*args, **kwargs, engine='openpyxl')
