@@ -97,3 +97,19 @@ class Detect:
                                'SpikePower': self.spikepower})
         op.to_excel(path+prefix+'_spiketimes.xlsx')
 
+if __name__ == '__main__':
+    processed_path = 'D:\Shares\Data\_Processed/2P\PVTot\LFP/'
+    prefix = 'PVTot5_2023-09-15_LFP_025'
+    from Proc2P.Bruker import LoadEphys
+    fs = 2000
+    trace = LoadEphys.Ephys(processed_path, prefix).trace
+    spk = Detect(trace, fs=fs)
+
+    t = spk.get_spikes()
+
+    self = spk
+    tr1 = 3
+    tr2 = 5
+    trdiff = 2
+    dur = 10
+    dist = 50
