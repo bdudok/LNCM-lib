@@ -48,6 +48,13 @@ if ext_drive_name in drive_names:
     for d in dlist:
         script_s += get_cmd(d)
 
+#DSI revision analysis to OneDrive
+dest_path = 'OneDrive:Documents/_projects/2023-DSI/Revision_analysis/'
+source_path = 'D:\Shares\Data\old_2P\DLX-ECB\PlaceFieldPlots/'
+dlist = ['Revision']
+for d in dlist:
+    script_s += get_cmd(d)
+
 
 with open(script_handle, 'w') as f:
     f.write(script_s)
