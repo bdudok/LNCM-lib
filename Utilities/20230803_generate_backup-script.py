@@ -14,9 +14,6 @@ python pywin32_postinstall.py -install
 script_handle = 'C:/Users/u247640/OneDriveBackup.cmd'
 ps_script_handle = 'C:/Users/u247640/DBBackup.ps1'
 
-dest_path = 'OneDrive:_RawData/'
-source_path = 'D:\Shares\Data\_RawData/'
-
 def get_cmd(folder):
     global source_path, dest_path
     s = f'rclone copy {source_path+folder} {dest_path+folder} -P'
@@ -25,7 +22,36 @@ def get_cmd(folder):
 
 script_s = ''
 
+#back up baserow db
+dest_path = 'OneDrive:_baserow_backup/'
+source_path = 'D:\Shares\Data\DB_Backups/'
+dlist = ['30days']
+for d in dlist:
+    script_s += get_cmd(d)
+
+#keep last 10 daily backups, then every 30 days
+ps_script = r'''cd D:\Shares\Data\DB_Backups
+Move-Item *.tar .\10days\
+docker stop baserow
+docker run --rm -v baserow_data:/baserow/data -v ${PWD}:/backup ubuntu tar cvf /backup/baserow_$(get-date -f yyyy-MM-dd).tar /baserow/data
+docker start baserow
+$oldestFile = gci ./10days/ | select -first 1
+$latestBu = gci ./30days/ | select -last 1
+$timespanF = new-timespan -days 10
+$timespanB = new-timespan -days 30
+if (((get-date) - $oldestFile.LastWriteTime) -gt $timespanF) {
+    if (((get-date) - $latestBu.LastWriteTime) -gt $timespanB) {
+        mv ./10days/$oldestFile ./30days/
+    }
+    else {rm ./10days/$oldestFile}
+}
+'''
+
+script_s += 'Powershell ' + ps_script_handle + '\n'
+
 #raw data folders to OneDrive
+dest_path = 'OneDrive:_RawData/'
+source_path = 'D:\Shares\Data\_RawData/'
 dlist = ['Confocal', 'Widefield', 'Bruker']
 
 for d in dlist:
@@ -66,32 +92,6 @@ dlist = ['Revision']
 for d in dlist:
     script_s += get_cmd(d)
 
-#back up baserow db
-dest_path = 'OneDrive:_baserow_backup/'
-source_path = 'D:\Shares\Data\DB_Backups/'
-dlist = ['30days']
-for d in dlist:
-    script_s += get_cmd(d)
-
-#keep last 10 daily backups, then every 30 days
-ps_script = '''cd D:\Shares\Data\DB_Backups
-mv *.tar ./10days/
-docker stop baserow
-docker run --rm -v baserow_data:/baserow/data -v ${PWD}:/backup ubuntu tar cvf /backup/baserow_$(get-date -f yyyy-MM-dd).tar /baserow/data
-docker start baserow
-$oldestFile = gci ./10days/ | select -first 1
-$latestBu = gci ./30days/ | select -last 1
-$timespanF = new-timespan -days 10
-$timespanB = new-timespan -days 30
-if (((get-date) - $oldestFile.LastWriteTime) -gt $timespanF) {
-    if (((get-date) - $latestBu.LastWriteTime) -gt $timespanB) {
-        mv ./10days/$oldestFile ./30days/
-    }
-    else {rm ./10days/$oldestFile}
-}
-'''
-
-script_s += ps_script_handle + '\n'
 
 with open(script_handle, 'w') as f:
     f.write(script_s)
