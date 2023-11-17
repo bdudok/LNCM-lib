@@ -47,7 +47,7 @@ if (((get-date) - $oldestFile.LastWriteTime) -gt $timespanF) {
 }
 '''
 
-script_s += 'Powershell ' + ps_script_handle + '\n'
+script_s += 'Powershell -NoProfile -ExecutionPolicy Bypass -File ' + ps_script_handle + '\n'
 
 #raw data folders to OneDrive
 dest_path = 'OneDrive:_RawData/'
