@@ -3,7 +3,7 @@ from matplotlib.collections import PatchCollection
 from matplotlib.patches import Polygon
 from matplotlib.widgets import Slider, Button, TextBox
 from Proc2P.Bruker.ConfigVars import CF
-from Proc2P.Analysis import ImagingSession
+from Proc2P.Analysis.ImagingSession import ImagingSession
 import copy
 
 import pandas

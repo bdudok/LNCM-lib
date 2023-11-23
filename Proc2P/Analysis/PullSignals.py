@@ -1,5 +1,5 @@
 import numpy
-from Proc2P.Analysis import LoadImage, load_roi_file
+from Proc2P.Analysis.LoadPolys import LoadImage, load_roi_file
 import matplotlib.path as mplpath
 import os
 from multiprocessing import Process

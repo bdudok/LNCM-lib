@@ -2,7 +2,7 @@ import numpy
 import os
 import cv2
 from Proc2P.Bruker.PreProc import SessionInfo
-from Bruker.LoadPolys import LoadImage
+from Proc2P.Analysis.LoadPolys import LoadImage
 from Proc2P.Bruker.SyncTools import Sync
 from Proc2P.utils import startstop, gapless
 

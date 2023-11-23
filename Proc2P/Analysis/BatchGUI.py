@@ -14,25 +14,25 @@ from multiprocessing import Queue, Process, cpu_count, freeze_support, set_start
 # from MotionCorrect import CleanupWorker
 
 # for roiedit
-from Proc2P.Analysis import Translate
-from Proc2P.Analysis import Gui as roi_Gui
-from Proc2P.Analysis import Worker as seg_Worker
+from Proc2P.Analysis.RoiEditor import RoiEditor, Translate
+from Proc2P.Analysis.RoiEditor import Gui as roi_Gui
+from Proc2P.Analysis.RoiEditor import Worker as seg_Worker
 from subprocess import call, Popen
 
 from Proc2P.Analysis.PullSignals import Worker as pull_Worker
 
 # for traces
-from Proc2P.Analysis import CaTrace
-from Proc2P.Analysis import Worker as tr_Worker
+from Proc2P.Analysis.CaTrace import CaTrace
+from Proc2P.Analysis.CaTrace import Worker as tr_Worker
 
 #for ephys
 # from Ripples import Ripples, export_SCA
 # from Spike_Sz_detect import Worker as SzDet_Worker
 
 # for views
-from Proc2P.Analysis import Gui as session_Gui
+from Proc2P.Analysis.SessionGui import Gui as session_Gui
 # from Scores import Scores
-from Proc2P.Analysis import LoadImage
+from Proc2P.Analysis.LoadPolys import LoadImage
 import cv2, h5py
 from scipy.signal import decimate
 
@@ -42,7 +42,7 @@ from Proc2P.Analysis.AssetFinder import AssetFinder
 # from BehaviorSession import BehaviorSession
 from TkApps import PickFromList
 from TimeProfile import TimeProfile
-from Proc2P.Analysis import exportstop
+from Proc2P.Analysis.AnalysisClasses.ExportStop import exportstop
 # from Batch_Utils import split_ephys, export_speed, export_speed_cms
 
 # specific analysis
@@ -57,9 +57,9 @@ class App:
         self.current_column = 0
         self.request_queue = request_queue
         self.filelist = FileList(self, self.root, self.column())
-        self.mc = Motion(self, self.root, self.column())
+        # self.mc = Motion(self, self.root, self.column())
         self.util = Util(self, self.root, self.column())
-        self.preview = Prev(self, self.root, self.column())
+        # self.preview = Prev(self, self.root, self.column())
         self.roidetect = RoiDet(self, self.root, self.column())
         self.roiedit = RoiEd(self, self.root, self.column())
         self.roiconvert = Rois(self, self.root, self.column())
@@ -245,7 +245,7 @@ class View:
         self.frame.grid(row=0, column=column, sticky=N + W)
 
         Label(self.frame, text='Display plots').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Highlight", command=self.autosel_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Highlight", command=self.autosel_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Unit plots", command=self.unit_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Session plot", command=self.session_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Place fields", command=self.pf_callback).grid(row=self.row(), sticky=N)
@@ -255,22 +255,22 @@ class View:
         Button(self.frame, text="Placefield seq.", command=self.pfseq_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Weighted Pf. seq.", command=self.pfseqsmooth_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Running Pf. seq.", command=self.runpfseq_callback).grid(row=self.row(), sticky=N)
-        Label(self.frame, text='Export').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Save csv", command=self.csv_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Save figure", command=self.figsave_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Save raw F", command=self.rawsave_callback).grid(row=self.row(), sticky=N)
-        Label(self.frame, text='QA Analysis').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Save synch events", command=self.QAsynch_callback).grid(row=self.row(), sticky=N)
+        # Label(self.frame, text='Export').grid(row=self.row(), pady=10)
+        # Button(self.frame, text="Save csv", command=self.csv_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Save figure", command=self.figsave_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Save raw F", command=self.rawsave_callback).grid(row=self.row(), sticky=N)
+        # Label(self.frame, text='QA Analysis').grid(row=self.row(), pady=10)
+        # Button(self.frame, text="Save synch events", command=self.QAsynch_callback).grid(row=self.row(), sticky=N)
 
-        Label(self.frame, text='JF ripples').grid(row=self.row(), pady=10)
-        self.config['Ripple-Secs'] = StringVar()
-        row = self.row()
-        Label(self.frame, text='Range(s)').grid(row=row, column=0, sticky=N + W)
-        Entry(self.frame, textvariable=self.config['Ripple-Secs'], width=5).grid(row=row, column=0, sticky=N + E)
-        self.config['Ripple-Secs'].set('5')
+        # Label(self.frame, text='JF ripples').grid(row=self.row(), pady=10)
+        # self.config['Ripple-Secs'] = StringVar()
+        # row = self.row()
+        # Label(self.frame, text='Range(s)').grid(row=row, column=0, sticky=N + W)
+        # Entry(self.frame, textvariable=self.config['Ripple-Secs'], width=5).grid(row=row, column=0, sticky=N + E)
+        # self.config['Ripple-Secs'].set('5')
 
-        Button(self.frame, text="Show ripple plot", command=self.RTA_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Save to excel", command=self.RTA_save_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Show ripple plot", command=self.RTA_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Save to excel", command=self.RTA_save_callback).grid(row=self.row(), sticky=N)
 
     def row(self, incr=1):
         self.current_row += incr
@@ -423,13 +423,13 @@ class Traces:
 
         Label(self.frame, text='Process traces').grid(row=self.row(), pady=10)
         Button(self.frame, text="Auto select", command=self.autosel_callback).grid(row=self.row(), sticky=N)
-        self.version = IntVar()
-        Checkbutton(self.frame, text='Old baseline', variable=self.version).grid(row=self.row(), sticky=N)
-        self.version.set(0)
+        # self.version = IntVar()
+        # Checkbutton(self.frame, text='Old baseline', variable=self.version).grid(row=self.row(), sticky=N)
+        # self.version.set(0)
 
-        self.peakdet = IntVar()
-        Checkbutton(self.frame, text='Detect peaks', variable=self.peakdet).grid(row=self.row(), sticky='N')
-        self.peakdet.set(1)
+        # self.peakdet = IntVar()
+        # Checkbutton(self.frame, text='Detect peaks', variable=self.peakdet).grid(row=self.row(), sticky='N')
+        # self.peakdet.set(1)
 
         Label(self.frame, text='Exclude from baseline').grid(row=self.row())
         defs = 0, 0
@@ -451,52 +451,52 @@ class Traces:
 
         Button(self.frame, text="Run", command=self.execute_callback).grid(row=self.row(), sticky=N)
 
-        Label(self.frame, text='Ripples').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Highlight", command=self.autosel_rip_callback).grid(row=self.row(), sticky=N)
+        # Label(self.frame, text='Ripples').grid(row=self.row(), pady=10)
+        # Button(self.frame, text="Highlight", command=self.autosel_rip_callback).grid(row=self.row(), sticky=N)
 
-        Label(self.frame, text='Config').grid(row=self.row(), pady=10)
-        defs = (5, 3, 1)
-        self.cfgfields = ['tr1', 'tr2', 'y_scale']
-        for i, text in enumerate(self.cfgfields):
-            self.config[text] = StringVar()
-            row = self.row()
-            Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
-            Entry(self.frame, textvariable=self.config[text], width=3).grid(row=row, column=0, sticky=N + E)
-            self.config[text].set(str(defs[i]))
-        self.force = IntVar()
-        Checkbutton(self.frame, text='Force recompute', variable=self.force).grid(row=self.row(), sticky='N')
-        self.force.set(0)
-
-        Button(self.frame, text="Open Ripples", command=self.ripples_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Display", command=self.ripples_enum_callback).grid(row=self.row(), sticky=N)
-
-        self.excl_spikes = IntVar()
-        Checkbutton(self.frame, text='Exclude spikes', variable=self.excl_spikes).grid(row=self.row(), sticky='N')
-        self.excl_spikes.set(0)
-        Button(self.frame, text="Detect recursive", command=self.ripples_rec_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Load ripp. set", command=self.ripples_load_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Save ripp. set", command=self.ripples_save_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="export to excel", command=self.ripples_export_callback).grid(row=self.row(), sticky=N)
-
-        Button(self.frame, text="M2 Score", command=self.m2score_callback).grid(row=self.row(), sticky=N, pady=10)
-        Button(self.frame, text="OROT Score", command=self.orotscore_callback).grid(row=self.row(), sticky=N, pady=10)
-
-    def m2score_callback(self):
-        for prefix in self.parent.filelist.get_active()[1]:
-            print('Export M2 score:', prefix, 'queued.')
-            self.parent.request_queue.put(('exportstop', (self.parent.filelist.wdir, prefix,
-                                                          self.parent.mc.channels.get(),
-                                                          self.parent.preview.get_ephys_channels(),
-                                                          'm2')))
-
-    def orotscore_callback(self):
-        for prefix in self.parent.filelist.get_active()[1]:
-            print('Export 1/M2 score:', prefix, 'queued.')
-            self.parent.request_queue.put(('exportstop', (self.parent.filelist.wdir, prefix,
-                                                          self.parent.mc.channels.get(),
-                                                          self.parent.preview.get_ephys_channels(),
-                                                          True,
-                                                          'm2')))
+    #     Label(self.frame, text='Config').grid(row=self.row(), pady=10)
+    #     defs = (5, 3, 1)
+    #     self.cfgfields = ['tr1', 'tr2', 'y_scale']
+    #     for i, text in enumerate(self.cfgfields):
+    #         self.config[text] = StringVar()
+    #         row = self.row()
+    #         Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
+    #         Entry(self.frame, textvariable=self.config[text], width=3).grid(row=row, column=0, sticky=N + E)
+    #         self.config[text].set(str(defs[i]))
+    #     self.force = IntVar()
+    #     Checkbutton(self.frame, text='Force recompute', variable=self.force).grid(row=self.row(), sticky='N')
+    #     self.force.set(0)
+    #
+    #     Button(self.frame, text="Open Ripples", command=self.ripples_callback).grid(row=self.row(), sticky=N)
+    #     Button(self.frame, text="Display", command=self.ripples_enum_callback).grid(row=self.row(), sticky=N)
+    #
+    #     self.excl_spikes = IntVar()
+    #     Checkbutton(self.frame, text='Exclude spikes', variable=self.excl_spikes).grid(row=self.row(), sticky='N')
+    #     self.excl_spikes.set(0)
+    #     Button(self.frame, text="Detect recursive", command=self.ripples_rec_callback).grid(row=self.row(), sticky=N)
+    #     Button(self.frame, text="Load ripp. set", command=self.ripples_load_callback).grid(row=self.row(), sticky=N)
+    #     Button(self.frame, text="Save ripp. set", command=self.ripples_save_callback).grid(row=self.row(), sticky=N)
+    #     Button(self.frame, text="export to excel", command=self.ripples_export_callback).grid(row=self.row(), sticky=N)
+    #
+    #     Button(self.frame, text="M2 Score", command=self.m2score_callback).grid(row=self.row(), sticky=N, pady=10)
+    #     Button(self.frame, text="OROT Score", command=self.orotscore_callback).grid(row=self.row(), sticky=N, pady=10)
+    #
+    # def m2score_callback(self):
+    #     for prefix in self.parent.filelist.get_active()[1]:
+    #         print('Export M2 score:', prefix, 'queued.')
+    #         self.parent.request_queue.put(('exportstop', (self.parent.filelist.wdir, prefix,
+    #                                                       self.parent.mc.channels.get(),
+    #                                                       self.parent.preview.get_ephys_channels(),
+    #                                                       'm2')))
+    #
+    # def orotscore_callback(self):
+    #     for prefix in self.parent.filelist.get_active()[1]:
+    #         print('Export 1/M2 score:', prefix, 'queued.')
+    #         self.parent.request_queue.put(('exportstop', (self.parent.filelist.wdir, prefix,
+    #                                                       self.parent.mc.channels.get(),
+    #                                                       self.parent.preview.get_ephys_channels(),
+    #                                                       True,
+    #                                                       'm2')))
 
     def row(self, incr=1):
         self.current_row += incr
@@ -593,7 +593,7 @@ class RoiDet:
         self.frame.grid(row=0, column=column, sticky=N + W)
 
         Label(self.frame, text='Segmentation').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Auto select", command=self.autosel_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Auto select", command=self.autosel_callback).grid(row=self.row(), sticky=N)
         #
         Label(self.frame, text='Methods').grid(row=self.row())
         approaches = ['iPC', 'PC', 'STICA', 'iPC-1', 'PC-1', 'STICA-1']
@@ -614,8 +614,8 @@ class RoiDet:
 
         Button(self.frame, text="Run", command=self.execute_callback).grid(row=self.row(), sticky=N)
 
-        Label(self.frame, text='Sublayers').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Compute", command=self.sublayer_callback).grid(row=self.row(), sticky=N)
+        # Label(self.frame, text='Sublayers').grid(row=self.row(), pady=10)
+        # Button(self.frame, text="Compute", command=self.sublayer_callback).grid(row=self.row(), sticky=N)
 
     def autosel_callback(self):
         wdir = self.parent.filelist.wdir
@@ -677,14 +677,14 @@ class RoiEd:
         self.frame.grid(row=0, column=column, sticky=N + W)
 
         Label(self.frame, text='Filter & Edit').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Highlight", command=self.highlight_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Translate", command=self.translate_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Highlight", command=self.highlight_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Translate", command=self.translate_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Start", command=self.roied_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Clear", command=self.clear_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Dilate", command=self.dilate_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Save", command=self.save_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Export to sbx", command=self.sbx_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Close", command=self.close_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Clear", command=self.clear_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Dilate", command=self.dilate_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Save", command=self.save_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Export to sbx", command=self.sbx_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Close", command=self.close_callback).grid(row=self.row(), sticky=N)
 
     def highlight_callback(self):
         wdir = self.parent.filelist.wdir
@@ -742,21 +742,21 @@ class Util:
         self.frame.grid(row=0, column=column, sticky=N + W)
 
         Label(self.frame, text='Preview').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Auto select", command=self.autosel_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Auto select", command=self.autosel_callback).grid(row=self.row(), sticky=N)
 
-        Button(self.frame, text="Run", command=self.execute_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Run", command=self.execute_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Export Stop", command=self.exportstop_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Show", command=self.show_callback).grid(row=self.row(), sticky=N)
 
         Button(self.frame, text="Play movie", command=self.viewer_callback).grid(row=self.row(), sticky=N)
 
-        Label(self.frame, text='Rename Tdmls').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Auto select", command=self.autosel_tdml_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Rename", command=self.execute_tdml_callback).grid(row=self.row(), sticky=N)
+        # Label(self.frame, text='Rename Tdmls').grid(row=self.row(), pady=10)
+        # Button(self.frame, text="Auto select", command=self.autosel_tdml_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Rename", command=self.execute_tdml_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Export behavior plots", command=self.export_tdml_callback).grid(row=self.row(),
                                                                                                  sticky=N)
-        Button(self.frame, text="Laps spreadsheet", command=self.export_list_callback).grid(row=self.row(),
-                                                                                            sticky=N)
+        # Button(self.frame, text="Laps spreadsheet", command=self.export_list_callback).grid(row=self.row(),
+        #                                                                                     sticky=N)
 
         Label(self.frame, text='Export Time profile').grid(row=self.row(), pady=10)
         defs = (0, 1000, 256, 500)
@@ -806,8 +806,8 @@ class Util:
 
     def exportstop_callback(self):
         for prefix in self.parent.filelist.get_active()[1]:
-            self.parent.request_queue.put(('exportstop', (self.parent.filelist.wdir, prefix, 'stop',
-                                                          self.parent.mc.channels.get())))
+            self.parent.request_queue.put(('exportstop', (self.parent.filelist.wdir, prefix, 'stop', 'Green')))
+                                                          # self.parent.mc.channels.get())))
 
     def execute_tdml_callback(self):
         pflist = self.parent.filelist.get_active()[1]
@@ -863,168 +863,168 @@ class Util:
         return self.current_row - incr
 
 
-class Prev:
-    def __init__(self, parent, master, column):
-        self.parent = parent
-        self.master = master
-        self.current_row = 0
-        self.config = {}
-
-        self.frame = Frame(master)
-        self.frame.grid(row=0, column=column, sticky=N + W)
-
-        Label(self.frame, text='Cam View').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Highlight", command=self.eyesel_callback).grid(row=self.row(), sticky=N)
-
-        Button(self.frame, text="Play cam", command=self.eyeviewer_callback).grid(row=self.row(), sticky=N)
-
-        Label(self.frame, text='Z stack').grid(row=self.row(), pady=10)
-        defs = (200, 5, 30)
-        for i, text in enumerate(['Range', 'Step', 'Frames']):
-            self.config[text] = StringVar()
-            row = self.row()
-            Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
-            Entry(self.frame, textvariable=self.config[text], width=5).grid(row=row, column=0, sticky=N + E)
-            self.config[text].set(str(defs[i]))
-
-        Button(self.frame, text="Show stack", command=self.playstack_callback).grid(row=self.row(), sticky=N)
-
-        Button(self.frame, text="Save stacks", command=self.savestack_callback).grid(row=self.row(), sticky=N)
-
-        Button(self.frame, text="Show MIP", command=self.showmip_callback).grid(row=self.row(), sticky=N)
-
-        Label(self.frame, text='Ephys channels').grid(row=self.row(), pady=10)
-        subframe = Frame(self.frame)
-        subframe.grid(row=self.row(), column=0, sticky=N + W)
-        for i, text in enumerate(('Ch', 'of')):
-            self.config[text] = StringVar()
-            Label(subframe, text=text, width=2).grid(row=0, column=i * 2, sticky=N + W)
-            Entry(subframe, textvariable=self.config[text], width=2).grid(row=0, column=i * 2 + 1, sticky=N + W)
-            self.config[text].set('1')
-
-        Label(self.frame, text='Ephys trace').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Show", command=self.showtrace_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Export csv", command=self.export_trace_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Export SCA", command=self.export_SCA_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text='LFP + Ca', command=self.show_overlay_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text='LFP + Ca QA', command=self.show_overlay_callback_QA).grid(row=self.row(), sticky=N)
-
-        Label(self.frame, text='Batch').grid(row=self.row(), pady=10)
-        Button(self.frame, text='Split ephys', command=self.split_ephys_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text='Export speed (ephys)', command=self.export_speed_callback).grid(row=self.row(),
-                                                                                                 sticky=N)
-        Button(self.frame, text='Export speed (imaging)', command=self.export_speed_cms_callback).grid(row=self.row(),
-                                                                                                       sticky=N)
-        Button(self.frame, text="Detect sz and spikes", command=self.detect_sz_callback).grid(row=self.row(), sticky=N)
-
-        Label(self.frame, text='Thresholds').grid(row=self.row(), pady=10)
-        defs = (5, )
-        for i, text in enumerate(['IISthr', ]):
-            self.config[text] = StringVar()
-            row = self.row()
-            Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
-            Entry(self.frame, textvariable=self.config[text], width=5).grid(row=row, column=0, sticky=N + E)
-            self.config[text].set(str(defs[i]))
-
-    def get_ephys_channels(self):
-        return [int(self.config[text].get()) for text in ('Ch', 'of')]
-
-    def split_ephys_callback(self):
-        split_ephys(filedialog.askdirectory(), self.get_ephys_channels()[1])
-
-    def export_speed_callback(self):
-        export_speed(filedialog.askdirectory(), self.get_ephys_channels()[1])
-
-    def export_speed_cms_callback(self):
-        path = filedialog.askdirectory()
-        export_speed_cms(path)
-        print('Export finished for all files in ', path)
-
-    def detect_sz_callback(self):
-        path = self.parent.filelist.wdir
-        kwargs = {'IIS_threshold': float(self.config['IISthr'].get())}
-        for prefix in self.parent.filelist.get_active()[1]:
-            self.parent.request_queue.put(('SzDet', (path, prefix, kwargs)))
-            print('Seizure detection queued:', prefix, )
-
-    def eyesel_callback(self):
-        wdir = self.parent.filelist.wdir
-        newsel = []
-        for i, prefix in enumerate(self.parent.filelist.prefix_list):
-            if os.path.exists(wdir + prefix + '_eye.mat'):
-                newsel.append(i)
-        self.parent.filelist.set_active(newsel)
-
-    def eyeviewer_callback(self):
-        prefix = self.parent.filelist.get_active()[1][0]
-        self.parent.request_queue.put(('eye', (self.parent.filelist.wdir, prefix)))
-
-    def get_stack_cfg(self):
-        cfg = []
-        for text in ['Step', 'Range', 'Frames']:
-            try:
-                cfg.append(int(self.config[text].get()))
-            except:
-                print(text + ' is not a number')
-                return -1
-        return cfg
-
-    def savestack_callback(self):
-        prefix = self.parent.filelist.get_active()[1]
-        cfg = self.get_stack_cfg()
-        cfg.append('saving')
-        self.parent.request_queue.put(('stack', (self.parent.filelist.wdir, prefix, cfg)))
-
-    def playstack_callback(self):
-        prefix = self.parent.filelist.get_active()[1][0]
-        self.parent.request_queue.put(('stack', (self.parent.filelist.wdir, prefix, self.get_stack_cfg())))
-
-    def showmip_callback(self):
-        prefix = self.parent.filelist.get_active()[1][0]
-        fn = self.parent.filelist.wdir + prefix + '_MIP.png'
-        if not os.path.exists(fn):
-            cfg = []
-            for text in ['Step', 'Range', 'Frames']:
-                try:
-                    cfg.append(int(self.config[text].get()))
-                except:
-                    print(text + ' is not a number')
-                    return -1
-            os.chdir(self.parent.filelist.wdir)
-            stack = LoadImage(prefix)
-            stack.create_zstack(*cfg, save=True)
-            if 'win' in sys.platform:
-                Popen([fn], shell=True)
-            else:
-                print("File saved in .tif format, calling system viewer not implemented for platform", sys.platform)
-
-    def showtrace_callback(self):
-        prefix = self.parent.filelist.get_active()[1][0]
-        self.parent.request_queue.put(('trace', (self.parent.filelist.wdir, prefix, self.get_ephys_channels())))
-
-    def export_trace_callback(self):
-        for prefix in self.parent.filelist.get_active()[1]:
-            play_ephys(self.parent.filelist.wdir, prefix, self.get_ephys_channels(), export=True)
-
-    def export_SCA_callback(self):
-        for prefix in self.parent.filelist.get_active()[1]:
-            export_SCA(self.parent.filelist.wdir, prefix, self.get_ephys_channels())
-
-    def show_overlay_callback(self):
-        prefix = self.parent.filelist.get_active()[1][0]
-        print(prefix, 'LFP plot queued...')
-        self.parent.request_queue.put(('lfp_overlay', (self.parent.filelist.wdir, prefix, self.get_ephys_channels())))
-
-    def show_overlay_callback_QA(self):
-        prefix = self.parent.filelist.get_active()[1][0]
-        print(prefix, 'LFP plot queued...')
-        self.parent.request_queue.put(('lfp_overlay_qa', (self.parent.filelist.wdir, prefix,
-                                                          self.parent.pltconfigs.get_tag(), self.get_ephys_channels())))
-
-    def row(self, incr=1):
-        self.current_row += incr
-        return self.current_row - incr
-
+# class Prev:
+#     def __init__(self, parent, master, column):
+#         self.parent = parent
+#         self.master = master
+#         self.current_row = 0
+#         self.config = {}
+#
+#         self.frame = Frame(master)
+#         self.frame.grid(row=0, column=column, sticky=N + W)
+#
+#         Label(self.frame, text='Cam View').grid(row=self.row(), pady=10)
+#         Button(self.frame, text="Highlight", command=self.eyesel_callback).grid(row=self.row(), sticky=N)
+#
+#         Button(self.frame, text="Play cam", command=self.eyeviewer_callback).grid(row=self.row(), sticky=N)
+#
+#         Label(self.frame, text='Z stack').grid(row=self.row(), pady=10)
+#         defs = (200, 5, 30)
+#         for i, text in enumerate(['Range', 'Step', 'Frames']):
+#             self.config[text] = StringVar()
+#             row = self.row()
+#             Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
+#             Entry(self.frame, textvariable=self.config[text], width=5).grid(row=row, column=0, sticky=N + E)
+#             self.config[text].set(str(defs[i]))
+#
+#         Button(self.frame, text="Show stack", command=self.playstack_callback).grid(row=self.row(), sticky=N)
+#
+#         Button(self.frame, text="Save stacks", command=self.savestack_callback).grid(row=self.row(), sticky=N)
+#
+#         Button(self.frame, text="Show MIP", command=self.showmip_callback).grid(row=self.row(), sticky=N)
+#
+#         Label(self.frame, text='Ephys channels').grid(row=self.row(), pady=10)
+#         subframe = Frame(self.frame)
+#         subframe.grid(row=self.row(), column=0, sticky=N + W)
+#         for i, text in enumerate(('Ch', 'of')):
+#             self.config[text] = StringVar()
+#             Label(subframe, text=text, width=2).grid(row=0, column=i * 2, sticky=N + W)
+#             Entry(subframe, textvariable=self.config[text], width=2).grid(row=0, column=i * 2 + 1, sticky=N + W)
+#             self.config[text].set('1')
+#
+#         Label(self.frame, text='Ephys trace').grid(row=self.row(), pady=10)
+#         Button(self.frame, text="Show", command=self.showtrace_callback).grid(row=self.row(), sticky=N)
+#         Button(self.frame, text="Export csv", command=self.export_trace_callback).grid(row=self.row(), sticky=N)
+#         Button(self.frame, text="Export SCA", command=self.export_SCA_callback).grid(row=self.row(), sticky=N)
+#         Button(self.frame, text='LFP + Ca', command=self.show_overlay_callback).grid(row=self.row(), sticky=N)
+#         Button(self.frame, text='LFP + Ca QA', command=self.show_overlay_callback_QA).grid(row=self.row(), sticky=N)
+#
+#         Label(self.frame, text='Batch').grid(row=self.row(), pady=10)
+#         Button(self.frame, text='Split ephys', command=self.split_ephys_callback).grid(row=self.row(), sticky=N)
+#         Button(self.frame, text='Export speed (ephys)', command=self.export_speed_callback).grid(row=self.row(),
+#                                                                                                  sticky=N)
+#         Button(self.frame, text='Export speed (imaging)', command=self.export_speed_cms_callback).grid(row=self.row(),
+#                                                                                                        sticky=N)
+#         Button(self.frame, text="Detect sz and spikes", command=self.detect_sz_callback).grid(row=self.row(), sticky=N)
+#
+#         Label(self.frame, text='Thresholds').grid(row=self.row(), pady=10)
+#         defs = (5, )
+#         for i, text in enumerate(['IISthr', ]):
+#             self.config[text] = StringVar()
+#             row = self.row()
+#             Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
+#             Entry(self.frame, textvariable=self.config[text], width=5).grid(row=row, column=0, sticky=N + E)
+#             self.config[text].set(str(defs[i]))
+#
+#     def get_ephys_channels(self):
+#         return [int(self.config[text].get()) for text in ('Ch', 'of')]
+#
+#     def split_ephys_callback(self):
+#         split_ephys(filedialog.askdirectory(), self.get_ephys_channels()[1])
+#
+#     def export_speed_callback(self):
+#         export_speed(filedialog.askdirectory(), self.get_ephys_channels()[1])
+#
+#     def export_speed_cms_callback(self):
+#         path = filedialog.askdirectory()
+#         export_speed_cms(path)
+#         print('Export finished for all files in ', path)
+#
+#     def detect_sz_callback(self):
+#         path = self.parent.filelist.wdir
+#         kwargs = {'IIS_threshold': float(self.config['IISthr'].get())}
+#         for prefix in self.parent.filelist.get_active()[1]:
+#             self.parent.request_queue.put(('SzDet', (path, prefix, kwargs)))
+#             print('Seizure detection queued:', prefix, )
+#
+#     def eyesel_callback(self):
+#         wdir = self.parent.filelist.wdir
+#         newsel = []
+#         for i, prefix in enumerate(self.parent.filelist.prefix_list):
+#             if os.path.exists(wdir + prefix + '_eye.mat'):
+#                 newsel.append(i)
+#         self.parent.filelist.set_active(newsel)
+#
+#     def eyeviewer_callback(self):
+#         prefix = self.parent.filelist.get_active()[1][0]
+#         self.parent.request_queue.put(('eye', (self.parent.filelist.wdir, prefix)))
+#
+#     def get_stack_cfg(self):
+#         cfg = []
+#         for text in ['Step', 'Range', 'Frames']:
+#             try:
+#                 cfg.append(int(self.config[text].get()))
+#             except:
+#                 print(text + ' is not a number')
+#                 return -1
+#         return cfg
+#
+#     def savestack_callback(self):
+#         prefix = self.parent.filelist.get_active()[1]
+#         cfg = self.get_stack_cfg()
+#         cfg.append('saving')
+#         self.parent.request_queue.put(('stack', (self.parent.filelist.wdir, prefix, cfg)))
+#
+#     def playstack_callback(self):
+#         prefix = self.parent.filelist.get_active()[1][0]
+#         self.parent.request_queue.put(('stack', (self.parent.filelist.wdir, prefix, self.get_stack_cfg())))
+#
+#     def showmip_callback(self):
+#         prefix = self.parent.filelist.get_active()[1][0]
+#         fn = self.parent.filelist.wdir + prefix + '_MIP.png'
+#         if not os.path.exists(fn):
+#             cfg = []
+#             for text in ['Step', 'Range', 'Frames']:
+#                 try:
+#                     cfg.append(int(self.config[text].get()))
+#                 except:
+#                     print(text + ' is not a number')
+#                     return -1
+#             os.chdir(self.parent.filelist.wdir)
+#             stack = LoadImage(prefix)
+#             stack.create_zstack(*cfg, save=True)
+#             if 'win' in sys.platform:
+#                 Popen([fn], shell=True)
+#             else:
+#                 print("File saved in .tif format, calling system viewer not implemented for platform", sys.platform)
+#
+#     def showtrace_callback(self):
+#         prefix = self.parent.filelist.get_active()[1][0]
+#         self.parent.request_queue.put(('trace', (self.parent.filelist.wdir, prefix, self.get_ephys_channels())))
+#
+#     def export_trace_callback(self):
+#         for prefix in self.parent.filelist.get_active()[1]:
+#             play_ephys(self.parent.filelist.wdir, prefix, self.get_ephys_channels(), export=True)
+#
+#     def export_SCA_callback(self):
+#         for prefix in self.parent.filelist.get_active()[1]:
+#             export_SCA(self.parent.filelist.wdir, prefix, self.get_ephys_channels())
+#
+#     def show_overlay_callback(self):
+#         prefix = self.parent.filelist.get_active()[1][0]
+#         print(prefix, 'LFP plot queued...')
+#         self.parent.request_queue.put(('lfp_overlay', (self.parent.filelist.wdir, prefix, self.get_ephys_channels())))
+#
+#     def show_overlay_callback_QA(self):
+#         prefix = self.parent.filelist.get_active()[1][0]
+#         print(prefix, 'LFP plot queued...')
+#         self.parent.request_queue.put(('lfp_overlay_qa', (self.parent.filelist.wdir, prefix,
+#                                                           self.parent.pltconfigs.get_tag(), self.get_ephys_channels())))
+#
+#     def row(self, incr=1):
+#         self.current_row += incr
+#         return self.current_row - incr
+#
 
 class Rois:
     def __init__(self, parent, master, column):
@@ -1042,15 +1042,15 @@ class Rois:
         # Button(self.frame, text="ImageJ -> Scanbox", command=self.execute_callback).grid(row=self.row(), sticky=N)
         # Button(self.frame, text="Scanbox -> ImageJ", command=self.execute2_callback).grid(row=self.row(), sticky=N)
 
-        Button(self.frame, text="Autoselect roi", command=self.autoroi_callback).grid(row=self.row(), sticky=N, pady=10)
-        Button(self.frame, text="Roieditor -> sbx", command=self.sbx_convert_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Autoselect roi", command=self.autoroi_callback).grid(row=self.row(), sticky=N, pady=10)
+        # Button(self.frame, text="Roieditor -> sbx", command=self.sbx_convert_callback).grid(row=self.row(), sticky=N)
 
-        Button(self.frame, text="Run sbxsegment", command=self.execute4_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Run sbxsegment", command=self.execute4_callback).grid(row=self.row(), sticky=N)
 
-        Label(self.frame, text='Extract signals').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Run Matlab script", command=self.execute3_callback).grid(row=self.row(), sticky=N)
-
-        Label(self.frame, text='------OR------').grid(row=self.row())
+        # Label(self.frame, text='Extract signals').grid(row=self.row(), pady=10)
+        # Button(self.frame, text="Run Matlab script", command=self.execute3_callback).grid(row=self.row(), sticky=N)
+        #
+        # Label(self.frame, text='------OR------').grid(row=self.row())
         Label(self.frame, text='Select channel').grid(row=self.row())
         MODES = ['All', 'First', 'Second']
         self.config['ch'] = StringVar()
@@ -1061,8 +1061,8 @@ class Rois:
         MODES = ['Use latest', 'Specify Tag']
         self.config['roi'] = StringVar()
         self.config['roi'].set(MODES[1])
-        for r, text in enumerate(MODES):
-            Radiobutton(self.frame, text=text, variable=self.config['roi'], value=text).grid(row=self.row(), sticky=NW)
+        # for r, text in enumerate(MODES):
+        #     Radiobutton(self.frame, text=text, variable=self.config['roi'], value=text).grid(row=self.row(), sticky=NW)
         self.config['roi_name'] = StringVar()
         self.config['roi_name'].set('1')
         row = self.row()
@@ -1071,33 +1071,33 @@ class Rois:
 
         Button(self.frame, text='Add selection to queue', command=self.pull_callback).grid(row=self.row(), sticky=N)
 
-        self.config['conc_str'] = StringVar()
-        self.config['conc_str'].set('1+2')
-        Label(self.frame, text='Concatenate Sets').grid(row=self.row(), pady=10)
-        row = self.row()
-        Entry(self.frame, textvariable=self.config['conc_str'], width=6).grid(row=row, column=0, sticky=NE)
-        Button(self.frame, text='Join', command=self.conc_callback).grid(row=self.row(), sticky=N)
+        # self.config['conc_str'] = StringVar()
+        # self.config['conc_str'].set('1+2')
+        # Label(self.frame, text='Concatenate Sets').grid(row=self.row(), pady=10)
+        # row = self.row()
+        # Entry(self.frame, textvariable=self.config['conc_str'], width=6).grid(row=row, column=0, sticky=NE)
+        # Button(self.frame, text='Join', command=self.conc_callback).grid(row=self.row(), sticky=N)
 
-    def conc_callback(self):
-        os.chdir(self.parent.filelist.wdir)
-        conc_str = self.config['conc_str'].get()
-        tags = conc_str.split('+')
-        if len(tags) != 2:
-            print('Incorrect command. Type two sets separated with + (e.g. 1+2)')
-            return -1
-        ch = self.config['ch'].get()
-        for prefix in self.parent.filelist.get_active()[1]:
-            print(f'Joining {prefix} ROIs {conc_str}')
-            da = Dual(prefix, tag=tags[0], ch=ch)
-            da.concatenate(tags[1], ch=ch)
+    # def conc_callback(self):
+    #     os.chdir(self.parent.filelist.wdir)
+    #     conc_str = self.config['conc_str'].get()
+    #     tags = conc_str.split('+')
+    #     if len(tags) != 2:
+    #         print('Incorrect command. Type two sets separated with + (e.g. 1+2)')
+    #         return -1
+    #     ch = self.config['ch'].get()
+    #     for prefix in self.parent.filelist.get_active()[1]:
+    #         print(f'Joining {prefix} ROIs {conc_str}')
+    #         da = Dual(prefix, tag=tags[0], ch=ch)
+    #         da.concatenate(tags[1], ch=ch)
 
     def pull_callback(self):
         pflist = self.parent.filelist.get_active()[1]
         ch = self.config['ch'].get()
-        if self.config['roi'].get() == 'Use latest':
-            roi = 'Auto'
-        else:
-            roi = self.config['roi_name'].get()
+        # if self.config['roi'].get() == 'Use latest':
+        #     roi = 'Auto'
+        # else:
+        roi = self.config['roi_name'].get()
         for prefix in pflist:
             self.parent.request_queue.put(('pull', (self.parent.filelist.wdir, prefix, roi, ch)))
             print(f'Pulling {prefix} ROI {roi} queued')
@@ -1145,114 +1145,114 @@ class Rois:
         return self.current_row - incr
 
 
-class Motion:
-    def __init__(self, parent, master, column):
-        self.parent = parent
-        self.master = master
-        self.current_row = 0
-
-        self.frame = Frame(master)
-        self.frame.grid(row=0, column=column, sticky=N + W)
-
-        Label(self.frame, text='Motion correction').grid(row=self.row(), pady=10)
-
-        Label(self.frame, text='Size limit (G)').grid(row=self.row())
-        self.slim = Scale(self.frame, from_=0, to=10, orient=HORIZONTAL)
-        self.slim.set(1)
-        self.slim.grid(row=self.row(), sticky=N)
-
-        self.autosel = Button(self.frame, text="Auto select", command=self.autosel_callback)
-        self.autosel.grid(row=self.row(), sticky=N)
-
-        Label(self.frame, text='Granularity').grid(row=self.row())
-        self.granularity = Scale(self.frame, from_=1, to=64, orient=HORIZONTAL)
-        self.granularity.set(8)
-        self.granularity.grid(row=self.row(), sticky=N)
-
-        Label(self.frame, text='Parallel files').grid(row=self.row())
-        self.cores = Scale(self.frame, from_=1, to=cpu_count(), orient=HORIZONTAL)
-        self.cores.set(2)
-        self.cores.grid(row=self.row(2), sticky=N)
-
-        Label(self.frame, text='Rigid steps').grid(row=self.row())
-        self.rigid_steps = Scale(self.frame, from_=0, to=3, orient=HORIZONTAL)
-        self.rigid_steps.set(3)
-        self.rigid_steps.grid(row=self.row(), sticky=N)
-
-        Label(self.frame, text='Max displacement').grid(row=self.row())
-        self.max_displacement = Scale(self.frame, from_=0, to=50, orient=HORIZONTAL)
-        self.max_displacement.set(40)
-        self.max_displacement.grid(row=self.row(), sticky=N)
-
-        self.opto_mode = IntVar()
-        Checkbutton(self.frame, text='Opto Mode', variable=self.opto_mode).grid(row=self.row(), sticky='W')
-        self.opto_mode.set(0)
-
-        Label(self.frame, text='Cutoff line').grid(row=self.row())
-        self.opto_cutoff = Scale(self.frame, from_=260, to=400, orient=HORIZONTAL)
-        self.opto_cutoff.set(260)
-        self.opto_cutoff.grid(row=self.row(), sticky=N)
-
-        self.ignore_sat = IntVar()
-        Checkbutton(self.frame, text='Ignore saturation', variable=self.ignore_sat).grid(row=self.row(), sticky='W')
-        self.ignore_sat.set(0)
-
-        Label(self.frame, text='Align based on:').grid(row=self.row())
-        MODES = ['Green', 'Red']
-        self.channels = StringVar()
-        self.channels.set('Green')
-        for r, text in enumerate(MODES):
-            Radiobutton(self.frame, text=text, variable=self.channels, value=text).grid(row=self.row(), sticky=N + W)
-
-        self.execute = Button(self.frame, text="Run", command=self.execute_callback)
-        self.execute.grid(row=self.row(), sticky=N)
-
-        Button(self.frame, text="Pull opto", command=self.opto_callback).grid(row=self.row(), sticky=N, pady=10)
-
-        Label(self.frame, text='Miniscope').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Convert avi series", command=self.avi_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Correct miniscope", command=self.miniscope_callback).grid(row=self.row(), sticky=N)
-
-    def avi_callback(self):
-        Process(target=convert_avi).start()
-
-    def miniscope_callback(self):
-        for prefix in self.parent.filelist.get_active()[1]:
-            print('Motion correction:', prefix, 'queued.')
-            self.parent.request_queue.put(('mini-mc', (self.parent.filelist.wdir, prefix, self.rigid_steps.get())))
-
-    def opto_callback(self):
-        self.parent.request_queue.put(('opto', (self.parent.filelist.wdir, self.parent.filelist.get_active()[1])))
-
-    def row(self, incr=1):
-        self.current_row += incr
-        return self.current_row - incr
-
-    def autosel_callback(self):
-        wdir = self.parent.filelist.wdir
-        sizelimit = self.slim.get() * (1024 ** 3)
-        newsel = []
-        for i, prefix in enumerate(self.parent.filelist.prefix_list):
-            if not os.path.exists(wdir + prefix + '_nonrigid.sbx'):
-                if self.parent.filelist.sizevalues[i] > sizelimit:
-                    newsel.append(i)
-        self.parent.filelist.set_active(newsel)
-
-    def execute_callback(self):
-        g = int(self.granularity.get())
-        if g > 2:
-            while 512 % g > 0:
-                g -= 1
-        if self.opto_mode.get():
-            optval = self.opto_cutoff.get()
-        else:
-            optval = 0
-        for prefix in self.parent.filelist.get_active()[1]:
-            print('Motion correction:', prefix, 'queued.')
-            self.parent.request_queue.put(('mc',
-                                           (self.parent.filelist.wdir, prefix, g, self.cores.get(),
-                                            self.channels.get(), self.rigid_steps.get(), self.max_displacement.get(),
-                                            optval, self.ignore_sat.get())))
+# class Motion:
+#     def __init__(self, parent, master, column):
+#         self.parent = parent
+#         self.master = master
+#         self.current_row = 0
+#
+#         self.frame = Frame(master)
+#         self.frame.grid(row=0, column=column, sticky=N + W)
+#
+#         Label(self.frame, text='Motion correction').grid(row=self.row(), pady=10)
+#
+#         Label(self.frame, text='Size limit (G)').grid(row=self.row())
+#         self.slim = Scale(self.frame, from_=0, to=10, orient=HORIZONTAL)
+#         self.slim.set(1)
+#         self.slim.grid(row=self.row(), sticky=N)
+#
+#         self.autosel = Button(self.frame, text="Auto select", command=self.autosel_callback)
+#         self.autosel.grid(row=self.row(), sticky=N)
+#
+#         Label(self.frame, text='Granularity').grid(row=self.row())
+#         self.granularity = Scale(self.frame, from_=1, to=64, orient=HORIZONTAL)
+#         self.granularity.set(8)
+#         self.granularity.grid(row=self.row(), sticky=N)
+#
+#         Label(self.frame, text='Parallel files').grid(row=self.row())
+#         self.cores = Scale(self.frame, from_=1, to=cpu_count(), orient=HORIZONTAL)
+#         self.cores.set(2)
+#         self.cores.grid(row=self.row(2), sticky=N)
+#
+#         Label(self.frame, text='Rigid steps').grid(row=self.row())
+#         self.rigid_steps = Scale(self.frame, from_=0, to=3, orient=HORIZONTAL)
+#         self.rigid_steps.set(3)
+#         self.rigid_steps.grid(row=self.row(), sticky=N)
+#
+#         Label(self.frame, text='Max displacement').grid(row=self.row())
+#         self.max_displacement = Scale(self.frame, from_=0, to=50, orient=HORIZONTAL)
+#         self.max_displacement.set(40)
+#         self.max_displacement.grid(row=self.row(), sticky=N)
+#
+#         self.opto_mode = IntVar()
+#         Checkbutton(self.frame, text='Opto Mode', variable=self.opto_mode).grid(row=self.row(), sticky='W')
+#         self.opto_mode.set(0)
+#
+#         Label(self.frame, text='Cutoff line').grid(row=self.row())
+#         self.opto_cutoff = Scale(self.frame, from_=260, to=400, orient=HORIZONTAL)
+#         self.opto_cutoff.set(260)
+#         self.opto_cutoff.grid(row=self.row(), sticky=N)
+#
+#         self.ignore_sat = IntVar()
+#         Checkbutton(self.frame, text='Ignore saturation', variable=self.ignore_sat).grid(row=self.row(), sticky='W')
+#         self.ignore_sat.set(0)
+#
+#         Label(self.frame, text='Align based on:').grid(row=self.row())
+#         MODES = ['Green', 'Red']
+#         self.channels = StringVar()
+#         self.channels.set('Green')
+#         for r, text in enumerate(MODES):
+#             Radiobutton(self.frame, text=text, variable=self.channels, value=text).grid(row=self.row(), sticky=N + W)
+#
+#         self.execute = Button(self.frame, text="Run", command=self.execute_callback)
+#         self.execute.grid(row=self.row(), sticky=N)
+#
+#         Button(self.frame, text="Pull opto", command=self.opto_callback).grid(row=self.row(), sticky=N, pady=10)
+#
+#         Label(self.frame, text='Miniscope').grid(row=self.row(), pady=10)
+#         Button(self.frame, text="Convert avi series", command=self.avi_callback).grid(row=self.row(), sticky=N)
+#         Button(self.frame, text="Correct miniscope", command=self.miniscope_callback).grid(row=self.row(), sticky=N)
+#
+#     def avi_callback(self):
+#         Process(target=convert_avi).start()
+#
+#     def miniscope_callback(self):
+#         for prefix in self.parent.filelist.get_active()[1]:
+#             print('Motion correction:', prefix, 'queued.')
+#             self.parent.request_queue.put(('mini-mc', (self.parent.filelist.wdir, prefix, self.rigid_steps.get())))
+#
+#     def opto_callback(self):
+#         self.parent.request_queue.put(('opto', (self.parent.filelist.wdir, self.parent.filelist.get_active()[1])))
+#
+#     def row(self, incr=1):
+#         self.current_row += incr
+#         return self.current_row - incr
+#
+#     def autosel_callback(self):
+#         wdir = self.parent.filelist.wdir
+#         sizelimit = self.slim.get() * (1024 ** 3)
+#         newsel = []
+#         for i, prefix in enumerate(self.parent.filelist.prefix_list):
+#             if not os.path.exists(wdir + prefix + '_nonrigid.sbx'):
+#                 if self.parent.filelist.sizevalues[i] > sizelimit:
+#                     newsel.append(i)
+#         self.parent.filelist.set_active(newsel)
+#
+#     def execute_callback(self):
+#         g = int(self.granularity.get())
+#         if g > 2:
+#             while 512 % g > 0:
+#                 g -= 1
+#         if self.opto_mode.get():
+#             optval = self.opto_cutoff.get()
+#         else:
+#             optval = 0
+#         for prefix in self.parent.filelist.get_active()[1]:
+#             print('Motion correction:', prefix, 'queued.')
+#             self.parent.request_queue.put(('mc',
+#                                            (self.parent.filelist.wdir, prefix, g, self.cores.get(),
+#                                             self.channels.get(), self.rigid_steps.get(), self.max_displacement.get(),
+#                                             optval, self.ignore_sat.get())))
 
 
 class FileList:
@@ -1269,9 +1269,9 @@ class FileList:
         Label(self.frame, textvariable=self.wdir_text).grid(row=0, sticky=N + W)
         Button(self.frame, text='Select folder', command=self.getdir_callback).grid(row=1, sticky=N)
 
-        self.alphabet = IntVar()
-        Checkbutton(self.frame, text='Alphabetical', variable=self.alphabet).grid(row=1, column=1, sticky='E')
-        self.alphabet.set(1)
+        # self.alphabet = IntVar()
+        # Checkbutton(self.frame, text='Alphabetical', variable=self.alphabet).grid(row=1, column=1, sticky='E')
+        # self.alphabet.set(1)
 
         self.listbox = Listbox(self.frame, selectmode=EXTENDED)
         self.listbox.grid(row=2)
@@ -1650,10 +1650,10 @@ if __name__ == '__main__':
             szdet_queue.put(job)
         elif jobtype == 'exportstop':
             print(job)
-            if job[-1] == 'm2':
-                Process(target=calc_m2_index, args=job[:-1]).start()
-            else:
-                Process(target=exportstop, args=job).start()
+            # if job[-1] == 'm2':
+            #     Process(target=calc_m2_index, args=job[:-1]).start()
+            # else:
+            Process(target=exportstop, args=job).start()
         elif jobtype == 'sbxconvert':
             Process(target=roi_Gui, args=job).start()
         elif jobtype == 'opto':

@@ -1,4 +1,3 @@
-import ImportFirst
 import os
 import copy
 import matplotlib.pyplot as plt
@@ -6,8 +5,8 @@ import numpy
 import pandas
 from sklearn.metrics import mutual_info_score
 # from BehaviorSession import BehaviorSession
-from Proc2P.Analysis import FrameDisplay, LoadPolys
-from Proc2P.Analysis import CaTrace
+from Proc2P.Analysis.LoadPolys import FrameDisplay, LoadPolys
+from Proc2P.Analysis.CaTrace import CaTrace
 from Proc2P.Bruker.ConfigVars import CF
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Bruker.LoadEphys import Ephys

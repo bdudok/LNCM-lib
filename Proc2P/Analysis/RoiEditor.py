@@ -1,6 +1,6 @@
 import tifffile
 
-from Proc2P.Analysis import FrameDisplay
+from Proc2P.Analysis.LoadPolys import FrameDisplay
 import matplotlib.path as mplpath
 import os
 import shutil
