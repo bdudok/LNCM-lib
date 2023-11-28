@@ -136,11 +136,10 @@ class Cfg:
 
         Label(self.frame, text='Plot config').grid(row=self.row(), pady=10)
         Label(self.frame, text='Parameter').grid(row=self.row())
-        MODES = [u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F', 'Inferred spikes', 'NND', 'EWMA', 'Peak locations',
-                 'AUPeaks',
-                 u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F (z)', 'smtr', 'ontr']
+        MODES = [u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F', 'NND', 'EWMA',
+                 u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F (z)', 'smtr', ]
         self.config['param'] = StringVar()
-        self.config['param'].set(MODES[-2])
+        self.config['param'].set(MODES[-1])
         for r, text in enumerate(MODES):
             Radiobutton(self.frame, text=text, variable=self.config['param'], value=text).grid(row=self.row(),
                                                                                                sticky=N + W)
@@ -153,13 +152,13 @@ class Cfg:
         self.config['period'] = self.period
 
         # Label(self.frame, text='Traces to display').grid(row=self.row())
-        Label(self.frame, text='.np folder').grid(row=self.row(), pady=10)
-        MODES = ['Use default', 'Specify Tag']
-        self.config['roi'] = StringVar()
-        self.config['roi'].set(MODES[1])
-        for r, text in enumerate(MODES):
-            Radiobutton(self.frame, text=text, variable=self.config['roi'], value=text).grid(row=self.row(), sticky=NW)
-        self.config['roi_name'] = self.parent.roiconvert.config['roi_name']
+        # Label(self.frame, text='.np folder').grid(row=self.row(), pady=10)
+        # MODES = ['Use default', 'Specify Tag']
+        # self.config['roi'] = StringVar()
+        # self.config['roi'].set(MODES[1])
+        # for r, text in enumerate(MODES):
+        #     Radiobutton(self.frame, text=text, variable=self.config['roi'], value=text).grid(row=self.row(), sticky=NW)
+        # self.config['roi_name'] = self.parent.roiconvert.config['roi_name']
         # self.config['roi_name'].set('1')
         # row = self.row()
         # Label(self.frame, text='Tag from Pull Traces').grid(row=row, column=0, sticky=NW)
@@ -753,7 +752,7 @@ class Util:
         # Label(self.frame, text='Rename Tdmls').grid(row=self.row(), pady=10)
         # Button(self.frame, text="Auto select", command=self.autosel_tdml_callback).grid(row=self.row(), sticky=N)
         # Button(self.frame, text="Rename", command=self.execute_tdml_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Export behavior plots", command=self.export_tdml_callback).grid(row=self.row(),
+        Button(self.frame, text="Export behavior plots", command=self.export_treadmill_callback).grid(row=self.row(),
                                                                                                  sticky=N)
         # Button(self.frame, text="Laps spreadsheet", command=self.export_list_callback).grid(row=self.row(),
         #                                                                                     sticky=N)
@@ -782,6 +781,9 @@ class Util:
         for prefix in pflist:
             TimeProfile(prefix, cfg)
 
+    def export_treadmill_callback(self):
+        print('not implemented')
+
     def autosel_callback(self):
         wdir = self.parent.filelist.wdir
         newsel = []
@@ -799,32 +801,11 @@ class Util:
                 newsel.append(i)
         self.parent.filelist.set_active(newsel)
 
-    def execute_callback(self):
-        for prefix in self.parent.filelist.get_active()[1]:
-            # print('Processing', prefix)
-            LoadImage(prefix).create_previews()
-
     def exportstop_callback(self):
         for prefix in self.parent.filelist.get_active()[1]:
             self.parent.request_queue.put(('exportstop', (self.parent.filelist.wdir, prefix, 'stop', 'Green')))
                                                           # self.parent.mc.channels.get())))
 
-    def execute_tdml_callback(self):
-        pflist = self.parent.filelist.get_active()[1]
-        wdir = self.parent.filelist.wdir
-        rn = RenameTDML(wdir, pflist)
-        sel = PickFromList(rn.report.split('\n'), root=self.master, multiple=True)
-        print(rn.perform_rename(sel.ret))
-        sel.kill()
-
-    def export_tdml_callback(self):
-        pflist = self.parent.filelist.get_active()[1]
-        wdir = self.parent.filelist.wdir
-        os.chdir(wdir)
-        for pf in pflist:
-            if os.path.exists(pf + '.tdml'):
-                if not os.path.exists(pf + '.tdml.png'):
-                    BehaviorSession(pf + '.tdml')
 
     def export_list_callback(self):
         pflist = self.parent.filelist.get_active()[1]
@@ -841,18 +822,10 @@ class Util:
             of.write(s)
 
     def show_callback(self):
-        wdir = self.parent.filelist.wdir
         prefix = self.parent.filelist.get_active()[1][0]
-        if os.path.exists(wdir + prefix + '_previewRGB.tif'):
-            cstr = wdir[:-1].replace('/', '\\') + prefix + '_previewRGB.tif'
-        else:
-            cstr = wdir[:-1].replace('/', '\\') + prefix + '_preview.tif'
-        if not os.path.exists(wdir + prefix + '_preview.tif'):
-            LoadImage(prefix).create_previews()
-        if 'win' in sys.platform:
-            Popen([cstr], shell=True)
-        else:
-            print("File saved in .tif format, calling system viewer not implemented for platform", sys.platform)
+        cstr = self.parent.filelist.wdir + prefix + '/' + prefix + '_preview.tif'
+        print(cstr)
+        Popen([cstr], shell=True)
 
     def viewer_callback(self):
         prefix = self.parent.filelist.get_active()[1][0]
@@ -1340,13 +1313,11 @@ class FileList:
 
 class play:
     def __init__(self, path, t):
-        os.chdir(path)
         step = 2
         self.frame = 0
         self.zplane = 0
         tblen = 512
-        f = LoadImage(t, explicit_need_data=True)
-        avi = f.data_type == 'avi'
+        f = LoadImage(path, t, explicit_need_data=False)
         single = (len(f.channels) == 1)
         nframes = f.nframes
         self.factor = tblen / nframes
@@ -1360,13 +1331,11 @@ class play:
             if cv2.getWindowProperty('Movie', 0) < 0:
                 break
             fr = numpy.zeros((*f.info['sz'], 3), dtype='uint8')
-            d = f.get_frame(self.frame, zplane=self.zplane)
-            if avi:
+            d = f.get_frame(self.frame, zplane=self.zplane) / f.imdat.bitdepth * 256
+            if single:
                 fr[:, :, 1] = d.squeeze()
-            elif single:
-                fr[:, :, 1] = 255 - (d / 256).squeeze()
             else:
-                fr[:, :, 1:] = 255 - (d / 256)
+                fr[:, :, 1:] = d
             fr = cv2.LUT(fr, self.table)
             cv2.putText(fr, str(self.frame), (0, 40),
                         fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1, color=(128, 128, 128))

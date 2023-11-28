@@ -69,7 +69,7 @@ class LoadImage(object):
         self.nframes = self.imdat.n_frames
         if explicit_need_data:
             self.load_data()
-        self.nplanes = 0
+        self.nplanes = 1
         self.channels = ['Ch2',]
 
     def load_data(self):
@@ -80,7 +80,7 @@ class LoadImage(object):
         self.data_loaded = True
 
     def __getitem__(self, item):
-        return self.data[item, :, :, ]
+        return self.imdat.data[item, :, :, ]
 
     def get_frame(self, frame, ch=None, zplane=0):
         if self.nplanes == 1:
