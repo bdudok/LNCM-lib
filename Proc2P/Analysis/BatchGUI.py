@@ -81,7 +81,7 @@ class App:
         ls = self.session_cache
         ch = self.pltconfigs.config['ch'].get()
         norip = not self.pltconfigs.config['ShowRipples'].get()
-        epc = self.preview.get_ephys_channels()
+        epc = (None,)#self.preview.get_ephys_channels()
         hash = prefix + str(tag) + str(ch) + str(norip) + ''.join([str(x) for x in epc])
         if hash in ls:
             del lu[lu.index(hash)]
@@ -278,10 +278,10 @@ class View:
     def load(self):
         cf = self.parent.pltconfigs.config
         prefix = self.parent.filelist.get_active()[1][0]
-        if cf['roi'].get() == 'Use default':
-            tag = None
-        else:
-            tag = cf['roi_name'].get()
+        # if cf['roi'].get() == 'Use default':
+        #     tag = None
+        # else:
+        tag = self.parent.roiconvert.config['roi_name'].get()
         os.chdir(self.parent.filelist.wdir)
         self.active_item = self.parent.get_session(prefix, tag)
         self.active_item_name = prefix
@@ -526,10 +526,10 @@ class Traces:
 
     def execute_callback(self):
         for prefix in self.parent.filelist.get_active()[1]:
-            if self.version.get():
-                bsltype = 'original'
-            else:
-                bsltype = 'poly'
+            # if self.version.get():
+            #     bsltype = 'original'
+            # else:
+            bsltype = 'poly'
             tags = [None]
             if self.specify.get():
                 tags = [self.parent.roiconvert.config['roi_name'].get()]
@@ -539,9 +539,9 @@ class Traces:
                 for f in os.listdir(self.parent.filelist.wdir):
                     if prefix in f and match_text in f and f.endswith('.npy'):
                         tags.append(f[f.find(match_text) + len(match_text):-4])
-            peakdet = self.peakdet.get()
+            peakdet = False#self.peakdet.get()
             excl = (int(self.config[self.tracefields[0]].get()), int(self.config[self.tracefields[1]].get()))
-            sz_mode = self.parent.mc.ignore_sat.get()
+            sz_mode = False#self.parent.mc.ignore_sat.get()
             for tag in tags:
                 print(f'{prefix}: tag {tag} queued for processing traces.')
                 self.parent.request_queue.put(('firing',
