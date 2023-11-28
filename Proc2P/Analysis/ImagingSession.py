@@ -28,7 +28,7 @@ class Pos:
 class ImagingSession(object):
     __name__ = 'ImagingSession'
     def __init__(self, procpath, prefix, tag=None, norip=False, opath='.', ch=0,
-                 ripple_tag=None,):
+                 ripple_tag=None, lfp_ch=1):
         self.opath = opath
         self.prefix = prefix
         self.procpath = procpath
@@ -53,6 +53,7 @@ class ImagingSession(object):
         self.map_opto()
 
         #map ephys
+        self.lfp_ch = lfp_ch
         self.map_phys()
         if (not norip) and self.has_ephys:
             self.ripple_tag = ripple_tag
@@ -168,7 +169,7 @@ class ImagingSession(object):
         return numpy.searchsorted(self.ephys.frames, f)
 
     def map_phys(self):
-        self.ephys = Ephys(self.procpath, self.prefix, channel=None)
+        self.ephys = Ephys(self.procpath, self.prefix, channel=self.lfp_ch)
         self.has_ephys = self.ephys.trace is not None
 
     def map_ripples(self):

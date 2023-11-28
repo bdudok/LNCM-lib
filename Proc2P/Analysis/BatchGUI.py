@@ -59,7 +59,7 @@ class App:
         self.filelist = FileList(self, self.root, self.column())
         # self.mc = Motion(self, self.root, self.column())
         self.util = Util(self, self.root, self.column())
-        # self.preview = Prev(self, self.root, self.column())
+        self.preview = Prev(self, self.root, self.column())
         self.roidetect = RoiDet(self, self.root, self.column())
         self.roiedit = RoiEd(self, self.root, self.column())
         self.roiconvert = Rois(self, self.root, self.column())
@@ -81,7 +81,7 @@ class App:
         ls = self.session_cache
         ch = self.pltconfigs.config['ch'].get()
         norip = not self.pltconfigs.config['ShowRipples'].get()
-        epc = (None,)#self.preview.get_ephys_channels()
+        epc = self.preview.get_ephys_channels()
         hash = prefix + str(tag) + str(ch) + str(norip) + ''.join([str(x) for x in epc])
         if hash in ls:
             del lu[lu.index(hash)]
@@ -179,9 +179,9 @@ class Cfg:
         self.config['skin'] = StringVar()
         var = self.config['skin']
         var.set(MODES[1])
-        for r, text in enumerate(MODES):
-            Radiobutton(self.frame, text=text, variable=var, value=text).grid(row=self.second_row(),
-                                                                              column=1, sticky=N + W)
+        # for r, text in enumerate(MODES):
+        #     Radiobutton(self.frame, text=text, variable=var, value=text).grid(row=self.second_row(),
+        #                                                                       column=1, sticky=N + W)
 
         Label(self.frame, text='Channels').grid(row=self.second_row(), column=1)
         MODES = ['Both', 'First', 'Second']
@@ -836,168 +836,168 @@ class Util:
         return self.current_row - incr
 
 
-# class Prev:
-#     def __init__(self, parent, master, column):
-#         self.parent = parent
-#         self.master = master
-#         self.current_row = 0
-#         self.config = {}
-#
-#         self.frame = Frame(master)
-#         self.frame.grid(row=0, column=column, sticky=N + W)
-#
-#         Label(self.frame, text='Cam View').grid(row=self.row(), pady=10)
-#         Button(self.frame, text="Highlight", command=self.eyesel_callback).grid(row=self.row(), sticky=N)
-#
-#         Button(self.frame, text="Play cam", command=self.eyeviewer_callback).grid(row=self.row(), sticky=N)
-#
-#         Label(self.frame, text='Z stack').grid(row=self.row(), pady=10)
-#         defs = (200, 5, 30)
-#         for i, text in enumerate(['Range', 'Step', 'Frames']):
-#             self.config[text] = StringVar()
-#             row = self.row()
-#             Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
-#             Entry(self.frame, textvariable=self.config[text], width=5).grid(row=row, column=0, sticky=N + E)
-#             self.config[text].set(str(defs[i]))
-#
-#         Button(self.frame, text="Show stack", command=self.playstack_callback).grid(row=self.row(), sticky=N)
-#
-#         Button(self.frame, text="Save stacks", command=self.savestack_callback).grid(row=self.row(), sticky=N)
-#
-#         Button(self.frame, text="Show MIP", command=self.showmip_callback).grid(row=self.row(), sticky=N)
-#
-#         Label(self.frame, text='Ephys channels').grid(row=self.row(), pady=10)
-#         subframe = Frame(self.frame)
-#         subframe.grid(row=self.row(), column=0, sticky=N + W)
-#         for i, text in enumerate(('Ch', 'of')):
-#             self.config[text] = StringVar()
-#             Label(subframe, text=text, width=2).grid(row=0, column=i * 2, sticky=N + W)
-#             Entry(subframe, textvariable=self.config[text], width=2).grid(row=0, column=i * 2 + 1, sticky=N + W)
-#             self.config[text].set('1')
-#
-#         Label(self.frame, text='Ephys trace').grid(row=self.row(), pady=10)
-#         Button(self.frame, text="Show", command=self.showtrace_callback).grid(row=self.row(), sticky=N)
-#         Button(self.frame, text="Export csv", command=self.export_trace_callback).grid(row=self.row(), sticky=N)
-#         Button(self.frame, text="Export SCA", command=self.export_SCA_callback).grid(row=self.row(), sticky=N)
-#         Button(self.frame, text='LFP + Ca', command=self.show_overlay_callback).grid(row=self.row(), sticky=N)
-#         Button(self.frame, text='LFP + Ca QA', command=self.show_overlay_callback_QA).grid(row=self.row(), sticky=N)
-#
-#         Label(self.frame, text='Batch').grid(row=self.row(), pady=10)
-#         Button(self.frame, text='Split ephys', command=self.split_ephys_callback).grid(row=self.row(), sticky=N)
-#         Button(self.frame, text='Export speed (ephys)', command=self.export_speed_callback).grid(row=self.row(),
-#                                                                                                  sticky=N)
-#         Button(self.frame, text='Export speed (imaging)', command=self.export_speed_cms_callback).grid(row=self.row(),
-#                                                                                                        sticky=N)
-#         Button(self.frame, text="Detect sz and spikes", command=self.detect_sz_callback).grid(row=self.row(), sticky=N)
-#
-#         Label(self.frame, text='Thresholds').grid(row=self.row(), pady=10)
-#         defs = (5, )
-#         for i, text in enumerate(['IISthr', ]):
-#             self.config[text] = StringVar()
-#             row = self.row()
-#             Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
-#             Entry(self.frame, textvariable=self.config[text], width=5).grid(row=row, column=0, sticky=N + E)
-#             self.config[text].set(str(defs[i]))
-#
-#     def get_ephys_channels(self):
-#         return [int(self.config[text].get()) for text in ('Ch', 'of')]
-#
-#     def split_ephys_callback(self):
-#         split_ephys(filedialog.askdirectory(), self.get_ephys_channels()[1])
-#
-#     def export_speed_callback(self):
-#         export_speed(filedialog.askdirectory(), self.get_ephys_channels()[1])
-#
-#     def export_speed_cms_callback(self):
-#         path = filedialog.askdirectory()
-#         export_speed_cms(path)
-#         print('Export finished for all files in ', path)
-#
-#     def detect_sz_callback(self):
-#         path = self.parent.filelist.wdir
-#         kwargs = {'IIS_threshold': float(self.config['IISthr'].get())}
-#         for prefix in self.parent.filelist.get_active()[1]:
-#             self.parent.request_queue.put(('SzDet', (path, prefix, kwargs)))
-#             print('Seizure detection queued:', prefix, )
-#
-#     def eyesel_callback(self):
-#         wdir = self.parent.filelist.wdir
-#         newsel = []
-#         for i, prefix in enumerate(self.parent.filelist.prefix_list):
-#             if os.path.exists(wdir + prefix + '_eye.mat'):
-#                 newsel.append(i)
-#         self.parent.filelist.set_active(newsel)
-#
-#     def eyeviewer_callback(self):
-#         prefix = self.parent.filelist.get_active()[1][0]
-#         self.parent.request_queue.put(('eye', (self.parent.filelist.wdir, prefix)))
-#
-#     def get_stack_cfg(self):
-#         cfg = []
-#         for text in ['Step', 'Range', 'Frames']:
-#             try:
-#                 cfg.append(int(self.config[text].get()))
-#             except:
-#                 print(text + ' is not a number')
-#                 return -1
-#         return cfg
-#
-#     def savestack_callback(self):
-#         prefix = self.parent.filelist.get_active()[1]
-#         cfg = self.get_stack_cfg()
-#         cfg.append('saving')
-#         self.parent.request_queue.put(('stack', (self.parent.filelist.wdir, prefix, cfg)))
-#
-#     def playstack_callback(self):
-#         prefix = self.parent.filelist.get_active()[1][0]
-#         self.parent.request_queue.put(('stack', (self.parent.filelist.wdir, prefix, self.get_stack_cfg())))
-#
-#     def showmip_callback(self):
-#         prefix = self.parent.filelist.get_active()[1][0]
-#         fn = self.parent.filelist.wdir + prefix + '_MIP.png'
-#         if not os.path.exists(fn):
-#             cfg = []
-#             for text in ['Step', 'Range', 'Frames']:
-#                 try:
-#                     cfg.append(int(self.config[text].get()))
-#                 except:
-#                     print(text + ' is not a number')
-#                     return -1
-#             os.chdir(self.parent.filelist.wdir)
-#             stack = LoadImage(prefix)
-#             stack.create_zstack(*cfg, save=True)
-#             if 'win' in sys.platform:
-#                 Popen([fn], shell=True)
-#             else:
-#                 print("File saved in .tif format, calling system viewer not implemented for platform", sys.platform)
-#
-#     def showtrace_callback(self):
-#         prefix = self.parent.filelist.get_active()[1][0]
-#         self.parent.request_queue.put(('trace', (self.parent.filelist.wdir, prefix, self.get_ephys_channels())))
-#
-#     def export_trace_callback(self):
-#         for prefix in self.parent.filelist.get_active()[1]:
-#             play_ephys(self.parent.filelist.wdir, prefix, self.get_ephys_channels(), export=True)
-#
-#     def export_SCA_callback(self):
-#         for prefix in self.parent.filelist.get_active()[1]:
-#             export_SCA(self.parent.filelist.wdir, prefix, self.get_ephys_channels())
-#
-#     def show_overlay_callback(self):
-#         prefix = self.parent.filelist.get_active()[1][0]
-#         print(prefix, 'LFP plot queued...')
-#         self.parent.request_queue.put(('lfp_overlay', (self.parent.filelist.wdir, prefix, self.get_ephys_channels())))
-#
-#     def show_overlay_callback_QA(self):
-#         prefix = self.parent.filelist.get_active()[1][0]
-#         print(prefix, 'LFP plot queued...')
-#         self.parent.request_queue.put(('lfp_overlay_qa', (self.parent.filelist.wdir, prefix,
-#                                                           self.parent.pltconfigs.get_tag(), self.get_ephys_channels())))
-#
-#     def row(self, incr=1):
-#         self.current_row += incr
-#         return self.current_row - incr
-#
+class Prev:
+    def __init__(self, parent, master, column):
+        self.parent = parent
+        self.master = master
+        self.current_row = 0
+        self.config = {}
+
+        self.frame = Frame(master)
+        self.frame.grid(row=0, column=column, sticky=N + W)
+
+        # Label(self.frame, text='Cam View').grid(row=self.row(), pady=10)
+        # Button(self.frame, text="Highlight", command=self.eyesel_callback).grid(row=self.row(), sticky=N)
+        #
+        # Button(self.frame, text="Play cam", command=self.eyeviewer_callback).grid(row=self.row(), sticky=N)
+        #
+        # Label(self.frame, text='Z stack').grid(row=self.row(), pady=10)
+        # defs = (200, 5, 30)
+        # for i, text in enumerate(['Range', 'Step', 'Frames']):
+        #     self.config[text] = StringVar()
+        #     row = self.row()
+        #     Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
+        #     Entry(self.frame, textvariable=self.config[text], width=5).grid(row=row, column=0, sticky=N + E)
+        #     self.config[text].set(str(defs[i]))
+        #
+        # Button(self.frame, text="Show stack", command=self.playstack_callback).grid(row=self.row(), sticky=N)
+        #
+        # Button(self.frame, text="Save stacks", command=self.savestack_callback).grid(row=self.row(), sticky=N)
+        #
+        # Button(self.frame, text="Show MIP", command=self.showmip_callback).grid(row=self.row(), sticky=N)
+
+        Label(self.frame, text='Ephys channels').grid(row=self.row(), pady=10)
+        subframe = Frame(self.frame)
+        subframe.grid(row=self.row(), column=0, sticky=N + W)
+        for i, text in enumerate(('Ch', 'of')):
+            self.config[text] = StringVar()
+            Label(subframe, text=text, width=2).grid(row=0, column=i * 2, sticky=N + W)
+            Entry(subframe, textvariable=self.config[text], width=2).grid(row=0, column=i * 2 + 1, sticky=N + W)
+            self.config[text].set('1')
+
+        Label(self.frame, text='Ephys trace').grid(row=self.row(), pady=10)
+        Button(self.frame, text="Show", command=self.showtrace_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Export csv", command=self.export_trace_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Export SCA", command=self.export_SCA_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text='LFP + Ca', command=self.show_overlay_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text='LFP + Ca QA', command=self.show_overlay_callback_QA).grid(row=self.row(), sticky=N)
+
+        # Label(self.frame, text='Batch').grid(row=self.row(), pady=10)
+        # Button(self.frame, text='Split ephys', command=self.split_ephys_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text='Export speed (ephys)', command=self.export_speed_callback).grid(row=self.row(),
+        #                                                                                          sticky=N)
+        # Button(self.frame, text='Export speed (imaging)', command=self.export_speed_cms_callback).grid(row=self.row(),
+        #                                                                                                sticky=N)
+        # Button(self.frame, text="Detect sz and spikes", command=self.detect_sz_callback).grid(row=self.row(), sticky=N)
+        #
+        # Label(self.frame, text='Thresholds').grid(row=self.row(), pady=10)
+        # defs = (5, )
+        # for i, text in enumerate(['IISthr', ]):
+        #     self.config[text] = StringVar()
+        #     row = self.row()
+        #     Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
+        #     Entry(self.frame, textvariable=self.config[text], width=5).grid(row=row, column=0, sticky=N + E)
+        #     self.config[text].set(str(defs[i]))
+
+    def get_ephys_channels(self):
+        return [int(self.config[text].get()) for text in ('Ch', 'of')]
+
+    # def split_ephys_callback(self):
+    #     split_ephys(filedialog.askdirectory(), self.get_ephys_channels()[1])
+
+    # def export_speed_callback(self):
+    #     export_speed(filedialog.askdirectory(), self.get_ephys_channels()[1])
+
+    # def export_speed_cms_callback(self):
+    #     path = filedialog.askdirectory()
+    #     export_speed_cms(path)
+    #     print('Export finished for all files in ', path)
+
+    # def detect_sz_callback(self):
+    #     path = self.parent.filelist.wdir
+    #     kwargs = {'IIS_threshold': float(self.config['IISthr'].get())}
+    #     for prefix in self.parent.filelist.get_active()[1]:
+    #         self.parent.request_queue.put(('SzDet', (path, prefix, kwargs)))
+    #         print('Seizure detection queued:', prefix, )
+
+    # def eyesel_callback(self):
+    #     wdir = self.parent.filelist.wdir
+    #     newsel = []
+    #     for i, prefix in enumerate(self.parent.filelist.prefix_list):
+    #         if os.path.exists(wdir + prefix + '_eye.mat'):
+    #             newsel.append(i)
+    #     self.parent.filelist.set_active(newsel)
+    #
+    # def eyeviewer_callback(self):
+    #     prefix = self.parent.filelist.get_active()[1][0]
+    #     self.parent.request_queue.put(('eye', (self.parent.filelist.wdir, prefix)))
+
+    # def get_stack_cfg(self):
+    #     cfg = []
+    #     for text in ['Step', 'Range', 'Frames']:
+    #         try:
+    #             cfg.append(int(self.config[text].get()))
+    #         except:
+    #             print(text + ' is not a number')
+    #             return -1
+    #     return cfg
+    #
+    # def savestack_callback(self):
+    #     prefix = self.parent.filelist.get_active()[1]
+    #     cfg = self.get_stack_cfg()
+    #     cfg.append('saving')
+    #     self.parent.request_queue.put(('stack', (self.parent.filelist.wdir, prefix, cfg)))
+    #
+    # def playstack_callback(self):
+    #     prefix = self.parent.filelist.get_active()[1][0]
+    #     self.parent.request_queue.put(('stack', (self.parent.filelist.wdir, prefix, self.get_stack_cfg())))
+    #
+    # def showmip_callback(self):
+    #     prefix = self.parent.filelist.get_active()[1][0]
+    #     fn = self.parent.filelist.wdir + prefix + '_MIP.png'
+    #     if not os.path.exists(fn):
+    #         cfg = []
+    #         for text in ['Step', 'Range', 'Frames']:
+    #             try:
+    #                 cfg.append(int(self.config[text].get()))
+    #             except:
+    #                 print(text + ' is not a number')
+    #                 return -1
+    #         os.chdir(self.parent.filelist.wdir)
+    #         stack = LoadImage(prefix)
+    #         stack.create_zstack(*cfg, save=True)
+    #         if 'win' in sys.platform:
+    #             Popen([fn], shell=True)
+    #         else:
+    #             print("File saved in .tif format, calling system viewer not implemented for platform", sys.platform)
+
+    def showtrace_callback(self):
+        prefix = self.parent.filelist.get_active()[1][0]
+        self.parent.request_queue.put(('trace', (self.parent.filelist.wdir, prefix, self.get_ephys_channels())))
+
+    # def export_trace_callback(self):
+    #     for prefix in self.parent.filelist.get_active()[1]:
+    #         play_ephys(self.parent.filelist.wdir, prefix, self.get_ephys_channels(), export=True)
+
+    # def export_SCA_callback(self):
+    #     for prefix in self.parent.filelist.get_active()[1]:
+    #         export_SCA(self.parent.filelist.wdir, prefix, self.get_ephys_channels())
+    #
+    # def show_overlay_callback(self):
+    #     prefix = self.parent.filelist.get_active()[1][0]
+    #     print(prefix, 'LFP plot queued...')
+    #     self.parent.request_queue.put(('lfp_overlay', (self.parent.filelist.wdir, prefix, self.get_ephys_channels())))
+    #
+    # def show_overlay_callback_QA(self):
+    #     prefix = self.parent.filelist.get_active()[1][0]
+    #     print(prefix, 'LFP plot queued...')
+    #     self.parent.request_queue.put(('lfp_overlay_qa', (self.parent.filelist.wdir, prefix,
+    #                                                       self.parent.pltconfigs.get_tag(), self.get_ephys_channels())))
+
+    def row(self, incr=1):
+        self.current_row += incr
+        return self.current_row - incr
+
 
 class Rois:
     def __init__(self, parent, master, column):
