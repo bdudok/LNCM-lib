@@ -22,13 +22,7 @@ class AssetFinder:
             if os.path.isdir(f):
                 if os.path.exists(os.path.join(f, f + '_SessionInfo.json')):
                     self.prefixes.append(f)
-        self.prefixes.sort()
+        self.prefixes.sort(reverse=True)
 
     def get_prefixes(self):
         return self.prefixes
-
-    '''---------------------add functions here for each specific call---------------------'''
-
-if __name__ == '__main__':
-    path = '//NEURO-GHWR8N2//AnalysisPC-Barna-2PBackup3//cckdlx//'
-    a = AssetFinder()

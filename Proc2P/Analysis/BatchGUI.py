@@ -1,4 +1,7 @@
 import warnings
+import sys
+
+import scipy.signal
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 from tkinter import *
@@ -26,6 +29,7 @@ from Proc2P.Analysis.CaTrace import CaTrace
 from Proc2P.Analysis.CaTrace import Worker as tr_Worker
 
 #for ephys
+from Proc2P.Bruker.LoadEphys import Ephys
 # from Ripples import Ripples, export_SCA
 # from Spike_Sz_detect import Worker as SzDet_Worker
 
@@ -1414,17 +1418,14 @@ class play_ephys:
     def __init__(self, path, prefix, channels=[1, 1], export=False):
         os.chdir(path)
         ch, n_channels = channels
-        raw_shape = n_channels + 1
-        ep_raw = numpy.fromfile(prefix + '.ephys', dtype='float32')
-        n_samples = int(len(ep_raw) / raw_shape)
-        ep_formatted = numpy.reshape(ep_raw, (n_samples, raw_shape))
-        fps = 25
-        self.fs = 10000
-        self.trace = ep_formatted[:, ch]
-        self.n = n_samples
+        ephys = Ephys(path, prefix, channel=ch)
+        display_fps = 25
+        self.fs = 2000
+        self.trace = ephys.trace
+        self.n = len(self.trace)
         self.frame = 0
         self.sample = 0
-        self.gain = 50
+        self.gain = 1
         self.speed = 10
         if export:
             pandas.DataFrame(self.trace).to_csv(prefix + '_ephys-trace.csv')
@@ -1432,10 +1433,10 @@ class play_ephys:
         else:
             cv2.namedWindow('Trace')
             cv2.createTrackbar('Time', 'Trace', self.frame, int(self.n / self.fs), self.tbonChange)
-            cv2.createTrackbar('Gain', 'Trace', self.gain, 100, self.gonChange)
+            cv2.createTrackbar('Gain', 'Trace', self.gain, 30, self.gonChange)
             cv2.createTrackbar('Speed', 'Trace', self.speed, 100, self.sonChange)
             while True:
-                key = cv2.waitKey(int(1000 / fps)) & 0xFF
+                key = cv2.waitKey(int(1000 / display_fps)) & 0xFF
                 if cv2.getWindowProperty('Trace', 0) < 0:
                     break
                 if key == ord('q'):
@@ -1451,7 +1452,7 @@ class play_ephys:
                         self.sample = 0
                         self.frame = 0
                     cv2.setTrackbarPos('Time', 'Trace', self.frame)
-                self.sample += int(self.speed / 10 * self.fs / fps)
+                self.sample += int(self.speed / 10 * self.fs / display_fps)
                 nf = int(self.sample / self.fs)
                 if nf != self.frame:
                     self.frame = nf
@@ -1477,6 +1478,7 @@ class play_ephys:
     def getgraph(self):
         h = 300
         l = 1000
+        resample_q = self.fs / l
         x = numpy.arange(l)
         frame = numpy.ones((2 * h, l, 3), dtype='uint8') * 255
         if not self.sample + self.fs < self.n:
@@ -1484,11 +1486,14 @@ class play_ephys:
             self.frame = 0
             cv2.setTrackbarPos('Time', 'Trace', self.frame)
         y = self.trace[self.frame * self.fs:self.fs + self.frame * self.fs]
-        y = decimate(y, 10)
+        if resample_q > 5 and abs(resample_q - int(resample_q)) < 0.001:
+            y = decimate(y, int(resample_q))
+        else:
+            y = scipy.signal.resample(y, l)
         y = h - y * self.gain * h
         pts = numpy.vstack((x, y)).astype('int32').T
         cv2.polylines(frame, [pts], isClosed=False, color=(128, 128, 128))  # , thickness=1)#, lineType=cv2.LINE_AA)
-        curr = int((self.sample % self.fs) / 10)
+        curr = int((self.sample % self.fs) / resample_q)
         pts = numpy.vstack((x[:curr], y[:curr])).astype('int32').T
         cv2.polylines(frame, [pts], isClosed=False, color=(255, 0, 0))  # , thickness=2, lineType=cv2.LINE_AA)
         return frame

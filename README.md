@@ -14,6 +14,10 @@ detect seizures and compute seizure burden time series using spike times as inpu
 load treadmill data from PyControl file
 ### Proc2P.Legacy
 all scanbox classes made during Soltesz lab times
+### Proc2p.Bruker
+classes for reading BCM Dudok lab raw data
+### Proc2p.Analysis
+processing pipeline and GUI; ImagingSession and related classes
 
 # The following GUI tools are included: 
 
