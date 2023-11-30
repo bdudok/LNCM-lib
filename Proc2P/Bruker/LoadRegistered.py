@@ -18,13 +18,14 @@ class LoadRegistered():
         self.Lx = ops['Lx']
         # find available files
         tags = '', '_Ch1', '_Ch2'
+        keys = (None, 'Ch1', 'Ch2')
         input_files = []
         self.channel_keys = []
-        for ti, tag in enumerate(tags):
+        for ti, (tag, key) in enumerate(zip(tags, keys)):
             bp = os.path.join(self.path, prefix + f'_registered{tag}.bin')
             if os.path.exists(bp):
                 input_files.append(bp)
-                self.channel_keys.append(tag)
+                self.channel_keys.append(key)
         self.n_channels = len(input_files)
         self.shape = (self.n_frames, self.Ly, self.Lx)
         # instead of loading the dimensttions, this could be passed from session info
@@ -39,10 +40,11 @@ class LoadRegistered():
 
     def get_channel(self, ch=None):
         '''
-        :param ch: None, 0: returns first channel. 1: returns second channel. 'Green': Ch2; 'Red: Ch1.
+        :param ch 1: returns second channel. 'Green': Ch2; 'Red: Ch1. Any other value returns first channel
         :return: memory mapped data corresponding to the selected channel
         '''
         ret_ch = 0
+        print(self.channel_keys)
         if ch == 'Green':
             assert 'Ch2' in self.channel_keys
             if self.channel_keys[0] == 'Ch2':

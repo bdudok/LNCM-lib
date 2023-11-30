@@ -28,7 +28,7 @@ class PreProc:
         self.reserved_channels = 2 #ignore voltage from first x channels
         self.lfp_channels = []
 
-        self.md_keys = ['led_channel', 'rsync_channel', 'lfp_channels', 'btag', 'dpath']
+        self.md_keys = ['led_channel', 'rsync_channel', 'lfp_channels', 'btag', 'dpath', 'channelnames']
 
         if not os.path.exists(self.procpath):
             os.mkdir(self.procpath)

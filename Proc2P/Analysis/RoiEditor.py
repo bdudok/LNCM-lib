@@ -841,11 +841,11 @@ class RoiEditor(object):
          return self.img.image.show_field()
 
     def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config={}, exclude_opto=True):
+        #todo. need to read dual channel movie into dual channel sima object; or correct channel. change -R; -G in gui.
         approach = list(approach)
         prefix = self.prefix
         im = self.img.image
         maxint = self.img.image.imdat.bitdepth - 1
-        im.load_data()
         force_re = False
         opto_name = self.opPath + prefix + '_bad_frames.npy'
         if exclude_opto and os.path.exists(opto_name):
@@ -887,7 +887,7 @@ class RoiEditor(object):
             chunk_n = min(chunk_n, int(imlen / chunk_size) - 2)
             print('Detecting', prefix, span, ', ', chunk_n, 'chunks')
             d = numpy.empty((chunk_n, im.data.shape[1] - y1 - y0, im.data.shape[2] - x1 - x0, ),
-                            dtype=im.data.dtype)
+                            dtype=im.imdat.data.dtype)
             chlist = numpy.sort(numpy.random.choice(int(imlen / chunk_size) - 2, chunk_n, replace=False))
             for chunk, frame in enumerate(chlist):
                 # make ds and trim edges

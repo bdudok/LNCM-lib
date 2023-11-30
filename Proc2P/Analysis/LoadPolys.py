@@ -60,30 +60,19 @@ class LoadPolys(object):
 
 
 class LoadImage(object):
-    def __init__(self, procpath, prefix, explicit_need_data=False):
+    def __init__(self, procpath, prefix):
         self.prefix = prefix
         self.opPath = procpath + prefix + '/'
         self.data_loaded = False
         self.imdat = LoadRegistered(procpath, prefix)
         self.info = {'sz': (self.imdat.Ly, self.imdat.Lx)}
         self.nframes = self.imdat.n_frames
-        if explicit_need_data:
-            self.load_data()
         self.nplanes = 1
         self.channels = self.imdat.channel_keys
 
-    def load_data(self, ch):
-        if self.data_loaded:
-            return True
-        self.data = self.imdat.get_channel(ch)
-        self.data_loaded = True
-
-    def __getitem__(self, item, ch=None):
-        return self.imdat.get_channel(ch)[item, :, :, ]
-
     def get_frame(self, frame, ch=None, zplane=0):
         if self.nplanes == 1:
-            return self.__getitem__(frame, ch)
+            return self.imdat.get_channel(ch)[frame, :, :, ]
         # else:
         #     return self.data[zplane][frame, :, :, ch]
 

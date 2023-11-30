@@ -758,11 +758,20 @@ class Util:
         self.frame = Frame(master, bd=2, relief=SUNKEN)
         self.frame.grid(row=0, column=column, sticky=N + W)
 
-        Label(self.frame, text='Preview').grid(row=self.row(), pady=10)
+
         # Button(self.frame, text="Auto select", command=self.autosel_callback).grid(row=self.row(), sticky=N)
 
         # Button(self.frame, text="Run", command=self.execute_callback).grid(row=self.row(), sticky=N)
+        Label(self.frame, text='Channel').grid(row=self.row(), pady=10)
+        MODES = ['First', 'Green', 'Red']
+        self.channels = StringVar()
+        self.channels.set('First')
+        for r, text in enumerate(MODES):
+            Radiobutton(self.frame, text=text, variable=self.channels, value=text).grid(row=self.row(), sticky=N + W)
+
         Button(self.frame, text="Export Stop", command=self.exportstop_callback).grid(row=self.row(), sticky=N)
+
+        Label(self.frame, text='Preview').grid(row=self.row(), pady=10)
         Button(self.frame, text="Show", command=self.show_callback).grid(row=self.row(), sticky=N)
 
         Button(self.frame, text="Play movie", command=self.viewer_callback).grid(row=self.row(), sticky=N)
@@ -821,8 +830,8 @@ class Util:
 
     def exportstop_callback(self):
         for prefix in self.parent.filelist.get_active()[1]:
-            self.parent.request_queue.put(('exportstop', (self.parent.filelist.wdir, prefix, 'stop', 'Green')))
-                                                          # self.parent.mc.channels.get())))
+            self.parent.request_queue.put(('exportstop', (self.parent.filelist.wdir, prefix, 'stop',
+                                                          self.channels.get())))
 
 
     def export_list_callback(self):
@@ -1043,7 +1052,7 @@ class Rois:
         #
         # Label(self.frame, text='------OR------').grid(row=self.row())
         Label(self.frame, text='Select channel').grid(row=self.row())
-        MODES = ['All', 'First', 'Second']
+        MODES = ['All', 'Green', 'Red']
         self.config['ch'] = StringVar()
         self.config['ch'].set('All')
         for r, text in enumerate(MODES):
@@ -1335,7 +1344,7 @@ class play:
         self.frame = 0
         self.zplane = 0
         tblen = 512
-        f = LoadImage(path, t, explicit_need_data=False)
+        f = LoadImage(path, t)
         single = (len(f.channels) == 1)
         nframes = f.nframes
         self.factor = tblen / nframes
@@ -1352,8 +1361,10 @@ class play:
             d = f.get_frame(self.frame, zplane=self.zplane) / f.imdat.bitdepth * 256
             if single:
                 fr[:, :, 1] = d.squeeze()
-            else:
-                fr[:, :, 1:] = d
+            if not single:
+                fr[:, :, 2] = d.squeeze()
+                d = f.get_frame(self.frame, zplane=self.zplane, ch=1) / f.imdat.bitdepth * 256
+                fr[:, :, 1] = d.squeeze()
             fr = cv2.LUT(fr, self.table)
             cv2.putText(fr, str(self.frame), (0, 40),
                         fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1, color=(128, 128, 128))
