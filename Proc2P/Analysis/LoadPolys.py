@@ -60,7 +60,7 @@ class LoadPolys(object):
 
 
 class LoadImage(object):
-    def __init__(self, procpath, prefix, explicit_need_data=False, ):
+    def __init__(self, procpath, prefix, explicit_need_data=False):
         self.prefix = prefix
         self.opPath = procpath + prefix + '/'
         self.data_loaded = False
@@ -70,30 +70,32 @@ class LoadImage(object):
         if explicit_need_data:
             self.load_data()
         self.nplanes = 1
-        self.channels = ['Ch2',]
+        self.channels = self.imdat.channel_keys
 
-    def load_data(self):
+    def load_data(self, ch):
         if self.data_loaded:
             return True
-        self.imdat.load()
-        self.data = self.imdat.data
+        self.data = self.imdat.get_channel(ch)
         self.data_loaded = True
 
-    def __getitem__(self, item):
-        return self.imdat.data[item, :, :, ]
+    def __getitem__(self, item, ch=None):
+        return self.imdat.get_channel(ch)[item, :, :, ]
 
     def get_frame(self, frame, ch=None, zplane=0):
         if self.nplanes == 1:
-            return self.__getitem__(frame)
+            return self.__getitem__(frame, ch)
         # else:
         #     return self.data[zplane][frame, :, :, ch]
 
-    def show_field(self, channel=0, force=False):
+    def show_field(self):
         preview_fn = self.opPath + self.prefix + '_preview.tif'
         pic = tifffile.imread(preview_fn)
         #return as multi channel
-        rgb_array = numpy.zeros((*pic.shape, 3), dtype='uint8')
-        rgb_array[..., 1] = 255 * pic / pic.max()
+        if not self.imdat.n_channels:
+            rgb_array = numpy.zeros((*pic.shape, 3), dtype='uint8')
+            rgb_array[..., 1] = 255 * pic / pic.max()
+        else:
+            rgb_array = pic
         return rgb_array
 
 

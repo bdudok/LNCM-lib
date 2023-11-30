@@ -16,7 +16,7 @@ PreProcess: load xml files, save all frame times, sync signals and metadata into
 class PreProc:
     __name__ = 'PreProc'
 
-    def __init__(self, dpath, procpath, prefix, btag='000', rsync_channel=0, lfp_channels=None, led_channel=1, ):
+    def __init__(self, dpath, procpath, prefix, btag='000', rsync_channel=0, led_channel=1, ):
         self.dpath = os.path.join(dpath, prefix + f'-{btag}/')  # raw data
         self.procpath = procpath + prefix + '/'  # output processed data
         self.prefix = prefix  # recorder prefix tag
@@ -25,7 +25,8 @@ class PreProc:
         # setup config
         self.led_channel = led_channel
         self.rsync_channel = rsync_channel
-        self.lfp_channels = lfp_channels
+        self.reserved_channels = 2 #ignore voltage from first x channels
+        self.lfp_channels = []
 
         self.md_keys = ['led_channel', 'rsync_channel', 'lfp_channels', 'btag', 'dpath']
 
@@ -45,11 +46,14 @@ class PreProc:
         Saves bad_frames, FrameTimes, StimFrames, 2pTTLtimes, and sessiondata
         '''
         lprint(self, 'Pre-processing ' + self.prefix)
+        self.found_output = []
         self.parse_frametimes()
         self.parse_TTLs()
         self.convert_ephys()
         self.parse_treadmill(tm_fig)
+        self.parse_cam()
         self.save_metadata()
+        print('Found:', ','.join(self.found_output))
 
     def parse_frametimes(self):
         # find xml filename
@@ -60,6 +64,11 @@ class PreProc:
 
         # get 2P info
         sdict = {}
+        self.channelnames = []
+        for child in list(sequence.find('Frame').findall('File')):
+            chn = child.attrib['channelName']
+            self.channelnames.append(chn)
+            self.found_output.append('2P'+chn)
         get_keys = ('framePeriod', 'scanLinePeriod')
         for child in list(sequence.find('Frame').find('PVStateShard')):
             key = child.attrib['key']
@@ -67,18 +76,44 @@ class PreProc:
                 sdict[key] = child.attrib['value']
         self.framerate = 1 / float(sdict['framePeriod'])
         if 'scanLinePeriod' in sdict:
-            self.linetime = float(sdict['scanLinePeriod'])  # not in 2channel files.
+            self.linetime = float(sdict['scanLinePeriod'])  # not always there, not sure why.
         else:
             self.linetime = numpy.nan
-            self.skip_analysis = True
-            print(self.prefix, 'XML parse error.')
-        # later include number of channels
+            # self.skip_analysis = True
+            # print(self.prefix, 'XML parse error.')
+
+    #     '''
+    #     In Frame, there's a File for each Ch
+    #     in 1 ch:
+    #         <Frame relativeTime="0" absoluteTime="2.95699999999988" index="1" parameterSet="CurrentSettings">
+    #   <File channel="2" channelName="Ch2" page="1" filename="SncgTot1_2023-11-09_LFP_001-000_Cycle00001_Ch2_000001.ome.tif" />
+    #   <ExtraParameters lastGoodFrame="0" />
+    #   <PVStateShard>
+    #     <PVStateValue key="framePeriod" value="0.049999992" />
+    #     <PVStateValue key="scanLinePeriod" value="6.3177E-05" />
+    #     <PVStateValue key="twophotonLaserPower">
+    #       <IndexedValue index="0" value="1800.4" />
+    #     </PVStateValue>
+    #   </PVStateShard>
+    # </Frame>
+    #     in 2 ch:
+    #         <Frame relativeTime="0" absoluteTime="2.99499999999898" index="1" parameterSet="CurrentSettings">
+    #   <File channel="1" channelName="Ch1" page="1" filename="SncgTot4_2023-10-23_movie_000-000_Cycle00001_Ch1_000001.ome.tif" />
+    #   <File channel="2" channelName="Ch2" page="1" filename="SncgTot4_2023-10-23_movie_000-000_Cycle00001_Ch2_000001.ome.tif" />
+    #   <ExtraParameters lastGoodFrame="0" />
+    #   <PVStateShard>
+    #     <PVStateValue key="framePeriod" value="0.050000004" />
+    #     <PVStateValue key="scanLinePeriod" value="6.3159E-05" />
+    #   </PVStateShard>
+    # </Frame>
+    #     '''
 
         # get voltage info
         voltage = sequence.find('VoltageRecording')
         self.voltage_config = voltage.attrib['configurationFile']
         self.voltage_data = voltage.attrib['dataFile']
         self.voltage_name = voltage.attrib['name']
+        self.found_output.append('ADC')
 
         # get opto info
         opto = sequence.find('MarkPoints')
@@ -86,6 +121,7 @@ class PreProc:
         if self.has_opto:
             self.opto_config = opto.attrib['filename']
             self.opto_name = opto.attrib['name']
+            self.found_output.append('Opto')
         else:
             self.opto_name = None
             self.opto_config = None
@@ -103,7 +139,16 @@ class PreProc:
         self.n_frames = len(dfs)
 
         # append metadata attribs
-        self.md_keys.extend(['n_frames', 'voltage_name', 'has_opto', 'opto_name', 'framerate', 'linetime'])
+        self.md_keys.extend(['n_frames', 'voltage_name', 'has_opto', 'opto_name',
+                             'framerate', 'linetime', 'channelnames'])
+
+
+    def parse_cam(self):
+        vfn = self.dpath+self.prefix+'.avi'
+        if os.path.exists(vfn):
+            self.cam_file = vfn
+            self.md_keys.append('cam_file')
+            self.found_output.append('Camera')
 
     def parse_TTLs(self):
         vdat = pandas.read_csv(self.dpath + self.voltage_data)
@@ -125,6 +170,7 @@ class PreProc:
             led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
             numpy.save(self.dpath + 'bad_frames.npy', stimframes)
             numpy.save(self.procpath + self.prefix + '_bad_frames.npy', stimframes)
+            self.found_output.append('StimPulses')
 
         # rsync times
         if self.rsync_channel is not None:
@@ -133,12 +179,23 @@ class PreProc:
             pos = numpy.where(numpy.convolve(trace > vmax * 0.5, [1, -1]) == 1)[0]
             self.ttl_times = pos / self.fs
             numpy.save(self.procpath + self.prefix + '_2pTTLtimes.npy', self.ttl_times)
+            self.found_output.append('Rsync')
 
         ##append metadata attribs
         self.md_keys.append('fs')
 
     def convert_ephys(self):
-        if self.lfp_channels is not None:
+        #get list of available LFP channels
+        all_channels = [str(x.split(' ')[-1]) for x in self.vdat.keys() if 'Time' not in x]
+        for x in all_channels:
+            try:
+                ch_n = int(x)
+                if not ch_n < self.reserved_channels:
+                    self.lfp_channels.append(x)
+            except:
+                pass
+
+        if len(self.lfp_channels):
             trace = [self.vdat[f' Input {ch}'].values for ch in self.lfp_channels]
             # get the frame for each sample
             # use int for this. data range is +-10 V, 1000x gain. data*1000 is in microvolt (raw). int16 range is 32k
@@ -148,6 +205,7 @@ class PreProc:
                 ephys[0, int(t * self.fs):int((t + 1) * self.fs)] = ti
             for ci in range(len(self.lfp_channels)):
                 ephys[ci + 1] = trace[ci] * 1000
+                self.found_output.append(f'LFP{ci+1}')
             self.ephys = ephys
             numpy.save(self.procpath + self.prefix + '_ephys.npy', ephys)
 
@@ -182,6 +240,7 @@ class PreProc:
         self.laps = len(tm.laptimes)
         self.rewards = 'not implemented'
         self.md_keys.extend(['laps', 'rewards'])
+        self.found_output.append('Treadmill')
 
     def get_frame_tm_x(self, frametime, tX):
         '''for each frametime, find index in treadmill analog signal'''
