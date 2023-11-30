@@ -27,8 +27,9 @@ class Treadmill:
                         prefix = fn[:-len(ext)]
                         longest = len(fn)
         self.prefix = prefix
+        self.filename = prefix + '.txt'
         self.flist = os.listdir(path)
-        self.d = d = data_import.Session(self.path + self.prefix + '.txt')
+        self.d = d = data_import.Session(self.path + self.filename)
 
         d.analog = {}
         for f in self.flist:
@@ -84,6 +85,8 @@ class Treadmill:
             if event.name == 'rsync':
                 t.append(event.time)
         return numpy.array(t)
+    def export_plot(self):
+        return session_plot.session_plot(self.path+self.filename, fig_no=1, return_fig=True)
 
 
 
