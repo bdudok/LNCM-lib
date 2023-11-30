@@ -11,7 +11,7 @@ from Proc2P.Bruker.ConfigVars import CF
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Bruker.LoadEphys import Ephys
 from LFP import Filter
-from Proc2P.utils import outlier_indices, gapless, startstop, lprint
+from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel
 # from Ripples import Ripples
 import time
 from scipy import stats
@@ -182,7 +182,7 @@ class ImagingSession(object):
         path = os.path.join(self.path, 'ephys/')
         if not os.path.exists(path):
             os.mkdir(path)
-        cfn = path + keys[0] + '.npy'
+        cfn = path + keys[0] + f'{self.lfp_ch}.npy'
         #later extend this to use multiple channels
         if os.path.exists(cfn):
             for key in keys:
@@ -238,17 +238,52 @@ class ImagingSession(object):
             qc_pass = numpy.logical_and(incl, qc_pass)
         return qc_pass
 
+    def export_spreadsheet(self):
+        df = pandas.DataFrame(self.ca.rel.transpose(),
+                              columns=[f"c{x}" for x in range(self.ca.cells)],
+                              index=numpy.arange(self.ca.frames, dtype='int'))
+        df['RelTime'] = self.ftimes[:, 0]
+        # df['AbsTime'] = self.ftimes[:, 1]
+        # treadmill
+        df['Position'] = self.pos.pos
+        df['Speed'] = self.pos.speed
+        ststop = ['' for i in range(self.ca.frames)]
+        for start, stop in zip(*self.startstop()):
+            ststop[start] = 'start'
+            ststop[stop] = 'stop'
+        df['StartStop'] = ststop
+
+        #ephys
+        epc=-1
+        for epc in range(len(self.si.info['lfp_channels'])):
+            ephys = Ephys(self.procpath, self.prefix, channel=epc)
+            if ephys.trace is not None:
+                self.lfp_ch = epc+1
+                self.map_ripples()
+                df[f'LFP{epc+1}RipplePower'] = self.ephys.ripple_power
+                df[f'LFP{epc+1}HFPower'] = self.ephys.hf_power
+        if self.opto is not None:
+            ofn = self.get_file_with_suffix('_StimFrames.xlsx')
+            if os.path.exists(ofn):
+                sf = read_excel(ofn)
+            stimpow = numpy.zeros(self.ca.frames)
+            stimpow[sf['ImgFrame']] = sf['Intensity']
+            df['PhotoStim'] = stimpow
+        sfn = self.get_file_with_suffix(f'_ROI-{self.tag}_Ch{self.ca.ch}_{epc+1}LFP.xlsx')
+        df.to_excel(sfn)
 
 
 if __name__ == '__main__':
-    path = 'D:/Shares/Data/_Processed/2P/PVTot/LFP/'
-    prefix = 'PVTot3_2023-09-15_LFP_028'
-    tag = 'ALL'
+    path = 'D:/Shares/Data/_Processed/2P/SncgTot/'
+    prefix = 'SncgTot4_2023-11-09_LFP_001'
+    tag = 'checked'
     a = ImagingSession(path, prefix, tag=tag, ch=0)
-    e = Ephys(a.procpath, a.prefix)
-    trace = e.edat[1]
-    r = Filter.Filter(trace, 2000)
-    a.map_ripples()
+
+
+    # e = Ephys(a.procpath, a.prefix)
+    # trace = e.edat[1]
+    # r = Filter.Filter(trace, 2000)
+    # a.map_ripples()
 
 
     # fig, ax = plt.subplots(nrows=3, sharex=True)

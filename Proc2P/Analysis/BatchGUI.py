@@ -251,6 +251,11 @@ class View:
         # Button(self.frame, text="Highlight", command=self.autosel_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Unit plots", command=self.unit_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Session plot", command=self.session_callback).grid(row=self.row(), sticky=N)
+
+        Label(self.frame, text='Export session').grid(row=self.row(), pady=10)
+        Button(self.frame, text="Export excel", command=self.export_excel_callback).grid(row=self.row(), sticky=N)
+
+        Label(self.frame, text='Place cells').grid(row=self.row(), pady=10)
         Button(self.frame, text="Place fields", command=self.pf_callback).grid(row=self.row(), sticky=N)
         Button(self.frame, text="Weighted Pfields", command=self.pfsmooth_callback).grid(row=self.row(), sticky=N)
         Label(self.frame, text='Sorted plots').grid(row=self.row(), pady=10)
@@ -323,6 +328,15 @@ class View:
     def unit_callback(self):
         self.load()
         self.active_item.start(param=self.getparam(), skin=self.parent.pltconfigs.config['skin'].get())
+
+    def export_excel_callback(self):
+        wdir = self.parent.filelist.wdir
+        tag = self.parent.roiconvert.config['roi_name'].get()
+
+        for prefix in self.parent.filelist.get_active()[1]:
+            session_Gui(wdir, prefix, tag=tag, norip=True, ).export_spreadsheet()
+
+
 
     def session_callback(self):
         self.load()
