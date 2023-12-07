@@ -70,7 +70,7 @@ class PreProc:
             self.linetime = float(sdict['scanLinePeriod'])  # not in 2channel files.
         else:
             self.linetime = numpy.nan
-            self.skip_analysis = True
+            # self.skip_analysis = True
             print(self.prefix, 'XML parse error.')
         # later include number of channels
 
@@ -167,21 +167,29 @@ class PreProc:
         # read rSync
         tm_rsync = tm.get_Rsync_times()
         sc_rsync = (self.ttl_times * 1000).astype('int')
-        align = rsync.Rsync_aligner(tm_rsync, sc_rsync)
-        self.frame_at_treadmill = align.B_to_A(self.frametimes * 1000)
-        numpy.save(self.procpath + self.prefix + '_frame_tm_times.npy', self.frame_at_treadmill)
-        # resample speed, pos to scope frames
-        indices = self.get_frame_tm_x(self.frame_at_treadmill, tm.pos_tX * 1000)
-        for Y, tag in zip((tm.smspd, tm.pos), ('smspd', 'pos')):
-            op = numpy.empty(len(self.frame_at_treadmill))
-            op[:] = numpy.nan
-            mask = indices > -1
-            op[mask] = Y[indices[mask]]
-            numpy.save(self.procpath + self.prefix + f'_{tag}.npy', op)
-        # add lap and reward number to output
-        self.laps = len(tm.laptimes)
-        self.rewards = 'not implemented'
-        self.md_keys.extend(['laps', 'rewards'])
+        try:
+            align = rsync.Rsync_aligner(tm_rsync, sc_rsync)
+            skip = False
+        except:
+            print('Treadmill pulse times:', tm_rsync)
+            print('Scope pulse times:', sc_rsync)
+            print('RSync align error')
+            skip = True
+        if not skip:
+            self.frame_at_treadmill = align.B_to_A(self.frametimes * 1000)
+            numpy.save(self.procpath + self.prefix + '_frame_tm_times.npy', self.frame_at_treadmill)
+            # resample speed, pos to scope frames
+            indices = self.get_frame_tm_x(self.frame_at_treadmill, tm.pos_tX * 1000)
+            for Y, tag in zip((tm.smspd, tm.pos), ('smspd', 'pos')):
+                op = numpy.empty(len(self.frame_at_treadmill))
+                op[:] = numpy.nan
+                mask = indices > -1
+                op[mask] = Y[indices[mask]]
+                numpy.save(self.procpath + self.prefix + f'_{tag}.npy', op)
+            # add lap and reward number to output
+            self.laps = len(tm.laptimes)
+            self.rewards = 'not implemented'
+            self.md_keys.extend(['laps', 'rewards'])
 
     def get_frame_tm_x(self, frametime, tX):
         '''for each frametime, find index in treadmill analog signal'''
