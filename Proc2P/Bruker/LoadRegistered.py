@@ -34,6 +34,7 @@ class LoadRegistered():
         if len(input_files) > 1:
             self.data2 = numpy.memmap(input_files[1], mode='r', dtype='int16', shape=self.shape)
 
+
     def load(self):
         pass #no need to override memory map with the s2p binary
         # self.data = numpy.array(self.data[...])
@@ -44,14 +45,14 @@ class LoadRegistered():
         :return: memory mapped data corresponding to the selected channel
         '''
         ret_ch = 0
-        print(self.channel_keys)
-        if ch == 'Green':
+        # print(self.channel_keys)
+        if ch == 'Green' or ch == 'Ch2':
             assert 'Ch2' in self.channel_keys
             if self.channel_keys[0] == 'Ch2':
                 pass
             elif self.channel_keys[1] == 'Ch2':
                 ret_ch = 1
-        elif ch == 'Red':
+        elif ch == 'Red' or ch == 'Ch1':
             assert 'Ch1' in self.channel_keys
             if self.channel_keys[0] == 'Ch1':
                 pass

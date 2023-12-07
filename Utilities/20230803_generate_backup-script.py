@@ -45,6 +45,7 @@ if (((get-date) - $oldestFile.LastWriteTime) -gt $timespanF) {
     }
     else {rm ./10days/$oldestFile}
 }
+rm *.tar
 '''
 
 script_s += 'Powershell -NoProfile -ExecutionPolicy Bypass -File ' + ps_script_handle + '\n'
@@ -71,7 +72,7 @@ ext_drive_name = 'LNCM1'
 if ext_drive_name in drive_names:
     dest_path = f'E:\ExtDrives/{ext_drive_name}/_Processed/'
     source_path = 'D:\Shares\Data\_Processed/'
-    dlist = ['2P/PVTot', '2P/SncgTot']
+    dlist = ['2P/PVTot', '2P/SncgTot', '2P/SncgDREADD']
     for d in dlist:
         script_s += get_cmd(d)
 

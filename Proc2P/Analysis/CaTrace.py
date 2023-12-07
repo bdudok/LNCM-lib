@@ -12,26 +12,38 @@ from sklearn.decomposition import PCA
 from Proc2P.Bruker.ConfigVars import CF
 from matplotlib import pyplot as plt
 
+
 class CaTrace(object):
     def __init__(self, path, prefix, verbose=False, bsltype='poly', exclude=(0, 0), peakdet=False, ch=0, tag=None):
         if verbose:
             print(f'Firing called with ch={ch}, tag={tag}')
-        self.peakdet = peakdet #removed peakdet from old Firing class, this doesn't do anything.
+        self.peakdet = peakdet  # removed peakdet from old Firing class, this doesn't do anything.
         self.path = path
         self.prefix = prefix
         self.opPath = os.path.join(self.path, self.prefix + '/')
+        self.is_dual = False
+        # parse channel
+        if ch in (0, 'Ch2', 'First', 'Green'):
+            ch = 0
+        elif ch in (1, 'Ch1', 'Second', 'Red'):
+            ch = 1
+        elif ch in ('Both', 'All', 'Dual'):
+            ch = 0
+            self.is_dual = True
+        else:
+            print('Channel not parsed:', ch)
+            assert False
         self.ch = ch
         self.tag = tag
-        self.pf = self.opPath + f'{prefix}_trace_{tag}'
+        self.pf = self.opPath + f'{prefix}_trace_{tag}-ch{ch}'  # folder name
         self.sync = Sync(path, prefix)
-        self.keys = ['bsl', 'rel', 'ntr', 'trace', 'smtr',]
+        self.keys = ['bsl', 'rel', 'ntr', 'trace', 'smtr', ]
         self.verbose = verbose
         self.bsltype = bsltype
         self.exclude = exclude
         if verbose:
             print(prefix, 'firing init')
         self.version_info = {}  # should contain only single strings as values
-        self.is_dual = False
 
     # def open_trace(self):
     #     self.open_raw(trace=numpy.load(self.pf))
@@ -48,7 +60,12 @@ class CaTrace(object):
                 print('Missing file:', file_name)
                 return -1
         if len(self.trace.shape) == 3:
+            print(self.ch, self.trace.shape)
+            if not self.ch < self.trace.shape[2]:
+                return -1
             self.trace = self.trace[..., self.ch]
+        elif self.ch > 0:
+            return -1
         self.cells, self.frames = self.trace.shape
         if self.verbose:
             print(self.prefix, 'Traces loaded', str(self.cells))
@@ -62,7 +79,7 @@ class CaTrace(object):
         #     print('movement not found')
         #     self.movement = numpy.zeros(self.frames, dtype=numpy.bool)
         # save outlier data points to exclude from analysis:
-        #mask with bad frames
+        # mask with bad frames
         self.ol_index = []
         bad_frames = self.sync.load('opto')
         if bad_frames is not None:
@@ -94,8 +111,9 @@ class CaTrace(object):
         os.mkdir(self.pf)
         for key in self.keys:
             numpy.save(self.pf + '//' + key, self.__getattribute__(key))
-        self.version_info = {'v': '10', 'bsltype': self.bsltype,
-                             'channel': str(self.ch), 'fps': str(CF.fps)}  # should contain only single strings as values
+        self.version_info = {'v': '11', 'bsltype': self.bsltype,
+                             'channel': str(self.ch),
+                             'fps': str(CF.fps)}  # should contain only single strings as values
         numpy.save(self.pf + '//' + 'info', self.version_info)
         print(self.prefix, self.cells, 'cells saved.')
 
@@ -126,8 +144,20 @@ class CaTrace(object):
         self.cells, self.frames = self.trace.shape[:2]
         if len(self.trace.shape) == 3:
             self.channels = self.trace.shape[-1]
+            if self.channels > 1:
+                self.is_dual = True
         elif len(self.trace.shape) == 2:
             self.channels = 1
+        # keeping the version above for backwards compatibility with 'dual' np folders.
+        # if the existing data is dual, we're good. if not, read second single and append.
+        if self.channels == 1 and self.is_dual:
+            second_folder = self.opPath + f'{self.prefix}_trace_{self.tag}-ch{1}'  # folder name
+            for key in self.keys:
+                fn = second_folder + '//' + key + '.npy'
+                if os.path.exists(fn):
+                    tr1 = self.__getattribute__(key)
+                    tr2 = numpy.load(fn)
+                    self.__setattr__(key, numpy.dstack((tr1, tr2)))
         vfn = self.pf + '//' + 'info' + '.npy'
         # load version info text into dict
         if os.path.exists(vfn):
@@ -248,15 +278,17 @@ class Worker(Process):
 
 
 if __name__ == '__main__':
-    # process trace created by PullSignals:
-    path = 'D:/Shares/Data/_Processed/2P/PVTot/Opto/'
-    prefix = 'IMG4_2023-09-12_opto_067'
-    tag = 'IN'
-    # request_queue = Queue()
-    # result_queue = Queue()
-    # nworker = 0
-    # ncpu = multiprocessing.cpu_count()
-    a = CaTrace(path, prefix, verbose=True, ch=0, tag=tag)
+    # test dual - load processed
+    wdir = 'D:/Shares/Data/_Processed/2P/testing/'
+    prefix = 'SncgTot4_2023-10-23_movie_000'
+    tag = '1'
+    # b = CaTrace(wdir, prefix, verbose=True, ch=0, tag=tag)
+    # c = CaTrace(wdir, prefix, verbose=True, ch=1, tag=tag)
+    # b.open_raw()
+    # c.open_raw()
+    # print(b.pack_data(0)[1][:2], c.pack_data(0)[1][:2])
+    a = CaTrace(wdir, prefix, verbose=True, ch='Both', tag=tag)
+    self = a
     a.load()
     # a.open_raw()
     # for c in range(a.cells):
@@ -268,4 +300,3 @@ if __name__ == '__main__':
     #     finished = a.unpack_data(data)
     #     if finished:
     #         break
-

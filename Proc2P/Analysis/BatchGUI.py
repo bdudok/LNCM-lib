@@ -613,7 +613,7 @@ class RoiDet:
         # Button(self.frame, text="Auto select", command=self.autosel_callback).grid(row=self.row(), sticky=N)
         #
         Label(self.frame, text='Methods').grid(row=self.row())
-        approaches = ['iPC', 'PC', 'STICA', 'iPC-1', 'PC-1', 'STICA-1']
+        approaches = ['iPC-G', 'PC-G', 'STICA-G', 'iPC-R', 'PC-R', 'STICA-R']
         self.rd_apps = {}
         for i, app in enumerate(approaches):
             self.rd_apps[app] = IntVar()
@@ -1572,28 +1572,28 @@ if __name__ == '__main__':
     tr_nworker = 0
     szdet_nworker = 0
     for jobtype, job in iter(request_queue.get, None):
-        if jobtype == 'mc':
-            if not cleanup_worker:
-                CleanupWorker(cleanup_queue).start()
-                cleanup_worker = True
-            path, prefix, g, cores, channels, rigid_steps, max_displacement, optomode, ignore_sat = job
-            if mc_nworker < cores:
-                mc_Worker(mc_job_queue, cleanup_queue).start()
-                mc_nworker += 1
-            if optomode:
-                os.chdir(path)
-                pullopto(prefix, path)
-            mc_job_queue.put((path, scratch, prefix, g, channels, rigid_steps, max_displacement, optomode, ignore_sat))
-        elif jobtype == 'mini-mc':
-            path, prefix, passes = job
-            if not os.path.exists(path + prefix + '_motion-crop.json'):
-                os.chdir(path)
-                CropCorrect(prefix).crop()
-            if mini_mc_worker < 1:
-                miniMcWorker(mini_request_queue).start()
-                mini_mc_worker += 1
-            mini_request_queue.put((path, prefix, passes))
-        elif jobtype == 'pull':
+        # if jobtype == 'mc':
+        #     if not cleanup_worker:
+        #         CleanupWorker(cleanup_queue).start()
+        #         cleanup_worker = True
+        #     path, prefix, g, cores, channels, rigid_steps, max_displacement, optomode, ignore_sat = job
+        #     if mc_nworker < cores:
+        #         mc_Worker(mc_job_queue, cleanup_queue).start()
+        #         mc_nworker += 1
+        #     if optomode:
+        #         os.chdir(path)
+        #         pullopto(prefix, path)
+        #     mc_job_queue.put((path, scratch, prefix, g, channels, rigid_steps, max_displacement, optomode, ignore_sat))
+        # elif jobtype == 'mini-mc':
+        #     path, prefix, passes = job
+        #     if not os.path.exists(path + prefix + '_motion-crop.json'):
+        #         os.chdir(path)
+        #         CropCorrect(prefix).crop()
+        #     if mini_mc_worker < 1:
+        #         miniMcWorker(mini_request_queue).start()
+        #         mini_mc_worker += 1
+        #     mini_request_queue.put((path, prefix, passes))
+        if jobtype == 'pull':
             if pull_nworker < 1:
                 pull_Worker(pull_queue).start()
                 pull_nworker += 1
@@ -1602,7 +1602,7 @@ if __name__ == '__main__':
             path, prefix, bsltype, exclude, sz_mode, peakdet, tag = job
             os.chdir(path)
             run = False
-            for ch in (0, ):
+            for ch in (0, 1):
                 a = CaTrace(path, prefix, bsltype=bsltype, exclude=exclude, peakdet=peakdet, ch=ch, tag=tag)
                 print(a.pf)
                 if a.open_raw() == -1:
@@ -1638,10 +1638,10 @@ if __name__ == '__main__':
             Process(target=play_stack, args=job).start()
         elif jobtype == 'trace':
             Process(target=play_ephys, args=job).start()
-        elif jobtype == 'lfp_overlay':
-            Process(target=plot_overlay, args=job).start()
-        elif jobtype == 'lfp_overlay_qa':
-            Process(target=plot_overlay_qa, args=job).start()
+        # elif jobtype == 'lfp_overlay':
+        #     Process(target=plot_overlay, args=job).start()
+        # elif jobtype == 'lfp_overlay_qa':
+        #     Process(target=plot_overlay_qa, args=job).start()
         elif jobtype == 'SzDet':
             if szdet_nworker < 20:
                 SzDet_Worker(szdet_queue).start()
@@ -1653,14 +1653,14 @@ if __name__ == '__main__':
             #     Process(target=calc_m2_index, args=job[:-1]).start()
             # else:
             Process(target=exportstop, args=job).start()
-        elif jobtype == 'sbxconvert':
-            Process(target=roi_Gui, args=job).start()
-        elif jobtype == 'opto':
-            path, pflist = job
-            for prefix in pflist:
-                os.chdir(path)
-                pullopto(prefix, path)
+        # elif jobtype == 'sbxconvert':
+        #     Process(target=roi_Gui, args=job).start()
+        # elif jobtype == 'opto':
+        #     path, pflist = job
+        #     for prefix in pflist:
+        #         os.chdir(path)
+        #         pullopto(prefix, path)
         elif jobtype == 'exit':
             break
         else:
-            print('Error in job type: ', jobtype)
+            print('Unknown job type: ', jobtype)

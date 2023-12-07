@@ -62,7 +62,11 @@ def pull_signals(path, prefix, tag=None, ch='All', raw=False):
                     binmask[nroi, x, y] = True
     #figure out channels to pull MODES = ['All', 'Green', 'Red']
     if ch == 'All':
-        channels = im.channels
+        if 'Ch1' in im.channels and 'Ch2' in im.channels:
+            channels = ['Ch2', 'Ch1'] #I want to keep green=0; red=1 throughout the pipeline, this step establishes that
+            #and later steps inherit.
+        else:
+            channels = im.channels
     else:
         channels = [ch]
 
@@ -101,13 +105,12 @@ def pull_signals(path, prefix, tag=None, ch='All', raw=False):
     minutes = datetime.timedelta.total_seconds(elapsed) / 60
     speed = (elapsed / ncells / len(channels) / nframes).microseconds
     print(f'{prefix} finished in {minutes:.1f} minutes ({speed} microseconds / cell / frame)')
+    print(traces.shape)
     return traces
 
 if __name__ == '__main__':
-    path = 'D:\Shares\Data\_Processed/2P\PVTot\Opto/'
-    prefix = 'PVTot5_2023-09-04_opto_023'
-    tag = 'IN'
-    t0 = time()
-    p = pull_signals(path, prefix, tag, 1)
-    print('Ch 1 Finished in', time()-t0)
+    path = 'D:/Shares/Data/_Processed/2P/testing/'
+    prefix = 'SncgTot4_2023-10-23_movie_000'
+    tag = '1'
+
 
