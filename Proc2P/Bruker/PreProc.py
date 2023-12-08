@@ -18,7 +18,7 @@ class PreProc:
 
     def __init__(self, dpath, procpath, prefix, btag='000', rsync_channel=0, led_channel=1, ):
         self.dpath = os.path.join(dpath, prefix + f'-{btag}/')  # raw data
-        self.procpath = procpath + prefix + '/'  # output processed data
+        self.procpath = os.path.join(procpath, prefix) + '/'  # output processed data
         self.prefix = prefix  # recorder prefix tag
         self.btag = btag  # tag appended by bruker (000 by default)
 
