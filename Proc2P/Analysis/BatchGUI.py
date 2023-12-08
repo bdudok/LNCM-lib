@@ -179,13 +179,13 @@ class Cfg:
         self.config[text].set(0)
 
         Label(self.frame, text='Skin').grid(row=self.second_row(), column=1)
-        MODES = ['dark', 'light', 'GS-fig']
+        MODES = ['dark', 'light',]
         self.config['skin'] = StringVar()
         var = self.config['skin']
         var.set(MODES[1])
-        # for r, text in enumerate(MODES):
-        #     Radiobutton(self.frame, text=text, variable=var, value=text).grid(row=self.second_row(),
-        #                                                                       column=1, sticky=N + W)
+        for r, text in enumerate(MODES):
+            Radiobutton(self.frame, text=text, variable=var, value=text).grid(row=self.second_row(),
+                                                                              column=1, sticky=N + W)
 
         Label(self.frame, text='Channels').grid(row=self.second_row(), column=1)
         MODES = ['Both', 'First', 'Second']

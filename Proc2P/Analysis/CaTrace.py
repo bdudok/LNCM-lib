@@ -60,7 +60,7 @@ class CaTrace(object):
                 print('Missing file:', file_name)
                 return -1
         if len(self.trace.shape) == 3:
-            print(self.ch, self.trace.shape)
+            # print(self.ch, self.trace.shape)
             if not self.ch < self.trace.shape[2]:
                 return -1
             self.trace = self.trace[..., self.ch]
@@ -144,20 +144,23 @@ class CaTrace(object):
         self.cells, self.frames = self.trace.shape[:2]
         if len(self.trace.shape) == 3:
             self.channels = self.trace.shape[-1]
-            if self.channels > 1:
-                self.is_dual = True
+            self.is_dual = self.channels > 1
         elif len(self.trace.shape) == 2:
             self.channels = 1
         # keeping the version above for backwards compatibility with 'dual' np folders.
         # if the existing data is dual, we're good. if not, read second single and append.
         if self.channels == 1 and self.is_dual:
             second_folder = self.opPath + f'{self.prefix}_trace_{self.tag}-ch{1}'  # folder name
+            found_second = False
             for key in self.keys:
                 fn = second_folder + '//' + key + '.npy'
                 if os.path.exists(fn):
+                    found_second = True
                     tr1 = self.__getattribute__(key)
                     tr2 = numpy.load(fn)
                     self.__setattr__(key, numpy.dstack((tr1, tr2)))
+            if not found_second:
+                self.is_dual = False
         vfn = self.pf + '//' + 'info' + '.npy'
         # load version info text into dict
         if os.path.exists(vfn):
@@ -287,7 +290,7 @@ if __name__ == '__main__':
     # b.open_raw()
     # c.open_raw()
     # print(b.pack_data(0)[1][:2], c.pack_data(0)[1][:2])
-    a = CaTrace(wdir, prefix, verbose=True, ch='Both', tag=tag)
+    a = CaTrace(wdir, prefix, verbose=True, ch='Dual', tag=tag)
     self = a
     a.load()
     # a.open_raw()

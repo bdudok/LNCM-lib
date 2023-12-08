@@ -13,6 +13,7 @@ import numpy
 class Gui(ImagingSession):
 
     def start(self, param=None, skin='light'):
+        self.primary_ch=0
         print('Called with param = ' + str(param))
         if skin == 'dark':
             lg = '#babaa3'
@@ -49,7 +50,7 @@ class Gui(ImagingSession):
             self.colors['trace-r'] = '#ed1e24'
             self.colors['run_1'] = '#5b52a3'
             self.colors['speed'] = '#5b52a3'
-            graph_param = param[..., 0]
+            graph_param = param[..., self.primary_ch]
         else:
             graph_param = param
         self.activecell = 0
@@ -66,7 +67,6 @@ class Gui(ImagingSession):
         if hasattr(self, 'ripples'):
             self.rippletrigger()
         self.time_graph(param=param)
-        #TODO here
         self.overview()
         self.cell_update()
 
@@ -77,13 +77,16 @@ class Gui(ImagingSession):
 
     def runspeed(self, param=None, bins=5, binsize=5, span=None):
         param = self.getparam(param)
+        if self.dualch and len(param.shape) == 3:
+            param = param[..., self.primary_ch]
         if span is None:
             span = (0, self.ca.frames)
         # find time points for each bin
         self.bin = numpy.empty((bins + 1, len(self.pos.pos)), dtype='bool')
-        self.bin[0] = numpy.invert(self.pos.movement)
+        self.bin[0] = numpy.logical_not(self.pos.movement)
         for i in range(bins):
             self.bin[i + 1] = (self.pos.speed > i * binsize) * (self.pos.speed < (i + 1) * binsize) * self.pos.movement
+        print(param.shape)
         zscores = self.pull_means(param, span)
         self.speedrates = copy.copy(self.rates[self.pltnum])
 
@@ -286,19 +289,19 @@ class Gui(ImagingSession):
             axspeed.plot(self.eye, color='blue', alpha=0.8, label='eye')
         # plot cell plots. instead of set_ydata use clear for update. drawing statements that would be repeated moved to update function
         # l_pol, = axpol.plot(numpy.arange(0, 6.28319, 6.28319 / 360), self.polar(self.graph_param))
-        if not self.dualch:
-            axrun.plot(numpy.nanmean(self.speedrates, axis=1), label='mean')
-            l_run, = axrun.plot(self.speedrates[:, self.activecell], label='cell')
-            if hasattr(self, 'ripples'):
-                l_rpl, = axrpl.plot(self.ripplerates[:, self.activecell], label='Ripple')
-            if self.using_laps:
-                axlap.imshow(self.perlap_fields[:, self.activecell, :].transpose(), cmap='inferno_r', vmin=0)
-            # for ax in [axspike, axtrace, axspeed, axpos]:
-            #     ax.myvline = ax.axvline(self.active_frame, color='#790000')
-            for ax in [axspeed, axrun, axrpl]:
-                ax.legend(loc='upper right', framealpha=self.colors['legendalpha'])
-            # axpol.myvline = axpol.axvline(-self.pos.relpos[self.active_frame] * 6.28319, color='#790000')
-            axrpl.myvline = axrpl.axvline(CF.fps, color='black')
+        # if not self.dualch:
+        axrun.plot(numpy.nanmean(self.speedrates, axis=1), label='mean')
+        l_run, = axrun.plot(self.speedrates[:, self.activecell], label='cell')
+        if hasattr(self, 'ripples'):
+            l_rpl, = axrpl.plot(self.ripplerates[:, self.activecell], label='Ripple')
+        if self.using_laps:
+            axlap.imshow(self.perlap_fields[:, self.activecell, :].transpose(), cmap='inferno_r', vmin=0)
+        # for ax in [axspike, axtrace, axspeed, axpos]:
+        #     ax.myvline = ax.axvline(self.active_frame, color='#790000')
+        for ax in [axspeed, axrun, ]: #axrpl
+            ax.legend(loc='upper right', framealpha=self.colors['legendalpha'])
+        # axpol.myvline = axpol.axvline(-self.pos.relpos[self.active_frame] * 6.28319, color='#790000')
+        axrpl.myvline = axrpl.axvline(CF.fps, color='black')
 
         # update active cell
         xvals = numpy.arange(self.ca.frames)
@@ -319,7 +322,7 @@ class Gui(ImagingSession):
                 plot_y_val = self.ca.rel[self.activecell]
                 # wh_active = numpy.logical_not(self.ca.event[self.activecell])
                 # if numpy.nansum(wh_active) > 2:
-                #     axtrace.plot(self.ca.rel[self.activecell], label='trace', zorder=1)
+                axtrace.plot(self.ca.rel[self.activecell], label='trace', zorder=1)
                 #     if not numpy.all(numpy.isnan(plot_y_val[wh_active])) and numpy.any(plot_y_val[wh_active] > 0):
                 #         axtrace.plot(numpy.ma.masked_where(wh_active, self.ca.event[self.activecell]), label='event',
                 #                      color=self.colors['event_2'], zorder=2)
@@ -327,13 +330,17 @@ class Gui(ImagingSession):
                 for ch_index, (ch_color, color_tag) in enumerate(zip(('Green', 'Red'), ('trace-g', 'trace-r'))):
                     plot_y_val = param[self.activecell, :, ch_index]
                     axtrace.plot(plot_y_val, label=ch_color, color=self.colors[color_tag], zorder=1)
-                    # axspike.plot(plot_y_val, label=ch_color, color=self.colors[color_tag], zorder=1)
+                    if ch_index == self.primary_ch:
+                        axspike.plot(plot_y_val, label=ch_color, color=self.colors[color_tag], zorder=1)
                     # if not numpy.all(numpy.isnan(plot_y_val[wh_run])) and numpy.any(plot_y_val[wh_run] > 0):
                     #     axspike.plot(numpy.ma.masked_where(wh_run, plot_y_val), label='run',
                     #                  color=self.colors['run_1'], zorder=2)
 
             if self.opto is not None:
-                plot_y_val = param[self.activecell]
+                if not self.dualch:
+                    plot_y_val = param[self.activecell]
+                else:
+                    plot_y_val = param[self.activecell, :, self.primary_ch]
                 wh_opto = self.opto
                 if numpy.nansum(wh_opto) > 2:
                     if not numpy.all(numpy.isnan(plot_y_val[wh_opto])) and numpy.any(plot_y_val[wh_opto] > 0):
@@ -656,18 +663,19 @@ class Gui(ImagingSession):
 
 
 if __name__ == '__main__':
-    path = r'D:\Shares\Data\_Processed\2P\SncgDREADD/'
-    prefix = 'SncgTot11_2023-11-20_Movie_002'
+    path = r'D:\Shares\Data\_Processed\2P\testing/'
+    prefix = 'SncgTot4_2023-10-23_movie_000'
     tag = '1'
-    a = Gui(path, prefix, tag=tag, ch=0)
+    a = Gui(path, prefix, tag=tag, ch='Both', )
+
     # plt.plot(a.pos.speed, color='black')
     # plt.plot(a.ca.smtr[0])
     # plt.imshow(a.ca.smtr, aspect='auto')
-    # a.start()
+    a.start(param='smtr')
 
-    fig = a.plot_session(param='smtr', cmap='inferno_r',
-                                         scatter=False,
-                                         hm=True, rate='mean', riplines=False,
-                                         axtitle='DF/F', unit='frames')
+    # fig = a.plot_session(param='smtr', cmap='inferno_r',
+    #                                      scatter=False,
+    #                                      hm=True, rate='mean', riplines=False,
+    #                                      axtitle='DF/F', unit='frames')
 
 
