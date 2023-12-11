@@ -32,6 +32,7 @@ for d in dlist:
 #keep last 10 daily backups, then every 30 days
 ps_script = r'''cd D:\Shares\Data\DB_Backups
 Move-Item *.tar .\10days\
+rm *.tar
 docker stop baserow
 docker run --rm -v baserow_data:/baserow/data -v ${PWD}:/backup ubuntu tar cvf /backup/baserow_$(get-date -f yyyy-MM-dd).tar /baserow/data
 docker start baserow
@@ -45,7 +46,6 @@ if (((get-date) - $oldestFile.LastWriteTime) -gt $timespanF) {
     }
     else {rm ./10days/$oldestFile}
 }
-rm *.tar
 '''
 
 script_s += 'Powershell -NoProfile -ExecutionPolicy Bypass -File ' + ps_script_handle + '\n'

@@ -105,7 +105,7 @@ def pull_signals(path, prefix, tag=None, ch='All', raw=False):
     minutes = datetime.timedelta.total_seconds(elapsed) / 60
     speed = (elapsed / ncells / len(channels) / nframes).microseconds
     print(f'{prefix} finished in {minutes:.1f} minutes ({speed} microseconds / cell / frame)')
-    print(traces.shape)
+    # print(traces.shape)
     return traces
 
 if __name__ == '__main__':

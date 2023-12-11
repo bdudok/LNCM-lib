@@ -1604,12 +1604,12 @@ if __name__ == '__main__':
             run = False
             for ch in (0, 1):
                 a = CaTrace(path, prefix, bsltype=bsltype, exclude=exclude, peakdet=peakdet, ch=ch, tag=tag)
-                print(a.pf)
                 if a.open_raw() == -1:
                     continue
                 if os.path.exists(a.pf):
                     print(f'{a.pf} folder exists, skipping')
                     continue
+                print('Processing', a.pf)
                 run = True
                 if sz_mode:
                     a.ol_index = []
