@@ -32,6 +32,7 @@ for d in dlist:
 #keep last 10 daily backups, then every 30 days
 ps_script = r'''cd D:\Shares\Data\DB_Backups
 Move-Item *.tar .\10days\
+rm *.tar
 docker stop baserow
 docker run --rm -v baserow_data:/baserow/data -v ${PWD}:/backup ubuntu tar cvf /backup/baserow_$(get-date -f yyyy-MM-dd).tar /baserow/data
 docker start baserow
@@ -71,7 +72,7 @@ ext_drive_name = 'LNCM1'
 if ext_drive_name in drive_names:
     dest_path = f'E:\ExtDrives/{ext_drive_name}/_Processed/'
     source_path = 'D:\Shares\Data\_Processed/'
-    dlist = ['2P/PVTot', '2P/SncgTot']
+    dlist = ['2P/PVTot', '2P/SncgTot', '2P/SncgDREADD']
     for d in dlist:
         script_s += get_cmd(d)
 

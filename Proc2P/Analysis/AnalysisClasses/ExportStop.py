@@ -10,7 +10,7 @@ def exportstop(procpath, prefix, mode='stop', channel='Green', stimlen=15, trim=
     dpath = os.path.join(procpath, prefix+'/')
     si = SessionInfo(dpath, prefix)
     si.load()
-    image = LoadImage(procpath, prefix, explicit_need_data=True)
+    image = LoadImage(procpath, prefix)
     sync = Sync(procpath, prefix)
     speed = sync.load('speed')
     mov = gapless(speed, threshold=0.05)
@@ -22,19 +22,10 @@ def exportstop(procpath, prefix, mode='stop', channel='Green', stimlen=15, trim=
     gap = 150
     # collect stops
     starts, stops = startstop(speed, duration=duration, gap=gap, span=span)
-    im = image.data
+    im = image.imdat.get_channel(channel)
     stoprun_image = numpy.zeros(image.info['sz'])
     frames = image.nframes
-    # if channel == 'Green':
-    #     ch = 0
-    # elif channel == 'Red':
-    #     ch = 1
-    #     if ch not in image.channels:
-    #         print('Channel not found:', channel)
-    #         return -1
-    # else:
-    #     print('Channel unexpected:', channel)
-    #     return -1
+
     if mode == 'stop':
         suf = '_StopActivity.tif'
         for start, stop in zip(starts, stops):

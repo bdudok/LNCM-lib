@@ -36,7 +36,7 @@ def OEProfile(prefix, ret=False):
     :param prefix:
     :return: saved image
     '''
-    a = LoadImage(prefix, explicit_need_data=True)
+    a = LoadImage(prefix,)
     line_margin = 45
     col_margin = 80
     t_margin = 100
@@ -105,7 +105,7 @@ def GetNeuropilIntensity(prefix):
 
 
 def PullNeuroPil(prefix, margin=80):
-    a = LoadImage(prefix, explicit_need_data=True)
+    a = LoadImage(prefix)
     nframes = a.nframes
     nchannels = len(a.channels)
     # find cropping

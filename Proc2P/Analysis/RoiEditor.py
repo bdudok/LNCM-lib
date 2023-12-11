@@ -42,7 +42,7 @@ class Worker(Process):
         for din in iter(self.queue.get, None):
             print(din)
             path, prefix, apps, config = din
-            RoiEditor(path, prefix,).autodetect(approach=apps, config=config)
+            RoiEditor(path, prefix, ).autodetect(approach=apps, config=config)
 
 
 class Lasso:
@@ -315,7 +315,6 @@ class Gui:
         self.rois = RoiEditor(path, prefix)
         self.load_rois()
 
-
         avgfn = self.opPath + self.prefix + '_avgmax.tif'
         if os.path.exists(avgfn):
             self.pic = tifffile.imread(avgfn)
@@ -408,10 +407,10 @@ class Gui:
                 self.current_key = self.active_keys[i]
                 self.calc_sets(self.current_key)
                 self.draw()
-
-    def save_sbx(self):
-        print('Exporting masks in background...')
-        Process(target=save_sbx, args=(self.prefix, self.pic.shape, self.saved_rois, self.path)).start()
+    #
+    # def save_sbx(self):
+    #     print('Exporting masks in background...')
+    #     Process(target=save_sbx, args=(self.prefix, self.pic.shape, self.saved_rois, self.path)).start()
 
     def lasso_callback(self, mode):
         # add rois included in lasso
@@ -489,15 +488,18 @@ class Gui:
         # code moved to separate function, call that to save after determining file name
         # determine number for next file
         exs = [0]
-        for f in os.listdir():
+        for f in os.listdir(self.opPath):
             if self.prefix in f and '_saved_roi_' in f:
                 try:
                     # ugly way to keep autodetected rois from breaking numbering
                     exs.append(int(f[:-4].split('_')[-1]))
                 except:
                     pass
-        fn = self.prefix + '_saved_roi_' + str(max(exs) + 1)
-        RoiEditor.save_roi(self.saved_rois, self.opPath+fn, self.rois.img.image.info['sz'])
+        exi = max(exs)+1
+        while os.path.exists(self.opPath + self.prefix + '_saved_roi_' + str(exi)):
+            exi += 1
+        fn = self.prefix + '_saved_roi_' + str(exi)
+        RoiEditor.save_roi(self.saved_rois, self.opPath + fn, self.rois.img.image.info['sz'])
         msg = f'{len(self.saved_rois)} saved in {fn}'
         print(msg)
         return msg
@@ -515,7 +517,7 @@ class Gui:
             sincl = self.lims[0] < s < self.lims[1]
             # bincl = self.blims[0] < self.brightness[self.current_key][i, self.channels[0]] < self.blims[1]
             # kincl = self.klims[0] < self.brightness[self.current_key][i, self.channels[1]]
-            self.incl[self.current_key][i] = sincl #and bincl #and kincl
+            self.incl[self.current_key][i] = sincl  # and bincl #and kincl
         self.calc_sets(self.current_key)
         self.draw()
 
@@ -759,7 +761,7 @@ class Gui:
                 exs.append(f)
         exs.sort()
         for nf, f in enumerate(exs):
-            polys = RoiEditor.load_roi(self.opPath+f)
+            polys = RoiEditor.load_roi(self.opPath + f)
             if len(polys) > 0:
                 key = f[:-4].split('_')[-1]
                 try:
@@ -838,14 +840,14 @@ class RoiEditor(object):
         return polys
 
     def get_pic(self):
-         return self.img.image.show_field()
+        return self.img.image.show_field()
 
     def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config={}, exclude_opto=True):
         approach = list(approach)
         prefix = self.prefix
         im = self.img.image
+        n_channels = len(im.channels)
         maxint = self.img.image.imdat.bitdepth - 1
-        im.load_data()
         force_re = False
         opto_name = self.opPath + prefix + '_bad_frames.npy'
         if exclude_opto and os.path.exists(opto_name):
@@ -886,52 +888,63 @@ class RoiEditor(object):
         else:
             chunk_n = min(chunk_n, int(imlen / chunk_size) - 2)
             print('Detecting', prefix, span, ', ', chunk_n, 'chunks')
-            d = numpy.empty((chunk_n, im.data.shape[1] - y1 - y0, im.data.shape[2] - x1 - x0, ),
-                            dtype=im.data.dtype)
+            imshape = (*im.imdat.data.shape, n_channels)
+            d = numpy.empty((chunk_n, imshape[1] - y1 - y0, imshape[2] - x1 - x0, n_channels),
+                            dtype=im.imdat.data.dtype)
             chlist = numpy.sort(numpy.random.choice(int(imlen / chunk_size) - 2, chunk_n, replace=False))
             for chunk, frame in enumerate(chlist):
                 # make ds and trim edges
                 # (16453, 512, 796, 1)
                 chunkslice = slice(span[0] + frame * chunk_size, span[0] + (frame + 1) * chunk_size)
-                #select frames. exclude opto frames if any.
+                # select frames. exclude opto frames if any.
                 if have_opto:
                     chunkslice = [i for i in range(chunkslice.start, chunkslice.stop) if i not in bad_frames]
-                d[chunk] = im.data[chunkslice, y0:-y1, x0:-x1, ].mean(axis=0)
+                # include all channels
+                for chi, chn in enumerate(im.channels):
+                    d[chunk, ..., chi] = im.imdat.get_channel(chn)[chunkslice, y0:-y1, x0:-x1].mean(axis=0)
+
             # put noise on saturated pixels to prevent CA1PC from crashing
             saturated = numpy.where(d == maxint)
             d[saturated] = maxint - numpy.random.random(saturated[0].size) * 16
             # save a picture of the averaged stuff in mIP
-            nicepic = numpy.zeros((im.data.shape[1], im.data.shape[2], 3), dtype='uint8')
-            lut = [1, 2]
-            nch = 1#im.data.shape[3]
-            for ch in range(nch):
-                id = numpy.amax(d, axis=0).astype('float')
+            nicepic = numpy.zeros((imshape[1], imshape[2], 3), dtype='uint8')
+            lut = [1, 2, 0]
+            for ch in range(n_channels):
+                id = numpy.amax(d[..., ch], axis=0).astype('float')
                 id -= id.min()
                 id /= numpy.percentile(id, 99)
                 nicepic[y0:-y1, x0:-x1, lut[ch]] = numpy.minimum(id, 1) * 255
             # add kurtosis image to blue channel
-            id = scipy.stats.kurtosis(d, axis=0)
-            id -= id.min()
-            id /= numpy.percentile(id, 99)
-            nicepic[y0:-y1, x0:-x1, 0] = numpy.minimum(id, 1) * 255
-            cv2.imwrite(self.opPath + prefix + '_avgmax.tif', nicepic)
+            if n_channels == 1:
+                id = scipy.stats.kurtosis(d[..., 0], axis=0)
+                id -= id.min()
+                id /= numpy.percentile(id, 99)
+                nicepic[y0:-y1, x0:-x1, 0] = numpy.minimum(id, 1) * 255
+                cv2.imwrite(self.opPath + prefix + '_avgmax.tif', nicepic)
 
             # create SIMA object
             if os.path.exists(dsname) and not force_re:
                 ds = sima.ImagingDataset.load(dsname)
             else:
                 # (num_frames, num_planes, num_rows, num_columns, num_channels)
-                ds = sima.ImagingDataset([sima.Sequence.create('ndarray', numpy.expand_dims(maxint - d, axis=(1,4)))], dsname)
+                ds = sima.ImagingDataset([sima.Sequence.create('ndarray', numpy.expand_dims(maxint - d, axis=1))],
+                                         dsname)
             if os.path.exists(idsname) and not force_re:
                 ids = sima.ImagingDataset.load(idsname)
             else:
-                ids = sima.ImagingDataset([sima.Sequence.create('ndarray', numpy.expand_dims(d, axis=(1,4)))],
+                ids = sima.ImagingDataset([sima.Sequence.create('ndarray', numpy.expand_dims(d, axis=1))],
                                           idsname)
         # run segmentation
         for item in approach:
-            ch = (0, 1)['1' in item]
-            if not ch < nch:
-                continue
+            # find index of channel
+            ch = 0
+            if item.endswith('-R'):
+                if 'Ch1' in im.channels:
+                    ch = im.channels.index('Ch1')
+                else:
+                    ch = 1
+            if item.endswith('-G') and 'Ch2' in im.channels:
+                ch = im.channels.index('Ch2')
             # default params if not specified
             pnames = ('Diameter', 'MinSize', 'MaxSize')
             pdefs = (10, 40, 200)
@@ -945,13 +958,13 @@ class RoiEditor(object):
             if 'PC' in item:
                 if not all_def:
                     itemtag = item + '-'.join([str(config[pname]) for pname in pnames])
-            print(item, 'Size setting: diam', config['Diameter'],  'min:', config['MinSize'], 'max:', config['MaxSize'])
+            print(item, 'Size setting: diam', config['Diameter'], 'min:', config['MinSize'], 'max:', config['MaxSize'])
 
             py_approach = sima.segment.PlaneCA1PC(channel=ch, verbose=False,
                                                   cut_min_size=int(config['MinSize']),
                                                   cut_max_size=int(config['MaxSize']),
                                                   x_diameter=int(config['Diameter']),
-                                                  y_diameter=int(config['Diameter']),)
+                                                  y_diameter=int(config['Diameter']), )
             if 'PC' in item and 'iPC' not in item:
                 try:
                     rois = ds.segment(py_approach, 'pc_ROIs')
@@ -1017,7 +1030,20 @@ class RoiEditor(object):
             rois.append(coords)
         self.ijrois = rois
 
-
     def create_previews(self):
         return self.img.polys.create_previews()
 
+
+if __name__ == '__main__':
+    # test single
+    wdir = 'D:/Shares/Data/_Processed/2P/testing/'
+    prefix = 'SncgTot4_2023-11-09_LFP_002'
+    r = RoiEditor(wdir, prefix, )
+    approach = ('STICA-G', )
+    # r.autodetect(approach=approach)
+
+    self = r
+    chunk_n = 100
+    chunk_size = 50
+    # ('D:/Shares/Data/_Processed/2P/testing//', 'SncgTot4_2023-11-09_LFP_002', ['PC-G', 'STICA-G'],
+    #  {'Start': '0', 'Stop': 'end', 'Diameter': '20', 'MinSize': '100', 'MaxSize': '800'})
