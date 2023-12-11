@@ -467,6 +467,17 @@ class Gui(ImagingSession):
     #     # x = numpy.arange(0, 6.28319, 6.28319 / 360)
     #     return numpy.abs(scipy.signal.hilbert(pol))
 
+    def ewma_smooth(self, period):
+        if not self.dualch:
+            data = numpy.empty((self.ca.cells, self.ca.frames))
+            for c in range(self.ca.cells):
+                data[c, :] = pandas.DataFrame(self.ca.ntr[c]).ewm(span=period).mean()[0]
+        else:
+            data = numpy.empty((self.ca.cells, self.ca.frames, 2))
+            for ch in range(2):
+                for c in range(self.ca.cells):
+                    data[c, :, ch] = pandas.DataFrame(self.ca.ntr[c, :, ch]).ewm(span=period).mean()[0]
+        return data
 
     def behavplot(self, ax):
         ax.plot(self.pos.pos, color='grey')

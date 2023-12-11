@@ -909,7 +909,7 @@ class RoiEditor(object):
             d[saturated] = maxint - numpy.random.random(saturated[0].size) * 16
             # save a picture of the averaged stuff in mIP
             nicepic = numpy.zeros((imshape[1], imshape[2], 3), dtype='uint8')
-            lut = [1, 2, 0]
+            lut = [2, 1, 0]
             for ch in range(n_channels):
                 id = numpy.amax(d[..., ch], axis=0).astype('float')
                 id -= id.min()
@@ -920,8 +920,8 @@ class RoiEditor(object):
                 id = scipy.stats.kurtosis(d[..., 0], axis=0)
                 id -= id.min()
                 id /= numpy.percentile(id, 99)
-                nicepic[y0:-y1, x0:-x1, 0] = numpy.minimum(id, 1) * 255
-                cv2.imwrite(self.opPath + prefix + '_avgmax.tif', nicepic)
+                nicepic[y0:-y1, x0:-x1, lut[2]] = numpy.minimum(id, 1) * 255
+            cv2.imwrite(self.opPath + prefix + '_avgmax.tif', nicepic)
 
             # create SIMA object
             if os.path.exists(dsname) and not force_re:

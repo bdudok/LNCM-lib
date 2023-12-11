@@ -14,7 +14,8 @@ from matplotlib import pyplot as plt
 
 
 class CaTrace(object):
-    def __init__(self, path, prefix, verbose=False, bsltype='poly', exclude=(0, 0), peakdet=False, ch=0, tag=None):
+    def __init__(self, path, prefix, verbose=False, bsltype='poly', exclude=(0, 0), peakdet=False, ch=0, invert=False,
+                 tag=None):
         if verbose:
             print(f'Firing called with ch={ch}, tag={tag}')
         self.peakdet = peakdet  # removed peakdet from old Firing class, this doesn't do anything.
@@ -41,6 +42,7 @@ class CaTrace(object):
         self.verbose = verbose
         self.bsltype = bsltype
         self.exclude = exclude
+        self.invert = invert
         if verbose:
             print(prefix, 'firing init')
         self.version_info = {}  # should contain only single strings as values
@@ -87,7 +89,10 @@ class CaTrace(object):
         self.ol_index.extend(outlier_indices(numpy.nanmean(self.trace, axis=0), thresh=12))
 
     def pack_data(self, c):
-        return c, self.trace[c], self.bsltype, self.movement, self.exclude, self.peakdet, self.ol_index
+        tr = self.trace[c]
+        if self.invert:
+            tr = numpy.nanmax(tr) - tr
+        return c, tr, self.bsltype, self.movement, self.exclude, self.peakdet, self.ol_index
 
     def unpack_data(self, data):
         channel = 0

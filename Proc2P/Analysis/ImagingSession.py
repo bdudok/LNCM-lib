@@ -110,6 +110,8 @@ class ImagingSession(object):
                 param = self.ca.rel
             elif param == 'ntr':
                 param = self.ca.ntr
+            elif param == 'trace':
+                param = self.ca.trace
             # elif param == 'ontr':
             #     param = self.ca.ontr
             elif param == 'smtr':

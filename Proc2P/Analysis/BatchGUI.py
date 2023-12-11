@@ -140,7 +140,7 @@ class Cfg:
 
         Label(self.frame, text='Plot config').grid(row=self.row(), pady=10)
         Label(self.frame, text='Parameter').grid(row=self.row())
-        MODES = [u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F', 'NND', 'EWMA',
+        MODES = ['Raw', u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F', 'EWMA',
                  u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F (z)', 'smtr', ]
         self.config['param'] = StringVar()
         self.config['param'].set(MODES[-1])
@@ -305,7 +305,9 @@ class View:
                        'Peak locations': 'peaks',
                        'AUPeaks': 'aupeaks',
                        'NND': 'nnd',
-                       'ontr': 'ontr'}
+                       'ontr': 'ontr',
+                       'Raw': 'trace'
+                       }
         param = resolvedict[self.parent.pltconfigs.config['param'].get()]
         if param == 'ewma':
             param = self.parent.pltconfigs.config['period'].get()
@@ -466,6 +468,12 @@ class Traces:
         Checkbutton(self.frame, text='Detect all ROIs', variable=self.detect_signals).grid(row=self.row(), sticky=N)
         self.detect_signals.set(0)
 
+        Label(self.frame, text='Invert (negative sensor)').grid(row=self.row())
+        self.invert_channels = [IntVar(value=0), IntVar(value=0)]
+        for bni, btn in enumerate(('Ch0(G)', 'Ch1(R)')):
+            Checkbutton(self.frame, text=btn, variable=self.invert_channels[bni]).grid(row=self.row(), sticky=N)
+
+
         Button(self.frame, text="Run", command=self.execute_callback).grid(row=self.row(), sticky=N)
 
         # Label(self.frame, text='Ripples').grid(row=self.row(), pady=10)
@@ -558,12 +566,15 @@ class Traces:
                     if prefix in f and match_text in f and f.endswith('.npy'):
                         tags.append(f[f.find(match_text) + len(match_text):-4])
             peakdet = False#self.peakdet.get()
+            invert = [x.get() for x in self.invert_channels]
             excl = (int(self.config[self.tracefields[0]].get()), int(self.config[self.tracefields[1]].get()))
             sz_mode = False#self.parent.mc.ignore_sat.get()
             for tag in tags:
                 print(f'{prefix}: tag {tag} queued for processing traces.')
                 self.parent.request_queue.put(('firing',
-                                               (self.parent.filelist.wdir, prefix, bsltype, excl, sz_mode, peakdet,
+                                               (self.parent.filelist.wdir, prefix,
+                                                bsltype, excl, sz_mode, peakdet,
+                                                invert,
                                                 tag)))
 
     def ripples_callback(self):
@@ -1600,11 +1611,12 @@ if __name__ == '__main__':
                 pull_nworker += 1
             pull_queue.put(job)
         elif jobtype == 'firing':
-            path, prefix, bsltype, exclude, sz_mode, peakdet, tag = job
+            path, prefix, bsltype, exclude, sz_mode, peakdet, invert, tag = job
             os.chdir(path)
             run = False
             for ch in (0, 1):
-                a = CaTrace(path, prefix, bsltype=bsltype, exclude=exclude, peakdet=peakdet, ch=ch, tag=tag)
+                a = CaTrace(path, prefix, bsltype=bsltype, exclude=exclude, peakdet=peakdet, ch=ch, tag=tag,
+                            invert=invert[ch])
                 if a.open_raw() == -1:
                     continue
                 if os.path.exists(a.pf):
