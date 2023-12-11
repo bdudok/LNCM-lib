@@ -859,7 +859,8 @@ class RoiEditor(object):
             print('no opto')
             have_opto = False
         # find trim:
-        x0, x1, y0, y1 = 10, 15, 10, 10
+        # x0, x1, y0, y1 = 10, 15, 10, 10
+        x0, x1, y0, y1 = 1, 1, 1, 1#not needed for bruker
         # create 50 frames which are each an average of 100, in random order
         dsname = self.opPath + prefix + '_avgs' + '.sima'
         idsname = self.opPath + prefix + '_iavgs' + '.sima'

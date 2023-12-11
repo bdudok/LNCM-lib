@@ -1447,6 +1447,7 @@ class play_ephys:
         display_fps = 25
         self.fs = 2000
         self.trace = ephys.trace
+        assert self.trace is not None, "No ephys trace"
         self.n = len(self.trace)
         self.frame = 0
         self.sample = 0

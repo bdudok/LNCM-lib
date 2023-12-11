@@ -249,22 +249,6 @@ class PreProc:
             self.rewards = 'not implemented'
             self.md_keys.extend(['laps', 'rewards'])
             self.found_output.append('Treadmill')
-        align = rsync.Rsync_aligner(tm_rsync, sc_rsync)
-        self.frame_at_treadmill = align.B_to_A(self.frametimes * 1000)
-        numpy.save(self.procpath + self.prefix + '_frame_tm_times.npy', self.frame_at_treadmill)
-        # resample speed, pos to scope frames
-        indices = self.get_frame_tm_x(self.frame_at_treadmill, tm.pos_tX * 1000)
-        for Y, tag in zip((tm.smspd, tm.pos), ('smspd', 'pos')):
-            op = numpy.empty(len(self.frame_at_treadmill))
-            op[:] = numpy.nan
-            mask = indices > -1
-            op[mask] = Y[indices[mask]]
-            numpy.save(self.procpath + self.prefix + f'_{tag}.npy', op)
-        # add lap and reward number to output
-        self.laps = len(tm.laptimes)
-        self.rewards = 'not implemented'
-        self.md_keys.extend(['laps', 'rewards'])
-        self.found_output.append('Treadmill')
 
     def get_frame_tm_x(self, frametime, tX):
         '''for each frametime, find index in treadmill analog signal'''
