@@ -60,10 +60,26 @@ class PreProc:
         xfn = os.path.join(self.dpath, self.prefix + f'-{self.btag}.xml')
         tree = ET.parse(xfn)
         root = tree.getroot()
+
+        #get scan settings
+        sdict = {}
+        simple_keys = ('activeMode', 'bitDepth', 'opticalZoom', 'objectiveLensMag', 'objectiveLensNA', 'samplesPerPixel')
+        indexed_keys = {'laserWavelength': ('0',), 'twophotonLaserPower': ('0',),
+                    'micronsPerPixel': ('XAxis', 'YAxis'), 'pmtGain': ('0', '1')}
+        for child in list(root.find('PVStateShard')):
+            key = child.attrib['key']
+            if key in simple_keys:
+                self.md_keys.append(key)
+                self.__setattr__(key, child.attrib['value'])
+            elif key in indexed_keys:
+                for ielement in child:
+                    if ielement.attrib['index'] in indexed_keys[key]:
+                        opk = key+'_'+ielement.attrib['index']
+                        self.md_keys.append(opk)
+                        self.__setattr__(opk, ielement.attrib['value'])
         sequence = root.find('Sequence')
 
         # get 2P info
-        sdict = {}
         self.channelnames = []
         for child in list(sequence.find('Frame').findall('File')):
             chn = child.attrib['channelName']
@@ -164,13 +180,14 @@ class PreProc:
         if self.led_channel is not None:
             trace = vdat[f' Input {self.led_channel}'].values
             vmax = 5.0  # 5V command is 100%LED
-            pos = numpy.where(numpy.convolve(trace > vmax * 0.05, [1, -1]) == 1)[0]
-            stimframes = numpy.searchsorted(self.frametimes * self.fs, pos) - 1  # convert to 0 indexing
-            led_op = pandas.DataFrame({'Intensity': trace[pos] / vmax, 'ImgFrame': stimframes}, index=[pos])
-            led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
-            numpy.save(self.dpath + 'bad_frames.npy', stimframes)
-            numpy.save(self.procpath + self.prefix + '_bad_frames.npy', stimframes)
-            self.found_output.append('StimPulses')
+            pos = numpy.where(numpy.convolve(trace > vmax * 0.05, [1, -1]) == 1)[0] #rising edges
+            if len(pos):
+                stimframes = numpy.searchsorted(self.frametimes * self.fs, pos) - 1  # convert to 0 indexing
+                led_op = pandas.DataFrame({'Intensity': trace[pos] / vmax, 'ImgFrame': stimframes}, index=[pos])
+                led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
+                numpy.save(self.dpath + 'bad_frames.npy', stimframes)
+                numpy.save(self.procpath + self.prefix + '_bad_frames.npy', stimframes)
+                self.found_output.append('StimPulses')
 
         # rsync times
         if self.rsync_channel is not None:
@@ -303,10 +320,13 @@ class SessionInfo:
 
 
 if __name__ == '__main__':
-    dpath = 'D:\Shares\Data\_RawData\Bruker\PVTot/'
-    procpath = 'D:\Shares\Data\_Processed/2P\PVTot\LFP/'
-    prefix = 'PVTot5_2023-09-15_LFP_026'
+    dpath = 'D:\Shares\Data\_RawData\Bruker\JEDI/'
+    procpath = 'D:\Shares\Data\_Processed/testing/'
+    prefix = 'PV10_2023-12-11_Fast_021'
     btag = '000'
 
-    s = PreProc(dpath, procpath, prefix, btag, lfp_channels=(2,))
-    e = s.ephys
+    if not os.path.exists(procpath):
+        os.mkdir(procpath)
+
+    s = PreProc(dpath, procpath, prefix, btag, )
+
