@@ -18,7 +18,12 @@ class Sync:
         '''
         assert hasattr(CF, tag)
         if tag not in self.cache:
-            self.cache[tag] = numpy.load(self.fn(getattr(CF, tag)))
+            fn = self.fn(getattr(CF, tag))
+            if os.path.exists(fn):
+                self.cache[tag] = numpy.load(fn)
+            else:
+                print('Sync: File not found for', tag)
+                self.cache[tag] = None
         return self.cache[tag]
 
 

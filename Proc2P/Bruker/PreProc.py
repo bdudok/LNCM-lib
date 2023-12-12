@@ -215,6 +215,8 @@ class PreProc:
 
     def parse_treadmill(self, save_fig=True):
         tm = TreadmillRead.Treadmill(self.dpath, self.prefix)
+        if tm.filename is None:
+            return None
         self.treadmill_fn = tm.filename
         self.md_keys.append('treadmill_fn')
         #save figure

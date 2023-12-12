@@ -13,6 +13,10 @@ def gapless(trace, gap=5, threshold=0):
     '''makes binary trace closing small gaps
     :param gap: in samples
     '''
+    if trace is None:
+        return None
+    elif not numpy.count_nonzero(trace):
+        return numpy.zeros(len(trace))
     gapless = trace > threshold
     ready = False
     while not ready:

@@ -76,10 +76,11 @@ class CaTrace(object):
         self.smtr = numpy.empty(self.trace.shape)
         self.rel = numpy.empty(self.trace.shape)
         self.computed_cells = 0
-        self.movement = gapless(self.sync.load('speed'))
-        # else:
-        #     print('movement not found')
-        #     self.movement = numpy.zeros(self.frames, dtype=numpy.bool)
+        try:
+            self.movement = gapless(self.sync.load('speed'))
+        except:
+            print('movement not found')
+            self.movement = numpy.zeros(self.frames, dtype=numpy.bool)
         # save outlier data points to exclude from analysis:
         # mask with bad frames
         self.ol_index = []
@@ -203,6 +204,8 @@ class Worker(Process):
             if self.verbose:
                 print('Starting cell ' + str(c))
             t1, t2, frames = 50, 500, len(data)
+            if movement is None:
+                movement = numpy.zeros(frames, dtype='bool')
             smw = numpy.empty(frames)
             bsl = numpy.empty(frames)
             rel = numpy.empty(frames)

@@ -19,7 +19,6 @@ from scipy import stats
 class Pos:
     '''to hold attributes of movement, previously used by treadmill (Quad) class'''
     def __init__(self, sync):
-        # self.sync = sync
         self.speed = sync.load('speed')
         self.pos = sync.load('pos')
         self.movement = gapless(self.speed, threshold=0.05)
@@ -70,7 +69,7 @@ class ImagingSession(object):
         self.has_behavior = False
         # here, implement reading the behavior events from treamill.
         # self.bdat = BehaviorSession(prefix + '.tdml', silent=True)
-        self.pos = Pos(self.ca.sync)
+        self.map_pos()
 
         self.pltnum = 0
         self.zscores = {}
@@ -92,6 +91,13 @@ class ImagingSession(object):
             self.opto[opto_frames] = 1
         else:
             self.opto = None
+
+    def map_pos(self):
+        self.pos = Pos(self.ca.sync)
+        if self.pos.speed is None: #in case this data is missing
+            self.pos.speed = numpy.zeros(self.ca.frames)
+            self.pos.pos = numpy.zeros(self.ca.frames)
+            self.pos.movement = numpy.zeros(self.ca.frames)
 
     def startstop(self, *args, **kwargs):
         return startstop(self.pos.speed, **kwargs)

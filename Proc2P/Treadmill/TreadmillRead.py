@@ -28,6 +28,10 @@ class Treadmill:
                         longest = len(fn)
         self.prefix = prefix
         self.filename = prefix + '.txt'
+        if not os.path.exists(self.path+self.filename):
+            print('Treadmill files not found')
+            self.filename = None
+            return None
         self.flist = os.listdir(path)
         self.d = d = data_import.Session(self.path + self.filename)
 

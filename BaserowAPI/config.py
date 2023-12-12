@@ -7,6 +7,7 @@ config = {
       'Mouse.ID': 4616,
       'InclTag': 4519,
       'Project': 4637
-  }
+  },
+  "lg_token": "a4d5d5e0104196c0378d238e06d1c2055038a369"
 }
 #api_token is read-only token with Barna account
