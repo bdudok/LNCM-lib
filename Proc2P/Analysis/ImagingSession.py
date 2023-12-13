@@ -239,6 +239,8 @@ class ImagingSession(object):
 
         qc_pass = numpy.any(numpy.nan_to_num(self.getparam('ntr')) > 3, axis=1)
         if trim:
+            if not self.rois.image_loaded:
+                self.rois.load_image()
             tops = [self.rois.polys[ci].min(axis=0)[1] for ci in range(self.ca.cells)]
             bottoms = [self.rois.polys[ci].max(axis=0)[1] for ci in range(self.ca.cells)]
             cutoff = self.rois.image.info['sz'][0] - trim

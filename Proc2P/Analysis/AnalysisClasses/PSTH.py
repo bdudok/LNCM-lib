@@ -1,5 +1,5 @@
 import os.path
-from Bruker.ImagingSession import ImagingSession
+from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.utils import lprint
 from datetime import datetime
 import pandas

@@ -1,13 +1,13 @@
-from _LNCM_Analysis import *
-from Bruker.AnalysisClasses import PhotoStim, EventMasks, PSTH
-from Bruker.ImagingSession import ImagingSession
+from Proc2P.Analysis.AnalysisClasses import PhotoStim, EventMasks, PSTH
+from Proc2P.Analysis.ImagingSession import ImagingSession
+import numpy
 
 '''
 To be used for higher level analysis.
 This can use classes from both Core and AnalysisClasses
 '''
 
-def get_opto_responses(session:ImagingSession, isi=10, pre_s = (-1, 0),  post_s = (0, 5), param_key='rel'):
+def get_opto_responses(session:ImagingSession, isi=10, pre_s = (-1, 0),  post_s = (0, 5), param_key='rel', w=156, fps=20):
     '''
     Return the response of each cell to photostimulation trains
     :param session: instance of ImagingSession
@@ -29,3 +29,30 @@ def get_opto_responses(session:ImagingSession, isi=10, pre_s = (-1, 0),  post_s 
     pre = numpy.nanmean(resps[:, pre_slice], axis=1)
     post = numpy.nanmean(resps[:, post_slice], axis=1)
     return train_starts, train_ints, post - pre
+
+def stoprun_scores(session:ImagingSession, param='ntr', ret_loc='actual', mode='mean', loc_input=None):
+    '''
+    :return: scores shaped (cells, 2), 0 is stop, 1 is run
+    '''
+    param = session.getparam(param)
+    # collect stop events. Criteria: last speed peak of 50 long run event followed by 150 gap.
+    if loc_input is None:
+        starts, stops = session.startstop(ret_loc=ret_loc)
+    else:
+        starts, stops = loc_input
+    stoprun_scores = numpy.zeros((session.ca.cells, 2))
+    for ti in range(len(stops)):
+        start, stop = starts[ti], stops[ti]
+        # calculate stop and run response score:
+        if mode == 'mean':
+            stoprun_scores[:, 0] += numpy.nanmean(param[:, stop:min(session.ca.frames, stop + 100)], axis=1) - \
+                                    numpy.nanmean(param[:, start:stop], axis=1)
+            stoprun_scores[:, 1] += numpy.nanmean(param[:, start:stop], axis=1) - \
+                                    numpy.nanmean(param[:, max(0, start - 100):start], axis=1)
+        if mode == 'max':
+            stoprun_scores[:, 0] += numpy.nanmax(param[:, stop:min(session.ca.frames, stop + 100)], axis=1) - \
+                                    numpy.nanmax(param[:, start:stop], axis=1)
+            stoprun_scores[:, 1] += numpy.nanmax(param[:, start:stop], axis=1) - \
+                                    numpy.nanmax(param[:, max(0, start - 100):start], axis=1)
+    stoprun_scores /= len(stops)
+    return stoprun_scores

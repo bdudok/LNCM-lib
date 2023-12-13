@@ -1,4 +1,4 @@
-from Bruker import ImagingSession, read_excel
+from Proc2P.Analysis import ImagingSession, read_excel
 import numpy
 from sklearn.cluster import dbscan
 
