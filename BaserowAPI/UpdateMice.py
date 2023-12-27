@@ -3,13 +3,16 @@ import requests
 import pandas
 from BaserowAPI.config import config
 
-auth_string = f"Token {config['api_token']}"
+#labguru API token. Expires in 30 days. Request a new one if necessary and paste here.
+lg_api_token = "a4d5d5e0104196c0378d238e06d1c2055038a369"
+# lg_api_token = config["lg_token"]
 
 #get list of mice from LG
-resp = requests.get(f'{config["lg_mice_url"]}?token={config["lg_token"]}')
+resp = requests.get(f'{config["lg_mice_url"]}?token={lg_api_token}')
 mice_lg = pandas.DataFrame(resp.json())
 
 #get list of mice from BR (can be multipage)
+auth_string = f"Token {config['api_token']}"
 mice_br = pandas.DataFrame()
 for page in range(int(len(mice_lg)/100+10)):
     resp = requests.get(config['mice_url'],
