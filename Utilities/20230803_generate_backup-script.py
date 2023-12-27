@@ -53,7 +53,7 @@ script_s += 'Powershell -NoProfile -ExecutionPolicy Bypass -File ' + ps_script_h
 #raw data folders to OneDrive
 dest_path = 'OneDrive:_RawData/'
 source_path = 'D:\Shares\Data\_RawData/'
-dlist = ['Confocal', 'Widefield', 'Bruker']
+dlist = ['Confocal', 'Widefield', 'Bruker', 'Pinnacle']
 
 for d in dlist:
     script_s += get_cmd(d)
@@ -72,9 +72,17 @@ ext_drive_name = 'LNCM1'
 if ext_drive_name in drive_names:
     dest_path = f'E:\ExtDrives/{ext_drive_name}/_Processed/'
     source_path = 'D:\Shares\Data\_Processed/'
-    dlist = ['2P/PVTot', '2P/SncgTot', '2P/SncgDREADD']
+    dlist = ['2P/PVTot', '2P/SncgTot', '2P/SncgDREADD',
+             '2P/JEDI', '2P/VADER']
     for d in dlist:
         script_s += get_cmd(d)
+
+#After OneDrive is expanded, also back up Processed there:
+dest_path = 'OneDrive:_ProcessedData/'
+# source_path = 'D:\Shares\Data\_Processed/'
+# dlist = ['2P',]
+for d in dlist:
+    script_s += get_cmd(d)
 
 #raw 2P data to LNCM2
 ext_drive_name = 'LNCM2'
@@ -85,6 +93,8 @@ if ext_drive_name in drive_names:
     for d in dlist:
         script_s += get_cmd(d)
 
+#raw EEG data to LNCM3
+#... when have more recs
 
 #DSI revision analysis to OneDrive
 dest_path = 'OneDrive:Documents/_projects/2023-DSI/Revision_analysis/'

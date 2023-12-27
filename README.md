@@ -19,6 +19,7 @@ classes for reading BCM Dudok lab raw data
 ### Proc2p.Analysis
 processing pipeline and GUI; ImagingSession and related classes
 
+
 # The following GUI tools are included: 
 
 ## Ephys
