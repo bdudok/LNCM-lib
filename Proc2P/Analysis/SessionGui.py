@@ -66,6 +66,10 @@ class Gui(ImagingSession):
         #     self.licktrigger(param=graph_param)
         if hasattr(self, 'ripples'):
             self.rippletrigger()
+        if hasattr(self, 'opto_ints'):
+            vals = self.opto_ints[self.opto]
+            if numpy.var(vals) > 0.1:
+                self.opto = self.opto_ints #for plotting
         self.time_graph(param=param)
         self.overview()
         self.cell_update()
@@ -272,7 +276,10 @@ class Gui(ImagingSession):
         spdval /= spdval.max()
         axspeed.plot(spdval, color=self.colors['speed'], label='speed', alpha=0.8)
         if self.opto is not None:
-            axspeed.plot(self.opto, color=self.colors['opto'], label='light', alpha=0.8)
+            o = self.opto
+            if hasattr(self, 'opto_ints'):
+                o = self.opto_ints
+            axspeed.plot(o, color=self.colors['opto'], label='light', alpha=0.8)
         if hasattr(self, 'ripples'):
             for t in self.ripple_frames:
                 axspeed.axvline(t - 0.5, color=ripcol)

@@ -37,6 +37,7 @@ class ImagingSession(object):
         #load info from json file
         self.si = SessionInfo(self.path, prefix)
         self.si.load()
+        self.fps = self.si['framerate']
         self.CF = CF()
         self.CF.fps = self.si['framerate']
 
@@ -89,6 +90,10 @@ class ImagingSession(object):
             opto_frames = self.ca.sync.load('opto')
             self.opto = numpy.zeros(self.ca.frames, dtype='bool')
             self.opto[opto_frames] = 1
+            if len(opto_frames) > 3:
+                self.opto_ints = numpy.zeros(self.ca.frames)
+                intdat = read_excel(self.get_file_with_suffix('_StimFrames.xlsx'))
+                self.opto_ints[intdat['ImgFrame'].values] = intdat['Intensity'].values
         else:
             self.opto = None
 

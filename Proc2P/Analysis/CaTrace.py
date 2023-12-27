@@ -125,12 +125,14 @@ class CaTrace(object):
 
     def load(self):
         if not os.path.exists(self.pf):
+            self.pf = self.opPath + f'{self.prefix}_trace_{self.tag}'
+        if not os.path.exists(self.pf):
             if self.tag == None:
                 self.tag = ''
             pf_try = [self.tag + '.np', self.tag + '-ch0.np', '1' + '.np', '1' + '-ch0.np', self.tag + 'dual.np',
                       '1-dual.np']
             for x in pf_try:
-                pf = self.prefix + '-' + x
+                pf = self.opPath+self.prefix + '-' + x
                 if os.path.exists(pf):
                     self.pf = pf
                     print('Loading traces from', pf)

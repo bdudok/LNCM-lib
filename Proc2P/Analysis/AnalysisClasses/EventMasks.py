@@ -128,6 +128,10 @@ def StopResponse(a, w):
     starts, stops = a.startstop()
     return masks_from_list(a, w, stops)
 
+def StartResponse(a, w):
+    starts, stops = a.startstop()
+    return masks_from_list(a, w, starts)
+
 
 def mask_from_list_nosession(w, event_list, trace_len, decay=6, eps=16, min_n=None,
                              clustloc='first', trace=None):

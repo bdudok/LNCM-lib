@@ -87,4 +87,7 @@ def startstop(speed, duration=50, gap=150, ret_loc='actual', span=None, speed_th
 
 
 def read_excel(*args, **kwargs):
-   return pandas.read_excel(*args, **kwargs, engine='openpyxl')
+    fn = args[0]
+    if fn.endswith('csv'):
+        return pandas.read_csv(*args, **kwargs)
+    return pandas.read_excel(*args, **kwargs, engine='openpyxl')
