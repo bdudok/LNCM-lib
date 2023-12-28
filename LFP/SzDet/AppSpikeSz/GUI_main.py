@@ -364,12 +364,11 @@ class GUI_main(QtWidgets.QMainWindow):
         self.refresh_data()
 
     def save_output_callback(self):
-
         #save settings
         if self.setup == 'Soltesz':
             output_fn = self.savepath + self.active_prefix + self.suffix
         elif self.setup == 'Pinnacle':
-            output_fn = self.savepath + self.active_prefix + self.get_field('Channel') + self.suffix
+            output_fn = self.savepath + self.active_prefix + f'_Ch{self.get_field("Channel")}' + self.suffix
         elif self.setup == 'LNCM':
             output_fn = os.path.join(self.savepath, self.active_prefix, self.active_prefix + self.suffix)
         op_dict = {}
