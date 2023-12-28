@@ -103,6 +103,9 @@ class GUI_main(QtWidgets.QMainWindow):
         elif self.setup == 'LNCM':
             self.param['SzDet.Framesize'] = 50
             self.param['fs'] = 2000
+        if self.setup == 'Pinnacle':
+            self.param['Channel'] = 1
+            self.param_keys_sorted = (*self.param_keys_sorted, 'Channel')
 
     def make_filelist_groupbox(self):
         groupbox = QGroupBox('File list')
@@ -185,6 +188,12 @@ class GUI_main(QtWidgets.QMainWindow):
 
         for label in self.param_keys_sorted:
             vbox.addLayout(self.make_field(label))
+
+        if self.setup == 'Pinnacle':
+            # vbox.addLayout(self.make_field('Channel'))
+            self.channel_name_label = QLabel('Channel Name')
+            vbox.addWidget(self.channel_name_label)
+
 
         return groupbox
 
@@ -357,8 +366,10 @@ class GUI_main(QtWidgets.QMainWindow):
     def save_output_callback(self):
 
         #save settings
-        if self.setup in ('Soltesz', 'Pinnacle'):
+        if self.setup == 'Soltesz':
             output_fn = self.savepath + self.active_prefix + self.suffix
+        elif self.setup == 'Pinnacle':
+            output_fn = self.savepath + self.active_prefix + self.get_field('Channel') + self.suffix
         elif self.setup == 'LNCM':
             output_fn = os.path.join(self.savepath, self.active_prefix, self.active_prefix + self.suffix)
         op_dict = {}
@@ -374,7 +385,8 @@ class GUI_main(QtWidgets.QMainWindow):
         self.FigCanvas1.fig.savefig(output_fn + '.png', dpi=300)
 
         self.mark_complete(self.current_selected_i)
-        self.load_next_callback()
+        if not self.setup == 'Pinnacle':
+            self.load_next_callback()
 
     def mark_complete(self, i, color='#50a3a4'):
         self.prefix_list.item(i).setBackground(QtGui.QColor(color))
@@ -396,6 +408,11 @@ class GUI_main(QtWidgets.QMainWindow):
         elif self.setup == 'Pinnacle':
             r = ReadEDF.EDF(self.savepath, self.active_prefix)
             self.param['fs'] = r.fs
+            self.param['Channels'] = r.channels
+            chi = int(self.get_field('Channel'))
+            r.set_channel(chi-1)
+            chstr = f'{r.active_channel}; {chi}/{len(r.channels)}'
+            self.channel_name_label.setText(chstr + ' (Use Open to change channels)')
 
         #get example trace
         fs = int(self.get_field('fs'))
