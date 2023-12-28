@@ -39,6 +39,8 @@ class PreProc:
         if not self.is_processed:
             self.skip_analysis = False
             self.preprocess()
+        else:
+            self.load_metadata()
 
     def preprocess(self, tm_fig=True):
         '''
@@ -289,6 +291,10 @@ class PreProc:
         for key in self.md_keys:
             self.si[key] = self.__getattribute__(key)
         self.si.save()
+
+    def load_metadata(self):
+        for key, value in self.si.info.items():
+            self.__setattr__(key, value)
 
 
 class SessionInfo:
