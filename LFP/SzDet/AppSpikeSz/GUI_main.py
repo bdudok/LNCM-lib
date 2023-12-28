@@ -20,8 +20,11 @@ QAbstractItemView, QLineEdit, QCheckBox)
 #Workflow Specific functions
 from LFP.SpikeDet import SpikesPower
 from LFP.SzDet import InstRate
+
+#Readers
 from Proc2P.Legacy.Loaders import load_ephys
 from Proc2P.Bruker import LoadEphys
+from LFP.Pinnacle import ReadEDF
 
 
 class GUI_main(QtWidgets.QMainWindow):
@@ -92,12 +95,14 @@ class GUI_main(QtWidgets.QMainWindow):
         self.param['TrDiff'] = 3
         self.param['Sz.MinDur'] = 5
         self.param['Sz.Gap'] = 3
+        self.param['SzDet.Framesize'] = 50
+        self.param['fs'] = 2000
         if self.setup == 'Soltesz':
             self.param['fs'] = 10000
             self.param['SzDet.Framesize'] = 64
         elif self.setup == 'LNCM':
-            self.param['fs'] = 2000
             self.param['SzDet.Framesize'] = 50
+            self.param['fs'] = 2000
 
     def make_filelist_groupbox(self):
         groupbox = QGroupBox('File list')
@@ -253,13 +258,18 @@ class GUI_main(QtWidgets.QMainWindow):
                             prefix_list.append(fn)
             if self.input_prefix is not None:
                 prefix_list = [prefix for prefix in self.input_prefix if prefix in self.dirpaths]
+        elif self.setup == 'Pinnacle':
+            suffix = '.edf'
+            prefix_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
+            if self.input_prefix is not None:
+                prefix_list = [x for x in prefix_list if x in self.input_prefix]
         #set list widget
         self.prefix_list.clear()
         self.prefix_list.addItems(prefix_list)
 
         #check if output exist
         flist = os.listdir(self.savepath)
-        if self.setup == 'Soltesz':
+        if self.setup in ['Soltesz', 'Pinnacle']:
             for pi, prefix in enumerate(prefix_list):
                 if prefix+self.suffix+'.json' in flist:
                     self.mark_complete(pi, color='#fcaf38')
@@ -347,7 +357,7 @@ class GUI_main(QtWidgets.QMainWindow):
     def save_output_callback(self):
 
         #save settings
-        if self.setup == 'Soltesz':
+        if self.setup in ('Soltesz', 'Pinnacle'):
             output_fn = self.savepath + self.active_prefix + self.suffix
         elif self.setup == 'LNCM':
             output_fn = os.path.join(self.savepath, self.active_prefix, self.active_prefix + self.suffix)
@@ -383,6 +393,9 @@ class GUI_main(QtWidgets.QMainWindow):
             r = load_ephys(self.active_prefix)
         elif self.setup == 'LNCM':
             r = LoadEphys.Ephys(self.savepath, self.active_prefix)
+        elif self.setup == 'Pinnacle':
+            r = ReadEDF.EDF(self.savepath, self.active_prefix)
+            self.param['fs'] = r.fs
 
         #get example trace
         fs = int(self.get_field('fs'))

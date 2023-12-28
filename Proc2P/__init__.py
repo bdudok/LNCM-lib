@@ -14,6 +14,4 @@ from scipy import stats
 from .Legacy.MyColorLib import get_color
 
 from BaserowAPI.BaserowRequests import GetSessions
-def read_excel(*args, **kwargs):
-    return pd.read_excel(*args, **kwargs, engine='openpyxl')
-
+from Proc2P.utils import read_excel, lprint
