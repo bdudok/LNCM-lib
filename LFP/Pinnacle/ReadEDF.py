@@ -16,7 +16,6 @@ class EDF:
         self.set_channel(0)
 
     def set_channel(self, ch):
-        print('Set channel called with', ch)
         if type(ch) is int:
             chi = ch
         else:
@@ -27,7 +26,6 @@ class EDF:
                 assert False
         self.active_channel = self.channels[chi]
         self.trace = self.data[chi]
-        print('Chi =', chi)
 
 if __name__ == '__main__':
     path = 'D:\Shares\Data\_RawData\Pinnacle\Tottering\Tot6_Tottering++/'
