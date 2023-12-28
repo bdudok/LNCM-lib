@@ -19,7 +19,8 @@ from scipy import stats
 class Pos:
     '''to hold attributes of movement, previously used by treadmill (Quad) class'''
     def __init__(self, sync):
-        self.speed = sync.load('speed')
+        self.speed = sync.load('spd')
+        self.smspd = sync.load('smspd')
         self.pos = sync.load('pos')
         self.movement = gapless(self.speed, threshold=0.05)
         # self.laps = #implement this

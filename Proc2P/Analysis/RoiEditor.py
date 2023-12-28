@@ -1,6 +1,7 @@
 import tifffile
 
 from Proc2P.Analysis.LoadPolys import FrameDisplay
+from Proc2P.utils import lprint
 import matplotlib.path as mplpath
 import os
 import shutil
@@ -34,13 +35,14 @@ class MouseTest:
 
 
 class Worker(Process):
+    __name__ = 'RoiWorker'
     def __init__(self, queue):
         super(Worker, self).__init__()
         self.queue = queue
 
     def run(self):
         for din in iter(self.queue.get, None):
-            print(din)
+            lprint(self, din)
             path, prefix, apps, config = din
             RoiEditor(path, prefix, ).autodetect(approach=apps, config=config)
 
@@ -783,6 +785,7 @@ class Gui:
 
 
 class RoiEditor(object):
+    __name__ = 'RoiEditor'
     def __init__(self, procpath, prefix):
         self.img = FrameDisplay(procpath, prefix, tag='skip')
         self.procpath = procpath
@@ -853,10 +856,10 @@ class RoiEditor(object):
         if exclude_opto and os.path.exists(opto_name):
             have_opto = True
             bad_frames = numpy.load(opto_name)
-            print(f'opto excluding {len(bad_frames)} frames')
+            lprint(self, f'opto excluding {len(bad_frames)} frames')
 
         else:
-            print('no opto')
+            lprint(self, 'no opto')
             have_opto = False
         # find trim:
         # x0, x1, y0, y1 = 10, 15, 10, 10
@@ -888,7 +891,7 @@ class RoiEditor(object):
             ids = sima.ImagingDataset.load(idsname)
         else:
             chunk_n = min(chunk_n, int(imlen / chunk_size) - 2)
-            print('Detecting', prefix, span, ', ', chunk_n, 'chunks')
+            lprint(self, 'Detecting', prefix, span, ', ', chunk_n, 'chunks')
             imshape = (*im.imdat.data.shape, n_channels)
             d = numpy.empty((chunk_n, imshape[1] - y1 - y0, imshape[2] - x1 - x0, n_channels),
                             dtype=im.imdat.data.dtype)
@@ -959,7 +962,7 @@ class RoiEditor(object):
             if 'PC' in item:
                 if not all_def:
                     itemtag = item + '-'.join([str(config[pname]) for pname in pnames])
-            print(item, 'Size setting: diam', config['Diameter'], 'min:', config['MinSize'], 'max:', config['MaxSize'])
+            lprint(self, item, 'Size setting: diam', config['Diameter'], 'min:', config['MinSize'], 'max:', config['MaxSize'])
 
             py_approach = sima.segment.PlaneCA1PC(channel=ch, verbose=False,
                                                   cut_min_size=int(config['MinSize']),
@@ -971,13 +974,13 @@ class RoiEditor(object):
                     rois = ds.segment(py_approach, 'pc_ROIs')
                     self.saveauto(rois, itemtag, x0, y0)
                 except AssertionError:
-                    print('CA1PC crashed for', prefix)
+                    lprint(self, 'CA1PC crashed for', prefix)
             if 'iPC' in item:
                 try:
                     rois = ids.segment(py_approach, 'ipc_ROIs')
                     self.saveauto(rois, itemtag, x0, y0)
                 except AssertionError:
-                    print('CA1PC-i crashed for', prefix)
+                    lprint(self, 'CA1PC-i crashed for', prefix)
             if 'IN' in item or 'STICA' in item:
                 # default params if not specified
                 if not 'comps' in config:

@@ -257,7 +257,7 @@ class PreProc:
             numpy.save(self.procpath + self.prefix + '_frame_tm_times.npy', self.frame_at_treadmill)
             # resample speed, pos to scope frames
             indices = self.get_frame_tm_x(self.frame_at_treadmill, tm.pos_tX * 1000)
-            for Y, tag in zip((tm.smspd, tm.pos), ('smspd', 'pos')):
+            for Y, tag in zip((tm.smspd, tm.pos, tm.speed), ('smspd', 'pos', 'spd')):
                 op = numpy.empty(len(self.frame_at_treadmill))
                 op[:] = numpy.nan
                 mask = indices > -1

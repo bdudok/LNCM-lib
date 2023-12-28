@@ -2,9 +2,11 @@ import datetime
 import numpy
 import pandas
 
-def lprint(obj, message):
+def lprint(obj, message, *args):
     '''Add timestamp and object name to print calls'''
     ts = datetime.datetime.now().isoformat(timespec='seconds')
+    for x in args:
+        message += ' ' + str(x)
     print(f'{ts} - {obj.__name__}: {message}')
 
 from Proc2P.Legacy.Batch_Utils import strip_ax

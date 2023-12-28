@@ -6,7 +6,7 @@ from scipy import signal
 import pandas
 import shutil
 from Proc2P.Bruker.SyncTools import Sync
-from Proc2P.utils import gapless, outlier_indices
+from Proc2P.utils import lprint, gapless, outlier_indices
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from Proc2P.Bruker.ConfigVars import CF
@@ -14,6 +14,7 @@ from matplotlib import pyplot as plt
 
 
 class CaTrace(object):
+    __name__ = 'CaTrace'
     def __init__(self, path, prefix, verbose=False, bsltype='poly', exclude=(0, 0), peakdet=False, ch=0, invert=False,
                  tag=None):
         if verbose:
@@ -32,7 +33,7 @@ class CaTrace(object):
             ch = 0
             self.is_dual = True
         else:
-            print('Channel not parsed:', ch)
+            lprint(self, 'Channel not parsed: ' + ch)
             assert False
         self.ch = ch
         self.tag = tag
@@ -59,7 +60,7 @@ class CaTrace(object):
             if os.path.exists(file_name):
                 self.trace = numpy.load(file_name)
             else:
-                print('Missing file:', file_name)
+                lprint(self, 'Missing file: ' + file_name)
                 return -1
         if len(self.trace.shape) == 3:
             # print(self.ch, self.trace.shape)
@@ -79,7 +80,7 @@ class CaTrace(object):
         try:
             self.movement = gapless(self.sync.load('speed'))
         except:
-            print('movement not found')
+            lprint(self, 'movement not found')
             self.movement = numpy.zeros(self.frames, dtype=numpy.bool)
         # save outlier data points to exclude from analysis:
         # mask with bad frames
@@ -121,7 +122,7 @@ class CaTrace(object):
                              'channel': str(self.ch),
                              'fps': str(CF.fps)}  # should contain only single strings as values
         numpy.save(self.pf + '//' + 'info', self.version_info)
-        print(self.prefix, self.cells, 'cells saved.')
+        lprint(self, self.prefix, self.cells, 'cells saved.')
 
     def load(self):
         if not os.path.exists(self.pf):
@@ -135,20 +136,20 @@ class CaTrace(object):
                 pf = self.opPath+self.prefix + '-' + x
                 if os.path.exists(pf):
                     self.pf = pf
-                    print('Loading traces from', pf)
+                    lprint(self, 'Loading traces from', pf)
                 break
         if not os.path.exists(self.pf):
             if self.tag not in ('skip', 'off'):
                 raise FileNotFoundError(f'Make sure the .np folder exists: {self.pf}\nPath is: {os.getcwd()}')
             else:
-                print('skipped loading ca')
+                lprint(self, 'skipped loading ca')
                 return -1
         for key in self.keys:
             fn = self.pf + '//' + key + '.npy'
             if os.path.exists(fn):
                 self.__setattr__(key, numpy.load(fn))
             else:
-                print(key, 'not available')
+                lprint(self, key, 'not available')
         self.cells, self.frames = self.trace.shape[:2]
         if len(self.trace.shape) == 3:
             self.channels = self.trace.shape[-1]
@@ -204,7 +205,7 @@ class Worker(Process):
         for data in iter(self.queue.get, None):
             c, data, bsltype, movement, exclude, peakdet, ol_index = data
             if self.verbose:
-                print('Starting cell ' + str(c))
+                lprint(self, 'Starting cell ' + str(c))
             t1, t2, frames = 50, 500, len(data)
             if movement is None:
                 movement = numpy.zeros(frames, dtype='bool')
@@ -268,7 +269,7 @@ class Worker(Process):
                     for i in range(frames):
                         bsl[i] = numpy.polyval(poly, i)
                     if numpy.any(bsl < 0):
-                        print(f'Baseline flips 0 in cell {c}, running sliding minimum baseline')
+                        lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline')
                         bsltype = 'original'
                 if bsltype in ['original', 'both']:  # both not implemented
                     for t in range(frames):
