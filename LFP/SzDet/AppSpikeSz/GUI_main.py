@@ -311,11 +311,11 @@ class GUI_main(QtWidgets.QMainWindow):
                                      trdiff=float(self.get_field('TrDiff')))
         fs = self.spikedet.fs
         framesize = int(self.get_field('SzDet.Framesize'))
-        sz_burden, sz_times = InstRate.SpikeTrace(t, framesize,
+        sz_burden, sz_times_raw = InstRate.SpikeTrace(t, framesize,
                                                   # length=int(len(self.spikedet.trace/framesize)),
                                                   cleanup=float(self.get_field('Sz.MinDur')),
                                                   gap=float(self.get_field('Sz.Gap')))
-        sz_times = sz_times.astype('int32')
+        sz_times = sz_times_raw.astype('int32')
         tx = (t*fs).astype('int64')
         Xrate = framesize/1000
         X = numpy.arange(0, len(sz_burden) * Xrate, Xrate)
@@ -336,7 +336,7 @@ class GUI_main(QtWidgets.QMainWindow):
         ax[1].set_ylabel('HF envelope')
 
         ax[2].plot(X, sz_burden, color='blue', linewidth=1)
-        for sz in sz_times:
+        for sz in sz_times_raw:
             for ca in (0, 2):
                 ax[ca].axvspan(sz[0], sz[1], color='red', alpha=0.4, zorder=0)
 

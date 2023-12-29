@@ -92,10 +92,14 @@ class Detect:
         self.spikeamp = self.trace[ra]
         return self.spiketimes
 
-    def spiketimes_to_excel(self, path, prefix):
+    def spiketimes_to_excel(self, path, prefix, ch=None):
         op = pandas.DataFrame({'SpikeTimes(s)': self.spiketimes, 'SpikeApmlitudes': self.spikeamp,
                                'SpikePower': self.spikepower})
-        op.to_excel(path+prefix+'_spiketimes.xlsx')
+        if ch is None:
+            f = path + prefix + '_spiketimes.xlsx'
+        else:
+            f = path + prefix + f'_Ch{ch}_spiketimes.xlsx'
+        op.to_excel(f)
 
 if __name__ == '__main__':
     processed_path = 'D:\Shares\Data\_Processed/2P\PVTot\LFP/'
