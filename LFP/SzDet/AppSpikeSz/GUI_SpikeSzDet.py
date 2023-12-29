@@ -28,12 +28,14 @@ from LFP.Pinnacle import ReadEDF
 
 
 class GUI_main(QtWidgets.QMainWindow):
-    def __init__(self, app, path=None, savepath=None, prefix_list=None, setupID='Soltesz'):
+    def __init__(self, app, path=None, savepath=None, prefix_list=None, setupID='LNCM',
+                 defaults=None):
         super().__init__()
 
         self.setWindowTitle(f'Detect spikes and seizures')
         self.setGeometry(30, 60, 3200, 1600) # Left, top, width, height.
         self.app = app
+        self.user_defaults = defaults
 
         #peristent settings
         self.wdir = path
@@ -111,6 +113,9 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.setup == 'Pinnacle':
             self.param['Channel'] = 1
             self.param_keys_sorted = (*self.param_keys_sorted, 'Channel')
+        if self.user_defaults is not None:
+            for key, value in self.user_defaults.items():
+                self.param[key] = value
 
     def make_filelist_groupbox(self):
         groupbox = QGroupBox('File list')
