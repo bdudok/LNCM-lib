@@ -2,7 +2,7 @@ import numpy
 from sklearn.neighbors import KernelDensity
 
 
-def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2):
+def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2, ret_raw_rate=False):
     '''
     Take a list of spike times (assuming sorted) and convert to a time series of inst spike rate
     :param spiketimes: array (s)
@@ -97,5 +97,6 @@ def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2):
     sz_times = numpy.empty((len(merged_sz), 2), )#dtype='int32')
     for i, szt in enumerate(merged_sz):
         sz_times[i] = szt
-
+    if ret_raw_rate:
+        return inst_rate, sz_times
     return sz_burden, sz_times
