@@ -73,7 +73,7 @@ if ext_drive_name in drive_names:
     dest_path = f'E:\ExtDrives/{ext_drive_name}/_Processed/'
     source_path = 'D:\Shares\Data\_Processed/'
     dlist = ['2P/PVTot', '2P/SncgTot', '2P/SncgDREADD',
-             '2P/JEDI', '2P/VADER']
+             '2P/JEDI', '2P/VADER', 'EEG/Tottering']
     for d in dlist:
         script_s += get_cmd(d)
 
@@ -89,7 +89,7 @@ ext_drive_name = 'LNCM2'
 if ext_drive_name in drive_names:
     dest_path = f'E:\ExtDrives/{ext_drive_name}/_RawData/'
     source_path = 'D:\Shares\Data\_RawData/'
-    dlist = ['Bruker']
+    dlist = ['Bruker', 'Pinnacle']
     for d in dlist:
         script_s += get_cmd(d)
 
