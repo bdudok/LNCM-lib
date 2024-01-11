@@ -69,8 +69,9 @@ class Treadmill:
                 any_lap = True
                 e_time = int(event.split(' ')[0])
                 e_idx = np.searchsorted(d.analog['pos'][:, 0], e_time)
-                self.lapends.append(e_idx)
-                self.laptimes.append(e_time)
+                if e_idx < len(self.abspos): #summary print at session end should be ignored
+                    self.lapends.append(e_idx)
+                    self.laptimes.append(e_time)
         if any_lap:
             # find reset position, make that 0
             self.laplen = np.median(np.diff(self.abspos[self.lapends]))
