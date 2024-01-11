@@ -13,17 +13,18 @@ mice_lg = pandas.DataFrame(resp.json())
 
 #get list of mice from BR (can be multipage)
 auth_string = f"Token {config['api_token']}"
-mice_br = pandas.DataFrame()
+mice_br = []
 for page in range(int(len(mice_lg)/100+10)):
     resp = requests.get(config['mice_url'],
                         headers={"Authorization": auth_string},
                         params={'page': page}
                         )
     if resp.status_code == 200:
-        mice_br = mice_br.append(pandas.DataFrame(resp.json()['results']))
+        mice_br.append(pandas.DataFrame(resp.json()['results']))
         if resp.json()['next'] is None:
             break
 
+mice_br = pandas.concat(mice_br)
 #find diff
 lg_set = set(mice_lg['name'])
 br_set = set(mice_br['Mouse.ID'])
