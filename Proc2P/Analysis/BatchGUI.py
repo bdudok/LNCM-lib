@@ -99,7 +99,9 @@ class App:
             print('Fetching', prefix, tag, ch)
             # print('Implement session GUI')
             # assert False
-            ls[hash] = session_Gui(self.filelist.wdir, prefix, tag=tag, norip=norip, ch=ch,)# ephys_channels=epc)
+            ls[hash] = session_Gui(self.filelist.wdir, prefix, tag=tag, norip=norip, ch=ch,
+                                   show_placefields=self.pltconfigs.config['ShowPlaceFields'].get(),
+                                   )# ephys_channels=epc)
             lu.append(hash)
         return ls[hash]
 
@@ -173,10 +175,10 @@ class Cfg:
         # STUFF IN SECOND COLUMN
 
         Label(self.frame, text='Units plot').grid(row=self.second_row(), column=1, pady=10)
-        text = 'ShowRipples'
-        self.config[text] = IntVar()
-        Checkbutton(self.frame, text=text, variable=self.config[text]).grid(row=self.second_row(), column=1, sticky=W)
-        self.config[text].set(0)
+        for text in ('ShowRipples', 'ShowPlaceFields'):
+            self.config[text] = IntVar()
+            Checkbutton(self.frame, text=text, variable=self.config[text]).grid(row=self.second_row(), column=1, sticky=W)
+            self.config[text].set(0)
 
         Label(self.frame, text='Skin').grid(row=self.second_row(), column=1)
         MODES = ['dark', 'light',]
@@ -336,7 +338,7 @@ class View:
         tag = self.parent.roiconvert.config['roi_name'].get()
 
         for prefix in self.parent.filelist.get_active()[1]:
-            session_Gui(wdir, prefix, tag=tag, norip=True, ).export_spreadsheet()
+            session_Gui(wdir, prefix, tag=tag, norip=True, show_placefields=False).export_spreadsheet()
 
 
 

@@ -38,12 +38,13 @@ class ImagingSession(object):
     __name__ = 'ImagingSession'
 
     def __init__(self, procpath, prefix, tag=None, norip=False, opath='.', ch=0,
-                 ripple_tag=None, lfp_ch=1):
+                 ripple_tag=None, lfp_ch=1, **kwargs):
         self.opath = opath
         self.prefix = prefix
         self.procpath = procpath
         self.tag = tag
         self.path = os.path.join(procpath, prefix + '/')
+        self.kwargs = kwargs
 
         # load info from json file
         self.si = SessionInfo(self.path, prefix)
