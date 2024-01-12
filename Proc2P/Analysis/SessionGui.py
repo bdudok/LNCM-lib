@@ -487,66 +487,17 @@ class Gui(ImagingSession):
         return data
 
     def behavplot(self, ax):
-        ax.plot(self.pos.pos, color='grey')
+        ax.plot(self.pos.pos, color='grey', zorder=0)
         if hasattr(self, 'bdat'):
             # add reward zones to plot
-            rz = self.bdat.data[2]
-            td = self.bdat.data[0]
-            l = len(self.pos.pos)
-            m = max(self.pos.pos)
-            x = numpy.empty(l)
-            for f in range(l):
-                bf = numpy.where(td <= self.frametotime(f))[0]
-                if len(bf) > 0 and rz[bf[-1]]:
-                    x[f] = m * 100
-                else:
-                    x[f] = -m * 100
-            ax.fill_between(range(l), -m * 100, x, color=self.colors.get('rewardzone', '#e2efda'))
-            ax.plot(self.pos.pos, color='grey')
+            rz = self.bdat['RZ']
+            licks = self.bdat['licks']
+            rewards = self.bdat['rewards']
+            for zone in rz:
+                ax.axvspan(*zone, color=self.colors.get('rewardzone', '#e2efda'), zorder=0, alpha=0.8)
             # add licks to plot
-            # x, y = [], []
-            # for l in self.bdat.choices[0]:
-            #     if l < self.bmtime[-1] and l > self.bmtime[0]:
-            #         t = self.timetoframe(l)
-            #         x.append(t)
-            #         y.append(self.pos.pos[t])
-            # ax.scatter(x, y, marker="o", color='green', s=50)
-            # x, y = [], []
-            # for l in self.bdat.choices[1]:
-            #     if l < self.bmtime[-1] and l > self.bmtime[0]:
-            #         t = self.timetoframe(l)
-            #         if t < self.ca.frames:
-            #             x.append(t)
-            #             y.append(self.pos.pos[t])
-            # ax.scatter(x, y, marker="|", color='red', s=50)
-            # x, y = [], []
-            # for l in self.bdat.rewards:
-            #     if l < self.bmtime[-1] and l > self.bmtime[0]:
-            #         t = self.timetoframe(l)
-            #         if t < self.ca.frames:
-            #             x.append(t)
-            #             y.append(self.pos.pos[t])
-            # ax.scatter(x, y, marker="|", color='blue', s=25)
-            # # plot extra pin info
-            # x1, x2, y1, y2 = [], [], [], []
-            # for pin, l, is_open in self.bdat.other_events:
-            #     if l < self.bmtime[-1] and l > self.bmtime[0]:
-            #         t = self.timetoframe(l)
-            #         if t < self.ca.frames:
-            #             if is_open:
-            #                 x1.append(t)
-            #                 y1.append(self.pos.pos[t])
-            #             else:
-            #                 x2.append(t)
-            #                 y2.append(self.pos.pos[t])
-            # ax.scatter(x1, y1, marker="<", color='black', s=50)
-            # ax.scatter(x2, y2, marker=">", color='black', s=50)
-            # add tones to plot
-            # tones = self.get_tones()
-            # for t in tones:
-            #     ax.axvline(t, color='red')
-
-            ax.set_ylim(-m * 0.1, m * 1.1)
+            ax.scatter(licks, self.pos.pos[licks], marker="o", color='blue', s=50)
+            ax.scatter(rewards, self.pos.pos[rewards], marker="o", color='green', s=50)
 
     def plot_session(self, param=None, offset=None, scatter=False, spec=[], hm=True, corder=None, hlines=None,
                      riplines=False, cmap='hot', rate='mean', silent=False, axtitle=None, unit='frames', vmax=None):

@@ -264,11 +264,37 @@ class PreProc:
             for Y, tag in zip((tm.smspd, tm.pos, tm.speed, tm.laps), ('smspd', 'pos', 'spd', 'laps')):
                 op[:] = numpy.nan
                 op[mask] = Y[indices[mask]]
-                print(tag, 'saved')
                 numpy.save(self.procpath + self.prefix + f'_{tag}.npy', op)
             # add lap and reward number to output
             self.laps = len(tm.laptimes)
-            self.rewards = 'not implemented'
+            licks = []
+            rewards = []
+            rzs = []
+            rz_started = None
+            for event in tm.d.events:
+                if numpy.isnan(event.time):
+                    continue
+                event_scopetime = align.A_to_B(event.time) / 1000
+                event_frame = int(numpy.searchsorted(self.frametimes, event_scopetime))
+                if not 0 < event_frame < len(self.frametimes)-1:
+                    continue
+                if 'lick' in event.name:
+                    licks.append(event_frame)
+                elif event.name == 'reward':
+                    rewards.append(event_frame)
+                elif event.name == 'reward_zone_entry':
+                    rz_started = event_frame
+                elif event.name == 'reward_timer':
+                    if rz_started is not None:
+                        rzs.append((rz_started, event_frame))
+                    rz_started = None
+            if rz_started is not None:
+                rzs.append((rz_started, len(self.frametimes)))
+            bdat = {'licks': licks, 'rewards': rewards, 'RZ': rzs}
+            with open(self.procpath + self.prefix + f'_bdat.json', 'w') as f:
+                json.dump(bdat, f)
+
+            self.rewards = len(rewards)
             self.md_keys.extend(['laps', 'rewards'])
             self.found_output.append('Treadmill')
 

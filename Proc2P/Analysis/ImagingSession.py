@@ -1,3 +1,4 @@
+import json
 import os
 import copy
 import matplotlib.pyplot as plt
@@ -111,6 +112,12 @@ class ImagingSession(object):
             self.pos.speed = numpy.zeros(self.ca.frames)
             self.pos.pos = numpy.zeros(self.ca.frames)
             self.pos.movement = numpy.zeros(self.ca.frames)
+        else:
+            bdat = self.get_file_with_suffix('_bdat.json')
+            if os.path.exists(bdat):
+                with open(bdat, 'r') as f:
+                    self.bdat = json.load(f)
+                self.has_behavior = True
 
     def startstop(self, *args, **kwargs):
         return startstop(self.pos.speed, **kwargs)
