@@ -319,7 +319,7 @@ class Gui:
 
         avgfn = self.opPath + self.prefix + '_avgmax.tif'
         if os.path.exists(avgfn):
-            self.pic = tifffile.imread(avgfn)
+            self.pic = cv2.cvtColor(tifffile.imread(avgfn), cv2.COLOR_RGB2BGR)
         else:
             self.pic = self.rois.get_pic()
 

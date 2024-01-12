@@ -51,8 +51,12 @@ class Treadmill:
         # convert to speed
         spd = np.diff(self.abspos)
         # remove overflow effect
-        wh_turn = numpy.where(abs(spd) > 100)
-        spd[wh_turn] = (spd[wh_turn[0] - 1] + spd[wh_turn[0] + 1]) / 2
+        wh_turn = numpy.where(abs(spd) > 100)[0]
+        spd[wh_turn] = (spd[wh_turn - 1] + spd[wh_turn + 1]) / 2
+        # make abspos continously increasing at overflows:
+        for t_idx in wh_turn:
+            self.abspos[t_idx+2:] = self.abspos[t_idx] + self.abspos[t_idx+2:]-self.abspos[t_idx+2]
+            self.abspos[t_idx+1] = (self.abspos[t_idx] + self.abspos[t_idx+2]) / 2
         rate = np.diff(self.pos_tX)  # in ms
         self.speed = np.empty(len(self.abspos))
         self.speed[0] = 0
@@ -80,6 +84,7 @@ class Treadmill:
                 self.pos[e_idx:] -= self.pos[e_idx]
                 self.laps[e_idx - 1:] += 1
             self.relpos = np.minimum(1, self.pos / self.laplen)
+
         else:
             self.pos = self.abspos - self.abspos.min()
             self.relpos = self.pos / TR.beltlen

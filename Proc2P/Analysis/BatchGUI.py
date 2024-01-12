@@ -441,7 +441,7 @@ class Traces:
         self.frame.grid(row=0, column=column, sticky=N + W)
 
         Label(self.frame, text='Process traces').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Auto select", command=self.autosel_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Auto select", command=self.autosel_callback).grid(row=self.row(), sticky=N)
         # self.version = IntVar()
         # Checkbutton(self.frame, text='Old baseline', variable=self.version).grid(row=self.row(), sticky=N)
         # self.version.set(0)
