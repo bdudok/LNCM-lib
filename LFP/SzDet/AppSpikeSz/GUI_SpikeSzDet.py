@@ -112,7 +112,8 @@ class GUI_main(QtWidgets.QMainWindow):
             self.param['fs'] = 2000
         if self.setup == 'Pinnacle':
             self.param['Channel'] = 1
-            self.param_keys_sorted = (*self.param_keys_sorted, 'Channel')
+            self.param_keys_sorted = (*self.param_keys_sorted, 'Channel',
+                                      'rejection_value', 'rejection_step', 'rejection_tail', 'rejection_factor')
         if self.user_defaults is not None:
             for key, value in self.user_defaults.items():
                 self.param[key] = value
@@ -333,6 +334,10 @@ class GUI_main(QtWidgets.QMainWindow):
         time_xvals = numpy.arange(0, len(self.spikedet.trace)) / fs
 
         #plot data
+        if self.raw_trace is not None:
+            wh = numpy.where(self.spikedet.trace == 0)
+            scale = min(self.spikedet.trace.max(), -self.spikedet.trace.min()) / numpy.absolute(self.raw_trace).max()
+            ax[0].plot(time_xvals[wh], self.raw_trace[wh]*scale, color='red', zorder=0, linewidth=1)
         ax[0].plot(time_xvals, self.spikedet.trace, color='black', zorder=1, linewidth=1)
         ax[0].scatter(time_xvals[tx], self.spikedet.trace[tx], color='lime',
                       marker='x', s=20, linewidth=0.7, zorder=2, alpha=0.8)
@@ -416,7 +421,7 @@ class GUI_main(QtWidgets.QMainWindow):
         elif self.setup == 'LNCM':
             r = LoadEphys.Ephys(self.savepath, self.active_prefix)
         elif self.setup == 'Pinnacle':
-            r = ReadEDF.EDF(self.savepath, self.active_prefix)
+            r = ReadEDF.EDF(self.savepath, self.active_prefix, rejection_ops=self.param)
             self.param['fs'] = r.fs
             self.param['Channels'] = r.channels
             chi = int(self.get_field('Channel'))
@@ -428,8 +433,12 @@ class GUI_main(QtWidgets.QMainWindow):
         fs = int(self.get_field('fs'))
         t_want = fs * 60 * 10 #10 minutes
         trace = r.trace
+        raw_trace = r.raw_trace
         if len(trace) > t_want:
-            trace = trace[int(len(trace)/2 - t_want/2):int(len(trace)/2 + t_want/2)]
+            want_slice = slice(int(len(trace)/2 - t_want/2), int(len(trace)/2 + t_want/2))
+            trace = trace[want_slice]
+            raw_trace = raw_trace[want_slice]
+        self.raw_trace = raw_trace
         self.spikedet = SpikesPower.Detect(trace, fs=fs, lo=float(self.get_field('LoCut')),
                                                          hi=float(self.get_field('HiCut')))
         self.set_field('Prefix', self.active_prefix)
