@@ -12,7 +12,7 @@ class Sync:
     def fn(self, suffix):
         return os.path.join(self.procpath, self.prefix + '/', self.prefix+suffix)
 
-    def load(self, tag):
+    def load(self, tag, suppress=False):
         '''check if tag cached, if not load it from file
         file suffixes stored in config.
         '''
@@ -22,7 +22,8 @@ class Sync:
             if os.path.exists(fn):
                 self.cache[tag] = numpy.load(fn)
             else:
-                print('Sync: File not found for', tag)
+                if not suppress:
+                    print('Sync: File not found for', tag)
                 self.cache[tag] = None
         return self.cache[tag]
 

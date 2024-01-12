@@ -55,9 +55,9 @@ class Gui(ImagingSession):
             graph_param = param
         self.activecell = 0
         self.graph_param = graph_param
-        if hasattr(self.pos, 'laps') and self.pos.laps[-1] > 2:
+        if hasattr(self.pos, 'laps') and numpy.nanmax(self.pos.laps) > 2:
             self.using_laps = True
-            self.placefields(param=graph_param, span=(100, self.ca.frames - 100), silent=True)
+            self.placefields_smooth(param=graph_param, silent=True, gui=True)
             self.calc_MI(param=graph_param, selection='movement')
         else:
             self.using_laps = False

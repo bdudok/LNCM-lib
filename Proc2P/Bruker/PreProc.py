@@ -257,13 +257,14 @@ class PreProc:
         if not skip:
             self.frame_at_treadmill = align.B_to_A(self.frametimes * 1000)
             numpy.save(self.procpath + self.prefix + '_frame_tm_times.npy', self.frame_at_treadmill)
-            # resample speed, pos to scope frames
+            # resample speed, pos, laps to scope frames
             indices = self.get_frame_tm_x(self.frame_at_treadmill, tm.pos_tX * 1000)
-            for Y, tag in zip((tm.smspd, tm.pos, tm.speed), ('smspd', 'pos', 'spd')):
-                op = numpy.empty(len(self.frame_at_treadmill))
+            op = numpy.empty(len(self.frame_at_treadmill))
+            mask = indices > -1
+            for Y, tag in zip((tm.smspd, tm.pos, tm.speed, tm.laps), ('smspd', 'pos', 'spd', 'laps')):
                 op[:] = numpy.nan
-                mask = indices > -1
                 op[mask] = Y[indices[mask]]
+                print(tag, 'saved')
                 numpy.save(self.procpath + self.prefix + f'_{tag}.npy', op)
             # add lap and reward number to output
             self.laps = len(tm.laptimes)

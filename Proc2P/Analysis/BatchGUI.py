@@ -256,13 +256,13 @@ class View:
         Button(self.frame, text="Export excel", command=self.export_excel_callback).grid(row=self.row(), sticky=N)
 
         Label(self.frame, text='Place cells').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Place fields", command=self.pf_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Weighted Pfields", command=self.pfsmooth_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Place fields", command=self.pf_callback).grid(row=self.row(), sticky=N)
+        Button(self.frame, text="Place fields", command=self.pfsmooth_callback).grid(row=self.row(), sticky=N)
         Label(self.frame, text='Sorted plots').grid(row=self.row(), pady=10)
-        Button(self.frame, text="Run sequence", command=self.runseq_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Placefield seq.", command=self.pfseq_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Weighted Pf. seq.", command=self.pfseqsmooth_callback).grid(row=self.row(), sticky=N)
-        Button(self.frame, text="Running Pf. seq.", command=self.runpfseq_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Run sequence", command=self.runseq_callback).grid(row=self.row(), sticky=N)
+        # Button(self.frame, text="Placefield seq.", command=self.pfseq_callback).grid(row=self.row(), sticky=N)
+        Button(self.frame, text="Place cell sequence", command=self.pfseqsmooth_callback).grid(row=self.row(), sticky=N)
+        Button(self.frame, text="Pf. seq. (run only)", command=self.runpfseq_callback).grid(row=self.row(), sticky=N)
         # Label(self.frame, text='Export').grid(row=self.row(), pady=10)
         # Button(self.frame, text="Save csv", command=self.csv_callback).grid(row=self.row(), sticky=N)
         # Button(self.frame, text="Save figure", command=self.figsave_callback).grid(row=self.row(), sticky=N)
@@ -384,7 +384,7 @@ class View:
         if cf['Heatmap'].get():
             cf['Scatter'].set(0)
         rate = ('mean', 'spikes')[cf['RateFromSpikes'].get()]
-        self.active_item.placefields_smooth(param=self.getparam(), silent=True)
+        self.active_item.placefields_smooth(param=self.getparam(), silent=True, strict=True)
         self.fig = self.active_item.plot_session(param=self.getparam(), corder=self.active_item.corder_smoothpf,
                                                  scatter=cf['Scatter'].get(), hm=cf['Heatmap'].get(),
                                                  cmap=cf['cmap'].get(),

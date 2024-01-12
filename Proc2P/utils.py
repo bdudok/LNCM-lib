@@ -21,6 +21,7 @@ def gapless(trace, gap=5, threshold=0):
         return numpy.zeros(len(trace))
     gapless = trace > threshold
     ready = False
+    gap = int(gap)
     while not ready:
         ready = True
         for t, m in enumerate(gapless):
