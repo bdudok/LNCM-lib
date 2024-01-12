@@ -682,9 +682,10 @@ class Gui:
             else:
                 color = self.colors['inactive']
                 ecolor = self.colors['inactive']
-            if len(self.psets[key + '_e']) > 0:
-                cv2.polylines(im, self.psets[key + '_e'], isClosed=True, color=ecolor)
-            cv2.polylines(im, self.psets[key], isClosed=True, color=color)
+            if key == self.current_key:
+                if len(self.psets[key + '_e']) > 0:
+                    cv2.polylines(im, self.psets[key + '_e'], isClosed=True, color=ecolor)
+                cv2.polylines(im, self.psets[key], isClosed=True, color=color)
         self.currim = cv2.LUT(im, self.lut)
         self.zoom()
         im = numpy.array(self.currim)
