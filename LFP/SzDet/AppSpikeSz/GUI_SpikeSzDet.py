@@ -92,7 +92,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.result_fields = {}
         self.res_keys_sorted = ('Prefix', 'Spikes', 'Seizures', 'Sz.Duration')
         self.param_keys_sorted = ('LoCut', 'HiCut', 'Tr1', 'Tr2', 'TrDiff', 'Dur', 'Dist',
-                                  'Sz.MinDur', 'Sz.Gap', 'SzDet.Framesize', 'fs')
+                                  'Sz.MinDur', 'Sz.Gap', 'SzDet.Framesize', 'fs', 'PlotDur')
         self.param['LoCut'] = 4
         self.param['HiCut'] = 35
         self.param['Tr1'] = 2
@@ -104,6 +104,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.param['Sz.Gap'] = 2
         self.param['SzDet.Framesize'] = 50
         self.param['fs'] = 2000
+        self.param['PlotDur'] = 10
         if self.setup == 'Soltesz':
             self.param['fs'] = 10000
             self.param['SzDet.Framesize'] = 64
@@ -431,7 +432,8 @@ class GUI_main(QtWidgets.QMainWindow):
 
         #get example trace
         fs = int(self.get_field('fs'))
-        t_want = fs * 60 * 10 #10 minutes
+        t_want = int(fs * 60 * float(self.get_field('PlotDur'))) #10 minutes
+        print(t_want)
         trace = r.trace
         raw_trace = r.raw_trace
         if len(trace) > t_want:
