@@ -1,1 +1,1 @@
-from .GUI_main import launch_GUI
+from .GUI_SpikeSzDet import launch_GUI

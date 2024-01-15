@@ -19,6 +19,16 @@ class EDF:
         self.set_channel(0)
         self.d = d
 
+    def get_TTL(self, channel='GPIO0'):
+        for chi, x in enumerate(self.channels):
+            if channel in x:
+                break
+        assert channel in x
+        y = self.data[chi]
+        vmax = y.max()
+        return numpy.where(numpy.convolve(y > vmax * 0.5, [1, -1]) == 1)[0] / self.fs
+
+
     def set_channel(self, ch):
         if type(ch) is int:
             chi = ch
