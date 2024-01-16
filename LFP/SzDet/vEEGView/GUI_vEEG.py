@@ -153,11 +153,7 @@ class GUI_main(QtWidgets.QMainWindow):
         # align button
         align_button = QPushButton('Align', )
         vbox.addWidget(align_button)
-        select_path_button.clicked.connect(self.align_callback)
-        #TODO load video npy and perform align
-        vttl = numpy.load(path + vid_fn + '.npy')[:, -1]
-        self.align = rsync.Rsync_aligner(vttl, ttl)
-
+        align_button.clicked.connect(self.align_callback)
 
         return groupbox
 
@@ -317,6 +313,16 @@ class GUI_main(QtWidgets.QMainWindow):
                 if os.path.exists(os.path.join(self.dirpaths[prefix], prefix + '.json')):
                     self.mark_complete(pi, color='#fcaf38')
 
+    def align_callback(self):
+        #load video npy and perform align
+        current_item = self.video_list.selectedItems()[0]
+        self.active_video = current_item.text()
+        self.current_video_i = self.video_list.currentRow()
+        vttl = numpy.load(path + self.active_video + '.npy')[:, -1]
+        self.refresh_data()
+        ttl = self.edf.get_TTL()
+        self.align = rsync.Rsync_aligner(vttl, ttl)
+
     def format_plot(self, plot):
         for ca in plot.ax:
             ca.spines['right'].set_visible(False)
@@ -431,11 +437,6 @@ class GUI_main(QtWidgets.QMainWindow):
         self.prefix_list.setCurrentItem(current_item)
         self.new_plot = True
         self.refresh_data()
-
-    def align(self):
-        self.refresh_data()
-        ttl = self.edf.get_TTL()
-
 
     def refresh_data(self):
         print(self.active_prefix)
