@@ -142,9 +142,11 @@ class GUI_main(QtWidgets.QMainWindow):
         twolists = QtWidgets.QHBoxLayout()
         self.prefix_list = QListWidget(self)
         self.prefix_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.prefix_list.itemSelectionChanged.connect(self.set_prefix)
         twolists.addWidget(self.prefix_list)
         self.video_list = QListWidget(self)
         self.video_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.video_list.itemSelectionChanged.connect(self.set_video)
         twolists.addWidget(self.video_list)
         vbox.addLayout(twolists)
 
@@ -154,6 +156,9 @@ class GUI_main(QtWidgets.QMainWindow):
         align_button = QPushButton('Align', )
         vbox.addWidget(align_button)
         align_button.clicked.connect(self.align_callback)
+        self.FigCanvas0 = SubplotsCanvas(figsize=(4, 2))
+        self.format_plot(self.FigCanvas0)
+        vbox.addWidget(self.FigCanvas0)
 
         return groupbox
 
@@ -297,6 +302,7 @@ class GUI_main(QtWidgets.QMainWindow):
             suffix = '.avi'
             video_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
         # set list widget
+        print(video_list)
         self.prefix_list.clear()
         self.prefix_list.addItems(prefix_list)
         self.video_list.clear()
@@ -315,20 +321,50 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def align_callback(self):
         #load video npy and perform align
-        current_item = self.video_list.selectedItems()[0]
-        self.active_video = current_item.text()
-        self.current_video_i = self.video_list.currentRow()
-        vttl = numpy.load(path + self.active_video + '.npy')[:, -1]
+        vttl = numpy.load(self.wdir + self.active_video + '.npy')[:, -1]
         self.refresh_data()
         ttl = self.edf.get_TTL()
-        self.align = rsync.Rsync_aligner(vttl, ttl)
+
+        # thgis only for this test, recorder now updated. #todo remove this after testing
+        if vttl[0] > numpy.diff(vttl).max():
+            vttl = vttl[1:] - vttl[0]  # does not contain actual frame numbers but since live view started :S
+
+        try:
+            self.alignment = rsync.Rsync_aligner(vttl, ttl)
+        except:
+            self.alignment = None
+
+        eegdur = len(self.edf.trace) / self.edf.fs
+        xunit = 60
+        ca = self.FigCanvas0.ax
+        ca.cla()
+        ca.plot((0, eegdur / xunit), (1, 1), color='black')
+        ca.scatter((0, eegdur / xunit), (1, 1), marker='|', color='black')
+        if self.alignment is not None:
+            align_fps = self.alignment.units_B
+            frametimes = self.alignment.B_to_A(numpy.arange(vttl[-1] + numpy.diff(vttl).max())) / align_fps
+            ft_bounds = frametimes[numpy.logical_not(numpy.isnan(frametimes))]
+            ca.scatter(ttl / xunit, numpy.ones(len(ttl)) * 0.5, marker='|', c=numpy.isnan(self.alignment.cor_times_A))
+            ca.plot((ft_bounds[0] / xunit, ft_bounds[-1] / xunit), (1, 1), color='green', linewidth=2)
+            ca.plot((vttl[0] / (align_fps * xunit), vttl[-1] / (align_fps * xunit)), (0, 0), color='grey')
+        else:
+            ca.plot((vttl[0] / (31 * xunit), vttl[-1] / (31 * xunit)), (0, 0), color='red')
+        ca.set_ylim(-0.1, 1.1)
+        ca.set_xlabel('Minutes')
+
+        self.FigCanvas0.draw()
+        plt.tight_layout()
 
     def format_plot(self, plot):
-        for ca in plot.ax:
+        ax = plot.ax
+        if not hasattr(ax, '__len__'):
+            ax = [ax]
+        for ca in ax:
             ca.spines['right'].set_visible(False)
             ca.spines['top'].set_visible(False)
 
     def update_plot1(self):
+        return 0 #todo for testing.
         print([self.get_field(field) for field in self.param_keys_sorted])
         # clear plot
         ax = self.FigCanvas1.ax
@@ -397,11 +433,16 @@ class GUI_main(QtWidgets.QMainWindow):
         self.set_field('Sz.Duration', f'{numpy.mean([sz[1] - sz[0] for sz in sz_times]):.2f}')
 
     def load_file_callback(self):
-        current_item = self.prefix_list.selectedItems()[0]
-        self.active_prefix = current_item.text()
+        # current_item = self.prefix_list.selectedItems()[0]
+        # self.active_prefix = current_item.text()
         self.current_selected_i = self.prefix_list.currentRow()
         self.new_plot = True
         self.refresh_data()
+
+    def set_prefix(self):
+        self.active_prefix = self.prefix_list.selectedItems()[0].text()
+    def set_video(self):
+        self.active_video = self.video_list.selectedItems()[0].text()
 
     def save_output_callback(self):
         # save settings
@@ -463,7 +504,8 @@ class GUI_main(QtWidgets.QMainWindow):
         if len(trace) > t_want:
             want_slice = slice(int(len(trace) / 2 - t_want / 2), int(len(trace) / 2 + t_want / 2))
             trace = trace[want_slice]
-            raw_trace = raw_trace[want_slice]
+            if raw_trace is not None:
+                raw_trace = raw_trace[want_slice]
         self.raw_trace = raw_trace
         self.spikedet = SpikesPower.Detect(trace, fs=fs, lo=float(self.get_field('LoCut')),
                                            hi=float(self.get_field('HiCut')))

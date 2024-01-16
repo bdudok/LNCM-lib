@@ -35,7 +35,10 @@ EEG = ReadEDF.EDF(path, eeg_fn,)
 ttl = EEG.get_TTL()
 
 vttl = numpy.load(path + vid_fn + '.npy')[:, -1]
-vttl = vttl[1:] - vttl[0] #does not contain actual frame numbers but since live view started :S
+if vttl[0] > numpy.diff(vttl).max():
+    vttl = vttl[1:] - vttl[0] #does not contain actual frame numbers but since live view started :S
+    #thgis only for this test, recorder now updated.
+
 
 ml = min(len(vttl), len(ttl))
 

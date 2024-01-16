@@ -39,7 +39,7 @@ class EDF:
                 print(f'Channel {ch} not found. available: {self.channels}')
                 assert False
         self.active_channel = self.channels[chi]
-        if self.rejection_ops is not None:
+        if self.rejection_ops is not None and 'rejection_value' in self.rejection_ops:
             tr = numpy.copy(self.data[chi])
             rejection_value = self.rejection_ops['rejection_value']
             rejection_step = int(self.rejection_ops['rejection_step'] * self.fs)
