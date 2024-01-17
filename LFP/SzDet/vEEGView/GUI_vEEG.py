@@ -37,6 +37,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.setWindowTitle(f'Detect spikes and seizures')
         self.setGeometry(30, 60, 3200, 1600)  # Left, top, width, height.
+        self.movie_size = (1024, 768)
         self.app = app
         self.user_defaults = defaults
 
@@ -57,7 +58,6 @@ class GUI_main(QtWidgets.QMainWindow):
         self.display_traces_groupbox = self.make_traces_groupbox()
         self.options_groupbox = self.make_options_groupbox()
         self.controls_groupbox = self.make_controls_groupbox()
-        self.results_groupbox = self.make_results_groupbox()
 
         # central widget
         centralwidget = QWidget(self)
@@ -73,7 +73,6 @@ class GUI_main(QtWidgets.QMainWindow):
         vertical_options_layout.addWidget(self.options_groupbox)
         vertical_options_layout.addWidget(self.separator)
         vertical_options_layout.addWidget(self.controls_groupbox)
-        vertical_options_layout.addWidget(self.results_groupbox)
         horizontal_layout.addLayout(vertical_options_layout)
 
         self.setCentralWidget(centralwidget)
@@ -167,32 +166,19 @@ class GUI_main(QtWidgets.QMainWindow):
         vbox = QtWidgets.QVBoxLayout()
         groupbox.setLayout(vbox)
 
-        # horizontal layout for buttons
-        horizontal_layout = QHBoxLayout()
-        # load button
-        select_session_button = QPushButton('Open', )
-        horizontal_layout.addWidget(select_session_button)
-        select_session_button.clicked.connect(self.load_file_callback)
-
-        # next button
-        select_next_button = QPushButton('Next', )
-        horizontal_layout.addWidget(select_next_button)
-        select_next_button.clicked.connect(self.load_next_callback)
-
-        # layout button
-        reset_layout_button = QPushButton('Layout', )
-        horizontal_layout.addWidget(reset_layout_button)
-        reset_layout_button.clicked.connect(plt.tight_layout)
-
-        vbox.addLayout(horizontal_layout)
-
-        vbox.addWidget(self.separator)
-        # raw
-        self.FigCanvas1 = SubplotsCanvas(nrows=3, sharex=True, figsize=(12, 9))
+        # traces
+        self.FigCanvas1 = SubplotsCanvas(nrows=2, sharex=True, figsize=(6, 9))
         self.format_plot(self.FigCanvas1)
         toolbar = NavigationToolbar2QT(self.FigCanvas1, self)
         vbox.addWidget(toolbar)
         vbox.addWidget(self.FigCanvas1)
+
+        #movie
+        self.lbl_video = QtWidgets.QLabel()
+        self.lbl_video.resize(*self.movie_size)
+        vbox.addWidget(self.lbl_video)
+        #TODO will probably use grid layout for this to make cam nice and big
+        # or grid_layout.addLayout(horizontal_layout, 0, 0, 1, 8)
 
         return groupbox
 
@@ -322,7 +308,7 @@ class GUI_main(QtWidgets.QMainWindow):
     def align_callback(self):
         #load video npy and perform align
         vttl = numpy.load(self.wdir + self.active_video + '.npy')[:, -1]
-        self.refresh_data()
+        self.refresh_data(noplot=True)
         ttl = self.edf.get_TTL()
 
         # thgis only for this test, recorder now updated. #todo remove this after testing
@@ -347,6 +333,9 @@ class GUI_main(QtWidgets.QMainWindow):
             ca.scatter(ttl / xunit, numpy.ones(len(ttl)) * 0.5, marker='|', c=numpy.isnan(self.alignment.cor_times_A))
             ca.plot((ft_bounds[0] / xunit, ft_bounds[-1] / xunit), (1, 1), color='green', linewidth=2)
             ca.plot((vttl[0] / (align_fps * xunit), vttl[-1] / (align_fps * xunit)), (0, 0), color='grey')
+            self.v_fps = align_fps
+            self.v_frametimes = frametimes
+            self.load_movie(fn=self.wdir + self.active_video)
         else:
             ca.plot((vttl[0] / (31 * xunit), vttl[-1] / (31 * xunit)), (0, 0), color='red')
         ca.set_ylim(-0.1, 1.1)
@@ -354,6 +343,13 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.FigCanvas0.draw()
         plt.tight_layout()
+
+    def load_movie(self, fn):
+        if os.path.exists(fn+'.avi'):
+            pass #todo load with cv2 reader
+        suffix = '_motion.npy'
+        if os.path.exists(fn+ suffix):
+            self.motion_energy = numpy.load(fn+suffix)
 
     def format_plot(self, plot):
         ax = plot.ax
@@ -364,8 +360,6 @@ class GUI_main(QtWidgets.QMainWindow):
             ca.spines['top'].set_visible(False)
 
     def update_plot1(self):
-        return 0 #todo for testing.
-        print([self.get_field(field) for field in self.param_keys_sorted])
         # clear plot
         ax = self.FigCanvas1.ax
         if not self.new_plot:
@@ -378,43 +372,25 @@ class GUI_main(QtWidgets.QMainWindow):
             ca.cla()
 
         # get data
-        t = self.spikedet.get_spikes(tr1=float(self.get_field('Tr1')), tr2=float(self.get_field('Tr2')),
-                                     trdiff=float(self.get_field('TrDiff')), dur=float(self.get_field('Dur')),
-                                     dist=float(self.get_field('Dist')))
-        fs = self.spikedet.fs
-        framesize = int(self.get_field('SzDet.Framesize'))
-        sz_burden, sz_times_raw = InstRate.SpikeTrace(t, framesize,
-                                                      # length=int(len(self.spikedet.trace/framesize)),
-                                                      cleanup=float(self.get_field('Sz.MinDur')),
-                                                      gap=float(self.get_field('Sz.Gap')))
-        sz_times = sz_times_raw.astype('int32')
-        tx = (t * fs).astype('int64')
-        Xrate = framesize / 1000
-        X = numpy.arange(0, len(sz_burden) * Xrate, Xrate)
-        time_xvals = numpy.arange(0, len(self.spikedet.trace)) / fs
+        #TODO load sz burden and sz times if available. also load opts from json
+        # sz_times = sz_times_raw.astype('int32')
+        framesize = 50#int(self.get_field('SzDet.Framesize'))
+        Xrate = framesize/1000
+        X = numpy.arange(0, len(self.edf.trace) * Xrate, Xrate)
+        time_xvals = numpy.arange(0, len(self.edf.trace)) / self.edf.fs
 
-        # plot data
-        if self.raw_trace is not None:
-            wh = numpy.where(self.spikedet.trace == 0)
-            scale = min(self.spikedet.trace.max(), -self.spikedet.trace.min()) / numpy.absolute(self.raw_trace).max()
-            ax[0].plot(time_xvals[wh], self.raw_trace[wh] * scale, color='red', zorder=0, linewidth=1)
-        ax[0].plot(time_xvals, self.spikedet.trace, color='black', zorder=1, linewidth=1)
-        ax[0].scatter(time_xvals[tx], self.spikedet.trace[tx], color='lime',
-                      marker='x', s=20, linewidth=0.7, zorder=2, alpha=0.8)
-        ax[0].set_ylabel('LFP')
+        #LFP
+        ax[0].plot(time_xvals, self.edf.trace, color='black', zorder=1, linewidth=1)
 
-        ax[1].plot(time_xvals, self.spikedet.env, color='orange', zorder=1, linewidth=1)
-        ax[1].scatter(time_xvals[tx], self.spikedet.env[tx], color='red',
-                      marker='x', s=20, linewidth=0.7, zorder=2, alpha=0.8)
-        for hv in ('Tr1', 'Tr2'):
-            v = float(self.get_field(hv))
-            ax[1].axhline(self.spikedet.stdev_env * v, color='black', linewidth=0.5)
-        ax[1].set_ylabel('HF envelope')
+        #Motion
+        if self.alignment is not None:
+            ax[1].plot(self.v_frametimes[:len(self.motion_energy)], self.motion_energy, color='orange', zorder=1, linewidth=1)
 
-        ax[2].plot(X, sz_burden, color='blue', linewidth=1)
-        for sz in sz_times_raw:
-            for ca in (0, 2):
-                ax[ca].axvspan(sz[0], sz[1], color='red', alpha=0.4, zorder=0)
+
+        # ax[2].plot(X, sz_burden, color='blue', linewidth=1)
+        # for sz in sz_times_raw:
+        #     for ca in (0, 2):
+        #         ax[ca].axvspan(sz[0], sz[1], color='red', alpha=0.4, zorder=0)
 
         if not self.new_plot:
             for ca, xlim, ylim in zip(ax, xlims, ylims):
@@ -426,11 +402,6 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.FigCanvas1.draw()
         plt.tight_layout()
-
-        # ('Spikes', 'Seizures', 'Sz.Duration')
-        self.set_field('Spikes', len(t))
-        self.set_field('Seizures', len(sz_times))
-        self.set_field('Sz.Duration', f'{numpy.mean([sz[1] - sz[0] for sz in sz_times]):.2f}')
 
     def load_file_callback(self):
         # current_item = self.prefix_list.selectedItems()[0]
@@ -479,7 +450,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.new_plot = True
         self.refresh_data()
 
-    def refresh_data(self):
+    def refresh_data(self, noplot=False):
         print(self.active_prefix)
         if self.setup == 'Soltesz':
             r = load_ephys(self.active_prefix)
@@ -510,7 +481,8 @@ class GUI_main(QtWidgets.QMainWindow):
         self.spikedet = SpikesPower.Detect(trace, fs=fs, lo=float(self.get_field('LoCut')),
                                            hi=float(self.get_field('HiCut')))
         self.set_field('Prefix', self.active_prefix)
-        self.update_plot1()
+        if not noplot:
+            self.update_plot1()
 
 
 class SubplotsCanvas(FigureCanvasQTAgg):
