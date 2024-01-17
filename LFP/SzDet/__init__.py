@@ -1,0 +1,1 @@
+from .ProcessWorker import run_detection as ProcessSeizures

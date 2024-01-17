@@ -19,13 +19,15 @@ QAbstractItemView, QLineEdit, QCheckBox)
 
 #Workflow Specific functions
 from LFP.SpikeDet import SpikesPower
-from LFP.SzDet import InstRate
+from LFP.SzDet import InstRate, ProcessSeizures
 
 #Readers
 from Proc2P.Legacy.Loaders import load_ephys
 from Proc2P.Bruker import LoadEphys
 from LFP.Pinnacle import ReadEDF
 
+#for processing in background
+# from multiprocessing import Process
 
 class GUI_main(QtWidgets.QMainWindow):
     def __init__(self, app, path=None, savepath=None, prefix_list=None, setupID='LNCM',
@@ -242,16 +244,23 @@ class GUI_main(QtWidgets.QMainWindow):
         self.is_sz_checkbox.setChecked(True)
         vbox.addWidget(self.is_sz_checkbox)
 
+        hline = QtWidgets.QHBoxLayout()
         save_button = QPushButton('Save settings', )
-        vbox.addWidget(save_button)
+        hline.addWidget(save_button)
         save_button.clicked.connect(self.save_output_callback)
+        proc_button = QPushButton('Process', )
+        hline.addWidget(proc_button)
+        proc_button.clicked.connect(self.process_callback)
+        vbox.addLayout(hline)
+
         return groupbox
 
 
-    def select_path_callback(self, path=None):
+    def select_path_callback(self, path=False):
         #get a folder
-        if path is None:
-            self.wdir = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
+        if path in (None, False):
+            self.wdir = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder') + '/'
+            self.savepath = self.wdir
             # self.settings.setValue("LastFile", self.wdir)
         self.path_label.setText(self.wdir)
         os.chdir(self.wdir)
@@ -404,6 +413,16 @@ class GUI_main(QtWidgets.QMainWindow):
         if not self.setup == 'Pinnacle':
             self.load_next_callback()
 
+    def process_callback(self):
+        #process the whole trace using current settings
+        if self.setup == 'Pinnacle':
+            opts = {}
+            for key in self.param_keys_sorted:
+                opts[key] = self.get_field(key)
+            # tt = Process(target=ProcessSeizures, args=(self.edf, opts))
+            # tt.start()
+            ProcessSeizures(self.edf, opts)
+
     def mark_complete(self, i, color='#50a3a4'):
         self.prefix_list.item(i).setBackground(QtGui.QColor(color))
 
@@ -429,7 +448,7 @@ class GUI_main(QtWidgets.QMainWindow):
             r.set_channel(chi-1)
             chstr = f'{r.active_channel}; {chi}/{len(r.channels)}'
             self.channel_name_label.setText(chstr + ' (Use Open to change channels)')
-
+            self.edf = r
         #get example trace
         fs = int(self.get_field('fs'))
         t_want = int(fs * 60 * float(self.get_field('PlotDur'))) #10 minutes

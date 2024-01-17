@@ -7,7 +7,10 @@ def lprint(obj, message, *args):
     ts = datetime.datetime.now().isoformat(timespec='seconds')
     for x in args:
         message += ' ' + str(x)
-    print(f'{ts} - {obj.__name__}: {message}')
+    if obj is None:
+        print(f'{ts}: {message}')
+    else:
+        print(f'{ts} - {obj.__name__}: {message}')
 
 from Proc2P.Legacy.Batch_Utils import strip_ax
 
