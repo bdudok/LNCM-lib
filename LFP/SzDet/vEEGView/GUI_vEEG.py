@@ -308,7 +308,7 @@ class GUI_main(QtWidgets.QMainWindow):
     def align_callback(self):
         #load video npy and perform align
         vttl = numpy.load(self.wdir + self.active_video + '.npy')[:, -1]
-        self.refresh_data(noplot=True)
+        self.refresh_data()
         ttl = self.edf.get_TTL()
 
         # thgis only for this test, recorder now updated. #todo remove this after testing
@@ -336,6 +336,8 @@ class GUI_main(QtWidgets.QMainWindow):
             self.v_fps = align_fps
             self.v_frametimes = frametimes
             self.load_movie(fn=self.wdir + self.active_video)
+            self.new_plot = True
+            self.update_plot1()
         else:
             ca.plot((vttl[0] / (31 * xunit), vttl[-1] / (31 * xunit)), (0, 0), color='red')
         ca.set_ylim(-0.1, 1.1)
@@ -382,6 +384,8 @@ class GUI_main(QtWidgets.QMainWindow):
         #LFP
         ax[0].plot(time_xvals, self.edf.trace, color='black', zorder=1, linewidth=1)
 
+        #Todo add emg
+
         #Motion
         if self.alignment is not None:
             ax[1].plot(self.v_frametimes[:len(self.motion_energy)], self.motion_energy, color='orange', zorder=1, linewidth=1)
@@ -397,18 +401,10 @@ class GUI_main(QtWidgets.QMainWindow):
                 ca.set_xlim(xlim)
                 ca.set_ylim(ylim)
         self.new_plot = False
-        ax[2].set_xlabel('Time (s)')
-        ax[2].set_ylabel('Seizure')
+        ax[1].set_xlabel('Time (s)')
 
         self.FigCanvas1.draw()
         plt.tight_layout()
-
-    def load_file_callback(self):
-        # current_item = self.prefix_list.selectedItems()[0]
-        # self.active_prefix = current_item.text()
-        self.current_selected_i = self.prefix_list.currentRow()
-        self.new_plot = True
-        self.refresh_data()
 
     def set_prefix(self):
         self.active_prefix = self.prefix_list.selectedItems()[0].text()
@@ -435,22 +431,8 @@ class GUI_main(QtWidgets.QMainWindow):
             ca.autoscale()
         self.FigCanvas1.fig.savefig(output_fn + '.png', dpi=300)
 
-        self.mark_complete(self.current_selected_i)
-        if not self.setup == 'Pinnacle':
-            self.load_next_callback()
 
-    def mark_complete(self, i, color='#50a3a4'):
-        self.prefix_list.item(i).setBackground(QtGui.QColor(color))
-
-    def load_next_callback(self):
-        self.current_selected_i += 1
-        current_item = self.prefix_list.item(self.current_selected_i)
-        self.active_prefix = current_item.text()
-        self.prefix_list.setCurrentItem(current_item)
-        self.new_plot = True
-        self.refresh_data()
-
-    def refresh_data(self, noplot=False):
+    def refresh_data(self):
         print(self.active_prefix)
         if self.setup == 'Soltesz':
             r = load_ephys(self.active_prefix)
@@ -466,23 +448,6 @@ class GUI_main(QtWidgets.QMainWindow):
             chstr = f'{r.active_channel}; {chi}/{len(r.channels)}'
             self.channel_name_label.setText(chstr + ' (Use Open to change channels)')
 
-        # get example trace
-        fs = int(self.get_field('fs'))
-        t_want = int(fs * 60 * float(self.get_field('PlotDur')))  # 10 minutes
-        print(t_want)
-        trace = r.trace
-        raw_trace = r.raw_trace
-        if len(trace) > t_want:
-            want_slice = slice(int(len(trace) / 2 - t_want / 2), int(len(trace) / 2 + t_want / 2))
-            trace = trace[want_slice]
-            if raw_trace is not None:
-                raw_trace = raw_trace[want_slice]
-        self.raw_trace = raw_trace
-        self.spikedet = SpikesPower.Detect(trace, fs=fs, lo=float(self.get_field('LoCut')),
-                                           hi=float(self.get_field('HiCut')))
-        self.set_field('Prefix', self.active_prefix)
-        if not noplot:
-            self.update_plot1()
 
 
 class SubplotsCanvas(FigureCanvasQTAgg):
