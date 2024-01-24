@@ -68,14 +68,28 @@ class Treadmill:
         self.laptimes = []
         self.laps = numpy.zeros(len(self.abspos), dtype='uint8')
         any_lap = False
-        for event in d.print_lines:
-            if 'lap_counter' in event:
-                any_lap = True
-                e_time = int(event.split(' ')[0])
-                e_idx = np.searchsorted(d.analog['pos'][:, 0], e_time)
-                if e_idx < len(self.abspos): #summary print at session end should be ignored
-                    self.lapends.append(e_idx)
-                    self.laptimes.append(e_time)
+        if hasattr(d, 'print_lines'):
+            for event in d.print_lines:
+                if 'lap_counter' in event:
+                    any_lap = True
+                    e_time = int(event.split(' ')[0])
+                    e_idx = np.searchsorted(d.analog['pos'][:, 0], e_time)
+                    if e_idx < len(self.abspos): #summary print at session end should be ignored
+                        self.lapends.append(e_idx)
+                        self.laptimes.append(e_time)
+        elif hasattr(d, 'variables_df'):
+            for _, event in d.variables_df.iterrows():
+                if not numpy.isnan(event[('values', 'lap_counter')]):
+                    any_lap = True
+                    e_time = event['time'] * 1000
+                    e_idx = np.searchsorted(d.analog['pos'][:, 0], e_time)
+                    #TODO this implementation is required for pycontrol >2.0.
+                    # test the unit of e_time matches analog on both 1.8 and 2.0 input data
+                    #old version was in ms, new is in sec
+                    assert False
+                    if e_idx < len(self.abspos): #summary print at session end should be ignored
+                        self.lapends.append(e_idx)
+                        self.laptimes.append(e_time)
         if any_lap:
             # find reset position, make that 0
             self.laplen = np.median(np.diff(self.abspos[self.lapends]))
