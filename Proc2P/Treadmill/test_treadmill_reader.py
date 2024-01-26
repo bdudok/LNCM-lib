@@ -25,9 +25,6 @@ for event in tm.print_lines:
         e_time = int(event.split(' ')[0])
         old_times.append(e_time)
 
-e_idx = np.searchsorted(tm.analog['pos'][:, 0], e_time)
-
-
 for _, event in tm_new.variables_df.iterrows():
     if not numpy.isnan(event[('values', 'lap_counter')]):
         e_time = event['time'].iloc[0]

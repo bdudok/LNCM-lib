@@ -2,7 +2,7 @@ import numpy
 from sklearn.neighbors import KernelDensity
 
 
-def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2, ret_raw_rate=False):
+def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2, ret_raw_rate=False, kde_bandwidth=0.3):
     '''
     Take a list of spike times (assuming sorted) and convert to a time series of inst spike rate
     :param spiketimes: array (s)
@@ -25,7 +25,7 @@ def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2, ret_raw
     # fitting a gaussian kernel on the event distribution.
     # higher value for bandwidth = more smoothing. the 1/3 sec works very well for
     #  approximating a rolling count of spikes within 1 sec
-    kde = KernelDensity(kernel='gaussian', bandwidth=.3).fit(spk_times.reshape(-1, 1))
+    kde = KernelDensity(kernel='gaussian', bandwidth=kde_bandwidth).fit(spk_times.reshape(-1, 1))
     inst_rate = numpy.exp(kde.score_samples(X.reshape(-1, 1)))[1:]  # this returns log prob density, so we exp it
     # calibrate to Hz. the returned probability density does not have units.
     mean_freq = len(spk_times) / (X[-1] - X[0])
@@ -58,8 +58,8 @@ def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2, ret_raw
             # determine if at least 5 spikes
             if spk_n[s:s1].sum() > 4:
                 # extend until it drops to 0
-                while inst_rate[s1 + 1] > 0.3 and s1 + 1 < slim:  ##0.3 to match the KDE bandwidth
-                    if s1 + fs < slim and inst_rate[int(s1 + fs)] > 0.3:
+                while inst_rate[s1 + 1] > kde_bandwidth and s1 + 1 < slim:  ##0.3 to match the KDE bandwidth
+                    if s1 + fs < slim and inst_rate[int(s1 + fs)] > kde_bandwidth:
                         # large step size prevents closing if another seizure starts soon
                         s1 += int(fs)
                     else:

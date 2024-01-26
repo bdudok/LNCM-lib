@@ -71,10 +71,10 @@ class Treadmill:
         if hasattr(d, 'print_lines'):
             for event in d.print_lines:
                 if 'lap_counter' in event:
-                    any_lap = True
                     e_time = int(event.split(' ')[0])
                     e_idx = np.searchsorted(d.analog['pos'][:, 0], e_time)
                     if e_idx < len(self.abspos): #summary print at session end should be ignored
+                        any_lap = True
                         self.lapends.append(e_idx)
                         self.laptimes.append(e_time)
         elif hasattr(d, 'variables_df'):
