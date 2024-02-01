@@ -27,7 +27,7 @@ def Seizures(a, w):
     return nonoverlap_from_list(a, w, event_frames, decay=int(a.CF.fps*0.2), eps=int(a.CF.fps), exclude_move=True)
 
 
-def masks_from_list(a, w, event_list):
+def masks_from_list(a, w, event_list, exclude_movement=False):
     '''return all masks from a custom event list'''
     events = numpy.array(event_list, dtype=numpy.int64)
     mask = numpy.empty((len(events), 2 * w))
@@ -42,6 +42,11 @@ def masks_from_list(a, w, event_list):
         w1 = i1 - current_frame
         # set actual indices
         mask[ri, w - w0:w + w1] = numpy.arange(current_frame - w0, current_frame + w1)
+    if exclude_movement:
+        speed_mask = numpy.nan_to_num(mask.astype('int16'))
+        mov_mask = a.pos.movement[speed_mask]
+        mov_mask[speed_mask == 0] = 0
+        mask[mov_mask] = numpy.nan
     return events, mask
 
 
