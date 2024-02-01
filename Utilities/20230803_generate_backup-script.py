@@ -42,9 +42,9 @@ $timespanF = new-timespan -days 10
 $timespanB = new-timespan -days 30
 if (((get-date) - $oldestFile.LastWriteTime) -gt $timespanF) {
     if (((get-date) - $latestBu.LastWriteTime) -gt $timespanB) {
-        mv ./10days/$oldestFile ./30days/
+        mv $oldestFile ./30days/
     }
-    else {rm ./10days/$oldestFile}
+    else {rm $oldestFile}
 }
 '''
 
@@ -72,7 +72,7 @@ ext_drive_name = 'LNCM1'
 if ext_drive_name in drive_names:
     dest_path = f'E:\ExtDrives/{ext_drive_name}/_Processed/'
     source_path = 'D:\Shares\Data\_Processed/'
-    dlist = ['2P/PVTot', '2P/SncgTot', '2P/SncgDREADD',
+    dlist = ['2P/PVTot', '2P/SncgTot', '2P/SncgDREADD', '2P/SncgOpto',
              '2P/JEDI', '2P/VADER', 'EEG/Tottering']
     for d in dlist:
         script_s += get_cmd(d)
