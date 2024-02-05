@@ -1,11 +1,15 @@
+import numpy
+
+import Proc2P
+from Proc2P import *
 from matplotlib.patches import Polygon
-from Proc2P.Bruker.ImagingSession import ImagingSession
+from Proc2P.Analysis.ImagingSession import ImagingSession
 import scipy
 from sklearn.metrics import mutual_info_score
 from sklearn import cluster
 from scipy.stats import binned_statistic
 from scipy.ndimage import gaussian_filter
-from CommonFunc import ewma
+
 
 
 
@@ -120,6 +124,7 @@ class Spatial:
         self.getdir()
         if not os.path.exists(self.dir):
             os.mkdir(self.dir)
+        self.set_pos('auto')
 
     def init_files(self, path, prefix, tag):
         self.path = path
@@ -148,7 +153,7 @@ class Spatial:
         bins = 9
         shuffle = 30
         a = self.session
-        wh = numpy.where(a.pos.gapless[100:-100])[0] + 100
+        wh = numpy.where(a.pos.movement[100:-100])[0] + 100
         x = a.pos.pos[wh]
         x = numpy.maximum(0, x)
         x = numpy.minimum(1, x / numpy.percentile(x, 99))
@@ -223,16 +228,14 @@ class Spatial:
             self.pos = numpy.load(pfn)
         else:
             if x == 'auto':
-                x = self.session.pos.pos
-                x = numpy.maximum(0, x)
-                x = numpy.minimum(1, x / numpy.percentile(x, 99))
+                x = self.session.pos.relpos
             self.pos = x
             numpy.save(pfn, x)
 
     def locmax(self, bins):
         '''hires estimation of max location with weighted distances'''
         rates = numpy.empty((bins, len(self.cells)))
-        wh = numpy.where(self.session.pos.gapless[100:-100])[0] + 100
+        wh = numpy.where(self.session.pos.movement[100:-100])[0] + 100
         x = self.pos[wh]
         binsize = 1.0 / bins
         for bi in range(bins):
@@ -254,12 +257,14 @@ class Spatial:
             rd = numpy.load(rdfn)
         else:
             rd = numpy.empty((len(self.cells), len(self.pos),))
+            rd[:] = numpy.nan
             # construct a LUT of cell loc, mouse pos and abs dist. (x: cell, y: mouse)
             lut = self.get_lut()
             # for each cell and frame, store lut value
             for ci, x in enumerate(self.loc):
                 for yi, yr in enumerate(self.pos):
-                    rd[ci, yi] = lut[x, int(yr * self.resolution)]
+                    if not numpy.isnan(yr):
+                        rd[ci, yi] = lut[x, int(yr * self.resolution)]
             numpy.save(rdfn, rd)
         self.cache['rd'] = rd
 
@@ -331,6 +336,8 @@ class Spatial:
                   where='run', overwrite=False, trim=100, norm_trace=False):
         '''distance dependent mean activity for all cells. Leave session and cells None to pull on current.
         pass session and index list to pull from matched cells in a second ImagingSession'''
+        if 'rd' not in self.cache:
+            self.reldist_array()
         if res is None:
             res = self.resolution
         if pull_session is None:
@@ -339,6 +346,7 @@ class Spatial:
             pull_cells = self.cells
         if save_tag is None:
             save_tag = 'self'
+        fps = self.session.fps
         nfn = f'{self.prefix}-{self.tag}-{self.setname}'
         hfn = self.dir + nfn + f'_{self.hash}'
         if trim == 100:
@@ -359,7 +367,7 @@ class Spatial:
                 rdfn = hfn + f'.binnedsignals-{param}-{res}-{save_tag}.npy'
             else:
                 if where == 'run':
-                    wh = numpy.where(self.session.pos.gapless[trim:-trim])[0] + trim
+                    wh = numpy.where(self.session.pos.movement[trim:-trim])[0] + trim
                 elif where == 'stop':
                     starts, stops = self.session.startstop()
                     wh = []
@@ -367,7 +375,7 @@ class Spatial:
                         wh.extend(numpy.arange(t + int(fps), min(t + int(5 * fps), self.session.ca.frames - 100)))
                     wh = numpy.array(wh)
                 elif where == 'immo':
-                    wh = numpy.where(numpy.logical_not(self.session.pos.gapless[trim:-trim]))[0] + trim
+                    wh = numpy.where(numpy.logical_not(self.session.pos.movement[trim:-trim]))[0] + trim
                 else:
                     wh = numpy.copy(where)
                     where = 'man'
@@ -494,7 +502,7 @@ class Spatial:
             ba = numpy.load(rdfn)
         else:
             if where == 'run':
-                wh = numpy.where(self.session.pos.gapless[100:-100])[0] + 100
+                wh = numpy.where(self.session.pos.movement[100:-100])[0] + 100
             Y = pull_session.getparam(param)
             laps = numpy.unique(self.session.pos.laps[wh])
             ba = numpy.empty((len(laps), len(pull_cells), res))
@@ -520,7 +528,7 @@ class Spatial:
 
     def pull_loc_rate(self, bins=50):
         a = self.session
-        wh = numpy.where(a.pos.gapless[100:-100])[0] + 100
+        wh = numpy.where(a.pos.movement[100:-100])[0] + 100
         x = a.pos.pos[wh]
         x = numpy.maximum(0, x)
         x = numpy.minimum(1, x / numpy.percentile(x, 99))
@@ -536,35 +544,6 @@ class Spatial:
                 rates[bi, ci] = numpy.average(a.ca.rel[c, wh], weights=weights)
         return rates
 
-# testing
-if __name__ == '__main__':
-    # match test
-    path = 'X:/Barna/ECB-Sncg/'
-    os.chdir(path)
-    prefix = 'ECB-Sncg_007_570'
-    cells_tag = 'R'
-
-    # init and save cells
-    a = ImagingSession(prefix, tag=cells_tag, ch=1)
-    s = Spatial()
-    s.init_session(a)
-    # s.det_PC()
-    # s.save_named_set('PC')
-
-    # init and load
-    # s = Spatial()
-    # s.init_files(path, prefix, cells_tag)
-    s.load_named_set('mPC')
-    s.set_pos()
-    s.pull_event_mean()
-
-    # # match test
-    # path = 'X:/Barna/ECB-Sncg/'
-    # os.chdir(path)
-    # prefix = 'ECB-Sncg_007_550'
-    # cells_tag = 'R'
-    # dil_tag = 'D'
-    # a = ImagingSession(prefix, tag=cells_tag, ch=1)
-    # b = ImagingSession(prefix, tag=dil_tag, ch=0)
-    # cells = numpy.where(a.qc())[0]
-    # c_a, c_b = match_cells(a, b, cells)
+# # testing
+# if __name__ == '__main__':
+#

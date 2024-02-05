@@ -79,8 +79,6 @@ class ImagingSession(object):
             self.ca.frames = self.si['n_frames']
         self.dualch = self.ca.is_dual
         self.has_behavior = False
-        # here, implement reading the behavior events from treamill.
-        # self.bdat = BehaviorSession(prefix + '.tdml', silent=True)
         self.map_pos()
 
         self.pltnum = 0
@@ -89,8 +87,6 @@ class ImagingSession(object):
         self.colors = {}
 
         self.preview = None
-
-        # implement reading the intensities in separate function
 
     def get_file_with_suffix(self, suffix):
         return os.path.join(self.path, self.prefix + suffix)
