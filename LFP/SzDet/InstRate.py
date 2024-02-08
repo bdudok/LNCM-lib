@@ -74,7 +74,7 @@ def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2, ret_raw
     #merge seizures
     merged_sz = []
     i = 0
-    while i < (len(sz)-1):
+    while i < len(sz):
         # print(f'checking sz {i}: {sz[i]}')
         j = i + 1
         t0 = sz[i][0]
@@ -85,7 +85,7 @@ def SpikeTrace(spiketimes, framesize:int, length=None, cleanup=5, gap=2, ret_raw
             j += 1
         if t1 - t0 > cleanup:
             #merge if any of the cluster members longer
-            for k in range(i, min(len(sz)-1, j+1)):
+            for k in range(i, min(len(sz), j+1)):
                 if sz[k][1] - sz[k][0] > cleanup:
                     merged_sz.append([t0,t1])
                     break
