@@ -5,6 +5,8 @@ class Ephys:
 
     def __init__(self, procpath, prefix, channel=1):
         epn = os.path.join(procpath, prefix, prefix + '_ephys.npy')
+        self.path = os.path.join(procpath, prefix, '')
+        self.prefix = prefix
         # print(epn)
         if os.path.exists(epn):
             self.edat = numpy.load(epn)

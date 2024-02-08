@@ -44,7 +44,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.savepath = savepath
         self.input_prefix = prefix_list
-        self.setup = setupID #'LNCM' or "Soltesz'
+        self.setup = setupID #'LNCM' or "Soltesz' or 'Pinnacle'
         # self.settings = QtCore.QSettings("pyqt_settings.ini", QtCore.QSettings.IniFormat)
         # self.settings.value("LastFile")
 
@@ -94,7 +94,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.result_fields = {}
         self.res_keys_sorted = ('Prefix', 'Spikes', 'Seizures', 'Sz.Duration')
         self.param_keys_sorted = ('LoCut', 'HiCut', 'Tr1', 'Tr2', 'TrDiff', 'Dur', 'Dist',
-                                  'Sz.MinDur', 'Sz.Gap', 'SzDet.Framesize', 'fs', 'PlotDur')
+                                  'Sz.MinDur', 'Sz.Gap', 'SzDet.Framesize', 'fs', 'PlotDur', 'Channel')
         self.param['LoCut'] = 4
         self.param['HiCut'] = 35
         self.param['Tr1'] = 2
@@ -107,6 +107,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.param['SzDet.Framesize'] = 50
         self.param['fs'] = 2000
         self.param['PlotDur'] = 10
+        self.param['Channel'] = 1
         if self.setup == 'Soltesz':
             self.param['fs'] = 10000
             self.param['SzDet.Framesize'] = 64
@@ -114,8 +115,7 @@ class GUI_main(QtWidgets.QMainWindow):
             self.param['SzDet.Framesize'] = 50
             self.param['fs'] = 2000
         if self.setup == 'Pinnacle':
-            self.param['Channel'] = 1
-            self.param_keys_sorted = (*self.param_keys_sorted, 'Channel',
+            self.param_keys_sorted = (*self.param_keys_sorted,
                                       'rejection_value', 'rejection_step', 'rejection_tail', 'rejection_factor')
         if self.user_defaults is not None:
             for key, value in self.user_defaults.items():
@@ -396,7 +396,8 @@ class GUI_main(QtWidgets.QMainWindow):
         elif self.setup == 'Pinnacle':
             output_fn = self.savepath + self.active_prefix + f'_Ch{self.get_field("Channel")}' + self.suffix
         elif self.setup == 'LNCM':
-            output_fn = os.path.join(self.savepath, self.active_prefix, self.active_prefix + self.suffix)
+            output_fn = os.path.join(self.savepath, self.active_prefix, self.active_prefix +
+                                     f'_Ch{self.get_field("Channel")}' + self.suffix)
         op_dict = {}
         for key in self.param_keys_sorted:
             op_dict[key] = self.get_field(key)
@@ -415,13 +416,15 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def process_callback(self):
         #process the whole trace using current settings
+        opts = {}
+        for key in self.param_keys_sorted:
+            opts[key] = self.get_field(key)
         if self.setup == 'Pinnacle':
-            opts = {}
-            for key in self.param_keys_sorted:
-                opts[key] = self.get_field(key)
             # tt = Process(target=ProcessSeizures, args=(self.edf, opts))
             # tt.start()
-            ProcessSeizures(self.edf, opts)
+            ProcessSeizures(self.edf, opts, format='edf')
+        elif self.setup == 'LNCM':
+            ProcessSeizures(self.ephys, opts, format='ephys', save_envelope=True)
 
     def mark_complete(self, i, color='#50a3a4'):
         self.prefix_list.item(i).setBackground(QtGui.QColor(color))
@@ -439,7 +442,9 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.setup == 'Soltesz':
             r = load_ephys(self.active_prefix)
         elif self.setup == 'LNCM':
-            r = LoadEphys.Ephys(self.savepath, self.active_prefix)
+            chi = int(self.get_field('Channel'))
+            r = LoadEphys.Ephys(self.savepath, self.active_prefix, channel=chi)
+            self.ephys = r
         elif self.setup == 'Pinnacle':
             r = ReadEDF.EDF(self.savepath, self.active_prefix, rejection_ops=self.param)
             self.param['fs'] = r.fs
@@ -451,14 +456,19 @@ class GUI_main(QtWidgets.QMainWindow):
             self.edf = r
         #get example trace
         fs = int(self.get_field('fs'))
-        t_want = int(fs * 60 * float(self.get_field('PlotDur'))) #10 minutes
-        print(t_want)
+        plotdur = self.get_field('PlotDur')
         trace = r.trace
-        raw_trace = r.raw_trace
-        if len(trace) > t_want:
-            want_slice = slice(int(len(trace)/2 - t_want/2), int(len(trace)/2 + t_want/2))
-            trace = trace[want_slice]
-            raw_trace = raw_trace[want_slice]
+        if hasattr(r, 'raw_trace'):
+            raw_trace = r.raw_trace
+        else:
+            raw_trace = None
+        if plotdur != 'all':
+            t_want = int(fs * 60 * float(plotdur)) #10 minutes
+            print(t_want)
+            if len(trace) > t_want:
+                want_slice = slice(int(len(trace)/2 - t_want/2), int(len(trace)/2 + t_want/2))
+                trace = trace[want_slice]
+                raw_trace = raw_trace[want_slice]
         self.raw_trace = raw_trace
         self.spikedet = SpikesPower.Detect(trace, fs=fs, lo=float(self.get_field('LoCut')),
                                                          hi=float(self.get_field('HiCut')))
