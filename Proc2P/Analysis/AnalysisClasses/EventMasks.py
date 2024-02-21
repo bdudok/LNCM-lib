@@ -14,8 +14,8 @@ def PhotoStimTrain(a, w):
     event_frames = numpy.load(a.get_file_with_suffix('_photostim_trains.npy'))
     return masks_from_list(a, w, event_frames)
 
-def LFPSpikes(a, w):
-    df = read_excel(a.get_file_with_suffix('_spiketimes.xlsx'))
+def LFPSpikes(a, w, ch=1):
+    df = read_excel(a.get_file_with_suffix(f'Ch{ch}_spiketimes.xlsx'))
     st = df['SpikeTimes(s)'].values
     event_frames = [a.timetoframe(x) for x in st]
     return nonoverlap_from_list(a, w, event_frames, decay=int(a.CF.fps*0.2), eps=int(a.CF.fps), exclude_move=True)

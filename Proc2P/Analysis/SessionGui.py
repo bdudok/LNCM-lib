@@ -66,6 +66,26 @@ class Gui(ImagingSession):
         #     self.licktrigger(param=graph_param)
         if hasattr(self, 'ripples'):
             self.rippletrigger()
+        if self.kwargs.get('show_spiketimes', False):
+            self.map_spiketimes()
+            length = int(2*self.fps)
+            self.ripplerates = numpy.zeros((length, self.ca.cells, len(self.spiketime_channels)))
+            for sch in range(len(self.spiketime_channels)):
+                nzr = []
+                for t in self.spiketimes[sch]:
+                    if t > 100 and t < self.ca.frames - 100:
+                        if not self.pos.movement[t]:
+                            nzr.append(t)
+                    for c in range(self.ca.cells):
+                        brmean = numpy.zeros((len(nzr), length))
+                        for i, frame in enumerate(nzr):
+                            y = graph_param[c][frame - int(length / 2):frame + int(length / 2)]
+                            brmean[i, :] = y
+                        brmean = numpy.nanmean(brmean, axis=0)
+                        brmean -= brmean.min()
+                        brmean /= brmean.max()
+                        self.ripplerates[:, c, sch] = brmean
+
         if hasattr(self, 'opto_ints'):
             vals = self.opto_ints[self.opto]
             if numpy.var(vals) > 0.1:
@@ -280,6 +300,11 @@ class Gui(ImagingSession):
             if hasattr(self, 'opto_ints'):
                 o = self.opto_ints
             axspeed.plot(o, color=self.colors['opto'], label='light', alpha=0.8)
+        if hasattr(self, 'spiketimes'):
+            rcols = ('red', 'green', 'violet')
+            for sch, spktimes in zip(self.spiketime_channels, self.spiketimes):
+                for t in spktimes:
+                    axspeed.axvline(t - 0.5, color=rcols[sch-1])
         if hasattr(self, 'ripples'):
             for t in self.ripple_frames:
                 axspeed.axvline(t - 0.5, color=ripcol)
@@ -301,11 +326,15 @@ class Gui(ImagingSession):
         l_run, = axrun.plot(self.speedrates[:, self.activecell], label='cell')
         if hasattr(self, 'ripples'):
             l_rpl, = axrpl.plot(self.ripplerates[:, self.activecell], label='Ripple')
+        if hasattr(self, 'spiketimes'):
+            rcols = ('red', 'green', 'violet')
+            for schi, sch in enumerate(self.spiketime_channels):
+                l_rpl, = axrpl.plot(self.ripplerates[:, self.activecell, schi], label=f'Ch{sch}', color=rcols[sch-1])
         if self.using_laps:
             axlap.imshow(self.perlap_fields[:, self.activecell, :].transpose(), cmap='inferno_r', vmin=0)
         # for ax in [axspike, axtrace, axspeed, axpos]:
         #     ax.myvline = ax.axvline(self.active_frame, color='#790000')
-        for ax in [axspeed, axrun, ]: #axrpl
+        for ax in [axspeed, axrun, axrpl]:
             ax.legend(loc='upper right', framealpha=self.colors['legendalpha'])
         # axpol.myvline = axpol.axvline(-self.pos.relpos[self.active_frame] * 6.28319, color='#790000')
         axrpl.myvline = axrpl.axvline(CF.fps, color='black')
@@ -354,6 +383,12 @@ class Gui(ImagingSession):
                         axspike.fill_between(xvals, numpy.nanmin(plot_y_val), plot_y_val,
                                              where=wh_opto, facecolor=self.colors['opto'], interpolate=True, alpha=0.8,
                                              label='stim')
+            if hasattr(self, 'spiketimes'):
+                rcols = ('red', 'green', 'violet')
+                for sch, spktimes in zip(self.spiketime_channels, self.spiketimes):
+                    for t in spktimes:
+                        axtrace.axvline(t - 0.5, color=rcols[sch-1])
+                        # axspike.axvline(t - 0.5, color=rcols[sch])
             if hasattr(self, 'ripples'):
                 for t in self.ripple_frames:
                     axtrace.axvline(t - 0.5, color=ripcol)

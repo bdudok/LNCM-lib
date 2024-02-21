@@ -37,7 +37,7 @@ class Pos:
 class ImagingSession(object):
     __name__ = 'ImagingSession'
 
-    def __init__(self, procpath, prefix, tag=None, norip=False, opath='.', ch=0,
+    def __init__(self, procpath, prefix, tag=None, norip=True, opath='.', ch=0,
                  ripple_tag=None, lfp_ch=1, **kwargs):
         self.opath = opath
         self.prefix = prefix
@@ -70,6 +70,7 @@ class ImagingSession(object):
         if (not norip) and self.has_ephys:
             self.ripple_tag = ripple_tag
             self.map_ripples()
+        # self.map_spiketimes()
 
         # map video
         self.eye = None  # implement later
@@ -195,6 +196,26 @@ class ImagingSession(object):
     def map_phys(self):
         self.ephys = Ephys(self.procpath, self.prefix, channel=self.lfp_ch)
         self.has_ephys = self.ephys.trace is not None
+
+    def map_spiketimes(self):
+        '''
+        Load existing spiketime excel files and convert to frames
+        '''
+        suffix = '_spiketimes.xlsx'
+        stfield = 'SpikeTimes(s)'
+        n_channels = self.ephys.edat.shape[0] - 1
+        fs = self.si.info['fs']
+        self.spiketime_channels = []
+        self.spiketimes = []
+        for i in range(n_channels):
+            fname = self.get_file_with_suffix(f'_Ch{i+1}{suffix}')
+            if os.path.exists(fname):
+                self.spiketime_channels.append(i+1)
+                stdat = read_excel(fname)
+                self.spiketimes.append(self.ephys.edat[0, (stdat[stfield].values * fs).astype('int64')])
+
+
+
 
     def map_ripples(self):
         # self.ripples = Ripples(self.prefix, tag=self.ripple_tag, strict_tag=True, )
