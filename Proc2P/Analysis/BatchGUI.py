@@ -101,7 +101,8 @@ class App:
             # assert False
             ls[hash] = session_Gui(self.filelist.wdir, prefix, tag=tag, norip=norip, ch=ch,
                                    show_placefields=self.pltconfigs.config['ShowPlaceFields'].get(),
-                                   show_spiketimes=self.pltconfigs.config['ShowSpikeTimes'].get()
+                                   show_spiketimes=self.pltconfigs.config['ShowSpikeTimes'].get(),
+                                   show_sz=self.pltconfigs.config['ShowSeizureTimes'].get()
                                    )# ephys_channels=epc)
             lu.append(hash)
         return ls[hash]
@@ -176,7 +177,7 @@ class Cfg:
         # STUFF IN SECOND COLUMN
 
         Label(self.frame, text='Units plot').grid(row=self.second_row(), column=1, pady=10)
-        for text in ('ShowRipples', 'ShowPlaceFields', 'ShowSpikeTimes'):
+        for text in ('ShowRipples', 'ShowPlaceFields', 'ShowSpikeTimes', 'ShowSeizureTimes'):
             self.config[text] = IntVar()
             Checkbutton(self.frame, text=text, variable=self.config[text]).grid(row=self.second_row(), column=1, sticky=W)
             self.config[text].set(0)

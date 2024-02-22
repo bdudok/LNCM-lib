@@ -214,7 +214,23 @@ class ImagingSession(object):
                 stdat = read_excel(fname)
                 self.spiketimes.append(self.ephys.edat[0, (stdat[stfield].values * fs).astype('int64')])
 
-
+    def map_seizuretimes(self):
+        '''
+        Load existing spiketime excel files and convert to frames
+        '''
+        suffix = '_seizure_times.xlsx'
+        stfield = ('Sz.Start(s)', 'Sz.Stop(s)')
+        n_channels = self.ephys.edat.shape[0] - 1
+        fs = self.si.info['fs']
+        self.sztime_channels = []
+        self.sztimes = []
+        for i in range(n_channels):
+            fname = self.get_file_with_suffix(f'_ch{i+1}{suffix}')
+            if os.path.exists(fname):
+                self.sztime_channels.append(i+1)
+                stdat = read_excel(fname)
+                sztimes = [self.ephys.edat[0, (stdat[x].values * fs).astype('int64')] for x in stfield]
+                self.sztimes.append(sztimes)
 
 
     def map_ripples(self):
@@ -417,8 +433,9 @@ class ImagingSession(object):
             self.perlap_fields = numpy.zeros((bins, self.ca.cells, nl))
             for l in range(nl):
                 lap = numpy.where(self.pos.laps == l)[0]
-                self.pull_means(param, (lap[0], lap[-1]))
-                self.perlap_fields[:, :, l] = self.rates[self.pltnum]
+                if len(lap) > 1:
+                    self.pull_means(param, (lap[0], lap[-1]))
+                    self.perlap_fields[:, :, l] = self.rates[self.pltnum]
         if not silent:
             fig = plt.figure(self.pltnum)
             self.pltnum += 1
