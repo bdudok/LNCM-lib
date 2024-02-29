@@ -1,4 +1,6 @@
 import json
+
+import numpy
 import requests
 import pandas
 from BaserowAPI.config import config
@@ -6,15 +8,16 @@ from BaserowAPI.config import config
 '''download mouse, incjection, window, and immuno data from LG,
 build a list of mice that contains the procedures done on them'''
 
-#labguru API token. Expires in 30 days. Request a new one if necessary and paste here.
+# labguru API token. Expires in 30 days. Request a new one if necessary and paste here.
 lg_api_token = "8a7e4cb392f54c19f159510279b513eab3e60e4b"
 # lg_api_token = config["lg_token"]
 
-#get list of mice from LG
-pagesize=100
+# get list of mice from LG
+pagesize = 100
 mice_lg = []
 next_page = 1
 while next_page:
+    print('Reading mice, page', next_page)
     resp = requests.get(f'{config["lg_mice_url"]}?token={lg_api_token}',
                         params={'page_size': pagesize, 'page': next_page})
     rjs = resp.json()
@@ -25,30 +28,16 @@ while next_page:
         next_page += 1
 
 mice_lg = pandas.concat(mice_lg)
-print('Got mouse list from LabGuru')
 
-#get list of injections
-resp = requests.get(f'{config["lg_protocol_url"]}?token={lg_api_token}',)
+# get list of injections
+resp = requests.get(f'{config["lg_protocol_url"]}?token={lg_api_token}', )
 rjs = resp.json()
 protocols = pandas.DataFrame(rjs)
 injection_prot_names = ('AAV injection',)
 inj_prot = protocols.loc[protocols['name'].isin(injection_prot_names)]
 
-def json_find_keys(item, search_key):
-    out_list = []
-    jtext = json.dumps(item, indent=2)
-    for line in jtext.split('\n'):
-        if search_key in line:
-            try:
-                item = line.split('": ')[1]
-                out_list.append(item.split('"')[1])
-            except:
-                print('Not parsed:', line)
-    return out_list
-
-#get list of experiments associated with injections
+# get list of experiments associated with injections
 experiments = {}
-exp_uuids = {}
 for _, inj in inj_prot.iterrows():
     resp = requests.get(f'{config["lg_api_root"]}{inj["api_url"]}?token={lg_api_token}', )
     rjs = resp.json()
@@ -57,41 +46,73 @@ for _, inj in inj_prot.iterrows():
         # resp = requests.get(f'{config["lg_api_root"]}/api/v1/experiments?uuid={uuid}&token={lg_api_token})
         resp = requests.get(f'{config["lg_api_root"]}api/v1/experiments?uuid={uuid}',
                             params={'token': lg_api_token})
-        exp = resp.json()
-        experiments[uuid] = exp
-        linked_uuids = json_find_keys(exp, '"uuid"')
-        exp_uuids[uuid] = linked_uuids
+        for exp in resp.json():
+            experiments[exp["id"]] = exp
+print(f'Got {len(links)} injection experiments')
+
+# get samples - these are entries that represent library elements (mouse, virus) linked to experiments
+next_page = 1
+samples_jsons = {}
+exp_samples = {}
+while next_page:
+    print('Reading samples, page', next_page)
+    resp = requests.get(f'{config["lg_api_root"]}api/v1/samples',
+                        params={'token': lg_api_token, 'page_size': pagesize, 'page': next_page})
+    rjs = resp.json()
+    if len(rjs) < pagesize:
+        next_page = False
+    else:
+        next_page += 1
+    for sample in rjs:
+        sid = sample["item_id"]
+        if sid not in exp_samples:
+            exp_samples[sid] = []
+        if sid not in samples_jsons:
+            samples_jsons[sid] = []
+        exp_samples[sid].append(sample["experiment_id"])
+        samples_jsons[sid].append(sample)
+
+# create mouse output table
+m_in = mice_lg.dropna(how='all', axis=1)
+for _, m in m_in.iterrows():
+    m['owner'] = m['owner']['name']
+primary_columns = ['name', 'DOB', 'Strain', 'Sex', 'Status', 'End date', 'Note', 'owner', 'id', 'sys_id', 'SourceCage',
+                   'SourceID', 'created_at', 'tags']
+m_out = pandas.DataFrame()
+additional_columns = []
+for col in m_in.columns:
+    if col.startswith('custom'):
+        continue
+    if not any(m_in[col].astype('bool')):
+        continue
+    if col not in primary_columns:
+        additional_columns.append(col)
+m_out = m_in[primary_columns]
+m_out.columns = pandas.MultiIndex.from_product([["Mouse Data"], m_out.columns])
+print('Formatted output spreadsheet')
+
+# iterate through samples, and add experiment info to each included mouse
+for sid, expids in exp_samples.items():
+    # check if this sample is a mouse
+    is_mouse = False
+    for sample in samples_jsons[sid]:
+        is_mouse = sample['container']['name'] == 'Mice'
+    if is_mouse:
+        assert False
+        m_out.loc[m_out[:, ["Mouse Data", "id"]] == sample['id']]
+    # check if the sample is an injection
+    for expid in expids:
+        if expid in experiments and is_mouse:
+            print(sample)
 
 
-#mice with injection exps:
-for uuid, links in exp_uuids.items():
-    linked_mice = mice_lg.loc[mice_lg['uuid'].isin(links)]
-    if not len(linked_mice):
-        # alert for injections without linked mice:
-        print(experiments[uuid][0]['title'], 'has no linked mice')
-        # print(experiments[uuid]['name'], linked_mice['name'])
 
 
 
-    # resp = requests.get(f'{config["lg_api_root"]}{"073274d3-4a29-4898-8f7b-9a75df7b7414"}?token={lg_api_token}', )
 
-# # put new mouse in BR
-# for mouse in diff_mouse:
-#     m = mice_lg.loc[mice_lg['name'] == mouse].iloc[0]
-#     j = {
-#                 "Mouse.ID": m['name'],
-#                 "System ID": m['sys_id'],
-#                 "Owner": m['owner']['name'],
-#                 "Created at": m['created_at'],
-#                 "Tags": m['tags'],
-#                 "Strain*": m['Strain'],
-#                 "MouseSource*": m['MouseSource'],
-#                 "SourceCage": m['SourceCage'],
-#                 "SourceID": m['SourceID'],
-#                 "DOB*": m['DOB'],
-#                 "Note": m['Note'],
-#                 "Sex*": m['Sex'],
-#                 "Status*": m['Status'],
-#                 "End date": m['End date'],
-#                 "NextTask": m['NextTask'],
-#         }
+
+#add remaining columns from labguru Mice collection
+for col in additional_columns:
+    m_out[pandas.MultiIndex.from_product([["Additional LabGuru Data"], additional_columns])] = m_in[additional_columns]
+
+
