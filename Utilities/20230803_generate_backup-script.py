@@ -68,6 +68,7 @@ for drive_letter in drive_list:
     drive_names[win32api.GetVolumeInformation(drive_letter)[0]] = drive_letter
 
 #processed data forders to LNCM1
+#update LabGuru when changing what's backed up on disk
 ext_drive_name = 'LNCM1'
 if ext_drive_name in drive_names:
     dest_path = f'E:\ExtDrives/{ext_drive_name}/_Processed/'
@@ -79,12 +80,13 @@ if ext_drive_name in drive_names:
 
 #After OneDrive is expanded, also back up Processed there:
 dest_path = 'OneDrive:_ProcessedData/'
-# source_path = 'D:\Shares\Data\_Processed/'
-# dlist = ['2P',]
+source_path = 'D:\Shares\Data\_Processed/'
+dlist = ['2P', 'EEG']
 for d in dlist:
     script_s += get_cmd(d)
 
 #raw 2P data to LNCM2
+#update LabGuru when changing what's backed up on disk
 ext_drive_name = 'LNCM2'
 if ext_drive_name in drive_names:
     dest_path = f'E:\ExtDrives/{ext_drive_name}/_RawData/'
@@ -97,11 +99,11 @@ if ext_drive_name in drive_names:
 #... when have more recs
 
 #DSI revision analysis to OneDrive
-dest_path = 'OneDrive:Documents/_projects/2023-DSI/Revision_analysis/'
-source_path = 'D:\Shares\Data\old_2P\DLX-ECB\PlaceFieldPlots/'
-dlist = ['Revision']
-for d in dlist:
-    script_s += get_cmd(d)
+# dest_path = 'OneDrive:Documents/_projects/2023-DSI/Revision_analysis/'
+# source_path = 'D:\Shares\Data\old_2P\DLX-ECB\PlaceFieldPlots/'
+# dlist = ['Revision']
+# for d in dlist:
+#     script_s += get_cmd(d)
 
 
 with open(script_handle, 'w') as f:

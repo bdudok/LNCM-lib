@@ -98,12 +98,14 @@ for sid, expids in exp_samples.items():
     for sample in samples_jsons[sid]:
         is_mouse = sample['container']['name'] == 'Mice'
     if is_mouse:
-        assert False
-        m_out.loc[m_out[:, ["Mouse Data", "id"]] == sample['id']]
+        this_mouse = m_out.loc[m_out[("Mouse Data", "id")] == sid].iloc[0]
+        #make sure that the id links to the correct mouse
+        assert this_mouse[("Mouse Data", "name")] == sample["name"]
     # check if the sample is an injection
     for expid in expids:
         if expid in experiments and is_mouse:
-            print(sample)
+            this_exp = experiments[expid]
+            #TODO get viruses that are linked, add date and name to output
 
 
 

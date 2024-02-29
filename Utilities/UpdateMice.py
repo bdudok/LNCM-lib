@@ -3,8 +3,8 @@ import requests
 import pandas
 from BaserowAPI.config import config
 
-#labguru API token. Expires in 30 days. Request a new one if necessary and paste here.
-lg_api_token = "c0aa7d060d092ca76324001e5326950f38b6f9d3"
+#labguru API token. Expires in 30 days. Request a new one if necessary (response:401) and paste here.
+lg_api_token = "8a7e4cb392f54c19f159510279b513eab3e60e4b"
 # lg_api_token = config["lg_token"]
 
 #get list of mice from LG
