@@ -13,7 +13,7 @@ from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Bruker.LoadEphys import Ephys
 from LFP import Filter
 from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel
-# from Ripples import Ripples
+from Proc2P.Analysis.Ripples import Ripples
 import time
 from scipy import stats
 
@@ -31,7 +31,8 @@ class Pos:
             self.relpos = numpy.maximum(0, self.pos - numpy.nanpercentile(self.pos, 1))
             self.relpos = numpy.minimum(1, self.relpos / numpy.nanpercentile(self.relpos, 99))
         else:
-            self.relpos = self.pos / numpy.nanmax(self.pos)
+            if self.pos is not None:
+                self.relpos = self.pos / numpy.nanmax(self.pos)
 
 
 class ImagingSession(object):
@@ -56,13 +57,17 @@ class ImagingSession(object):
         # load polygons, option to access image data
         self.rois = FrameDisplay(procpath, prefix, tag=tag, lazy=True)
 
-        # load processed tracces
+        # load processed traces
         self.ca = CaTrace(procpath, prefix, tag=tag, ch=ch)
         self.ca.load()
         self.ftimes = numpy.load(self.get_file_with_suffix('_FrameTimes.npy'))
 
         # load photostimulation if available:
         self.map_opto()
+
+        #load treadmill speed
+        self.has_behavior = False
+        self.map_pos()
 
         # map ephys
         self.lfp_ch = lfp_ch
@@ -79,8 +84,6 @@ class ImagingSession(object):
         if tag == 'skip':
             self.ca.frames = self.si['n_frames']
         self.dualch = self.ca.is_dual
-        self.has_behavior = False
-        self.map_pos()
 
         self.pltnum = 0
         self.zscores = {}
@@ -234,38 +237,68 @@ class ImagingSession(object):
 
 
     def map_ripples(self):
-        # self.ripples = Ripples(self.prefix, tag=self.ripple_tag, strict_tag=True, )
-        # store power per frame in files (or load if already exists)
-        nframes = self.ca.frames
         fs = self.si['fs']
+        self.ripples = Ripples(self.procpath, self.prefix, tag=self.ripple_tag, strict_tag=True,
+                               ephys_channel=self.lfp_ch, fs=fs)
+        nframes = self.ca.frames
+        frs = []
+        for e in self.ripples.events:
+            f = self.sampletoframe(e.p[0])
+            if f < nframes and f not in frs:
+                if not self.pos.movement[f]:
+                    frs.append(f)
+        frs.sort()
+        self.ripple_frames = numpy.array(frs)
+        #store power per frame in files (or load if already exists)
+
         keys = ('ripple_power', 'theta_power', 'hf_power')
         bands = ('ripple', 'theta', 'HF')
-        path = os.path.join(self.path, 'ephys/')
-        if not os.path.exists(path):
-            os.mkdir(path)
-        cfn = path + keys[0] + f'{self.lfp_ch}.npy'
+        power_getter = {'ripple': 'envelope', 'theta': 'theta', 'HF': None}
+        path = self.ripples.path
         # later extend this to use multiple channels
-        if os.path.exists(cfn):
-            for key in keys:
+        for band, key in zip(bands, keys):
+            cfn = path + key + '.npy'
+            if os.path.exists(cfn):
                 setattr(self.ephys, key, numpy.load(path + key + '.npy'))
-        else:
-            lprint(self, 'Creating ripple power files...')
-            filt = Filter.Filter(self.ephys.edat[1], fs)
-            for band, key in zip(bands, keys):
-                power = numpy.zeros(nframes)
-                locut, hicut = self.CF.bands[band]
-                ftr, envelope = filt.run_filt(filt.gen_filt(locut, hicut))
-                numpy.save(path + key + '_filtered.npy', numpy.array([ftr, envelope]))
+            else:
+                lprint(self, f'Saving {band} power file ...')
+                filt = Filter.Filter(self.ephys.trace, fs)
+                frame_power = numpy.zeros(nframes)
+                power_key = power_getter[band]
+                if power_key is not None:
+                    envelope = getattr(self.ripples, power_key)
+                else:
+                    locut, hicut = self.CF.bands[band]
+                    ftr, envelope = filt.run_filt(filt.gen_filt(locut, hicut))
                 t0, f = 0, 0
                 for t1, s in enumerate(self.ephys.frames):
                     if s > f:
                         if f < nframes:
-                            power[f] = envelope[t0:t1].mean()
+                            frame_power[f] = envelope[t0:t1].mean()
                             t0 = t1
                             f += 1
-                setattr(self.ephys, key, power)
-                numpy.save(path + key + '.npy', power)
-            lprint(self, 'power measured in bands: ' + str(bands))
+                setattr(self.ephys, key, frame_power)
+                numpy.save(cfn, frame_power)
+        lprint(self, f'power available in bands: ' + str(bands))
+
+    def rippletrigger(self, param=None, ch=0):
+        # plot averaged time course ripp triggered. using channel
+        if param is None:
+            param = self.getparam('ntr')
+            if self.dualch:
+                param = param[..., ch]
+        length = int(self.fps)
+        nzr = self.ripple_frames
+        self.ripplerates = numpy.zeros((length, self.ca.cells))
+        for c in range(self.ca.cells):
+            brmean = numpy.zeros((len(nzr), length))
+            for i, frame in enumerate(nzr):
+                y = param[c][frame - int(length / 2):frame + int(length / 2)]
+                brmean[i, :] = y
+            brmean = numpy.nanmean(brmean, axis=0)
+            brmean -= brmean.min()
+            brmean /= brmean.max()
+            self.ripplerates[:, c] = brmean
 
     def pull_means(self, param, span, cells=None):
         # return mean of param in the bins of self.bin
@@ -504,20 +537,8 @@ class ImagingSession(object):
 
 
 if __name__ == '__main__':
-    path = 'D:/Shares/Data/_Processed/2P/SncgTot/'
-    prefix = 'SncgTot4_2023-11-09_LFP_001'
-    tag = 'checked'
-    a = ImagingSession(path, prefix, tag=tag, ch=0)
-
-    # e = Ephys(a.procpath, a.prefix)
-    # trace = e.edat[1]
-    # r = Filter.Filter(trace, 2000)
-    # a.map_ripples()
-
-    # fig, ax = plt.subplots(nrows=3, sharex=True)
-    # ax[0].imshow(a.ca.smtr, aspect='auto')
-    # ax[0].set_ylabel('DF/F')
-    # ax[1].plot(a.pos.speed)
-    # ax[1].set_ylabel('Speed (cm/s)')
-    # ax[2].plot(a.opto)
-    # ax[2].set_ylabel('Opto stim')
+    procpath = 'D:\Shares\Data\_Processed/2P\JEDI/'
+    prefix = 'JEDI-PV16_2024-03-05_Movie_032'
+    tag = '1'
+    a = ImagingSession(procpath, prefix, tag=tag, ch=0, norip=False)
+    print(a.fps)

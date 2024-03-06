@@ -10,6 +10,8 @@ config = {
       'InclTag': 4519,
       'Project': 4637
   },
+  "lg_api_root": "https://my.labguru.com/",
   "lg_mice_url": "https://my.labguru.com/api/v1/biocollections/Mice",
+  "lg_protocol_url": "https://my.labguru.com/api/v1/protocols",
 }
 #api_token is read-only token with Barna account
