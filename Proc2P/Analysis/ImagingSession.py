@@ -290,15 +290,17 @@ class ImagingSession(object):
         length = int(self.fps)
         nzr = self.ripple_frames
         self.ripplerates = numpy.zeros((length, self.ca.cells))
+        brmean = numpy.empty((len(nzr), length))
         for c in range(self.ca.cells):
-            brmean = numpy.zeros((len(nzr), length))
+            brmean[:] = numpy.nan
             for i, frame in enumerate(nzr):
-                y = param[c][frame - int(length / 2):frame + int(length / 2)]
-                brmean[i, :] = y
-            brmean = numpy.nanmean(brmean, axis=0)
-            brmean -= brmean.min()
-            brmean /= brmean.max()
-            self.ripplerates[:, c] = brmean
+                if (length < frame < (self.ca.frames - length)):
+                    y = param[c][frame - int(length / 2):frame + int(length / 2)]
+                    brmean[i, :] = y
+            brflat = numpy.nanmean(brmean, axis=0)
+            brflat -= brflat.min()
+            brflat /= brflat.max()
+            self.ripplerates[:, c] = brflat
 
     def pull_means(self, param, span, cells=None):
         # return mean of param in the bins of self.bin
@@ -538,7 +540,7 @@ class ImagingSession(object):
 
 if __name__ == '__main__':
     procpath = 'D:\Shares\Data\_Processed/2P\JEDI/'
-    prefix = 'JEDI-PV16_2024-03-05_Movie_032'
+    prefix = 'JEDI-PV16_2024-03-05_Fast_034'
     tag = '1'
     a = ImagingSession(procpath, prefix, tag=tag, ch=0, norip=False)
     print(a.fps)

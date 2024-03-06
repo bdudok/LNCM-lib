@@ -389,8 +389,8 @@ class Gui(ImagingSession):
                         axtrace.axvspan(t0, t1, color=rcols[sch - 1], alpha=0.5)
             if hasattr(self, 'ripples'):
                 for t in self.ripple_frames:
-                    axtrace.axvline(t - 0.5, color=ripcol)
-                    axspike.axvline(t - 0.5, color=ripcol)
+                    axtrace.axvline(t - 0.5, color=ripcol, zorder=-1)
+                    axspike.axvline(t - 0.5, color=ripcol, zorder=-1)
             # for ax in [axspike, axtrace]:
             #     ax.legend(loc='upper right', framealpha=self.colors['legendalpha'])
             # l_pol.set_ydata(self.polar(self.graph_param))
@@ -626,11 +626,11 @@ class Gui(ImagingSession):
                     axr.axvline(t - 0.5, color='black')
                     axf.axvline(t - 0.5, color='black')
             if hasattr(self.ripples, 'theta'):
-                rpsm = pandas.DataFrame(self.theta_power).ewm(span=3).mean()
+                rpsm = pandas.DataFrame(self.ephys.theta_power).ewm(span=3).mean()
                 rpsm -= rpsm.min()
                 rpsm /= rpsm.max()
                 axs.plot(rpsm, label='ThetaPower', alpha=0.8)
-            rpsm = pandas.DataFrame(self.ripple_power).ewm(span=3).mean()
+            rpsm = pandas.DataFrame(self.ephys.ripple_power).ewm(span=3).mean()
             rpsm -= rpsm.min()
             rpsm /= rpsm.max()
             axs.plot(rpsm, label='RipplePower', alpha=0.8)
