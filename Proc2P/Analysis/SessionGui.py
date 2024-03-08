@@ -289,7 +289,7 @@ class Gui(ImagingSession):
             rcols = ('red', 'green', 'violet')
             for sch, spktimes in zip(self.spiketime_channels, self.spiketimes):
                 for t in spktimes:
-                    axspeed.axvline(t - 0.5, color=rcols[sch-1])
+                    axspeed.axvline(t - 0.5, color=rcols[sch-1], zorder=-1)
         if hasattr(self, 'sztimes'):
             rcols = ('red', 'green', 'violet')
             for sch, spktimes in zip(self.sztime_channels, self.sztimes):
@@ -300,7 +300,7 @@ class Gui(ImagingSession):
                 self.spiketime_channels = self.sztime_channels
         if hasattr(self, 'ripples'):
             for t in self.ripple_frames:
-                axspeed.axvline(t - 0.5, color=ripcol)
+                axspeed.axvline(t - 0.5, color=ripcol, zorder=-1)
             if hasattr(self.ripples, 'theta'):
                 rpsm = pandas.DataFrame(self.ephys.theta_power).ewm(span=3).mean()
                 rpsm -= rpsm.min()
@@ -380,7 +380,7 @@ class Gui(ImagingSession):
                 rcols = ('red', 'green', 'violet')
                 for sch, spktimes in zip(self.spiketime_channels, self.spiketimes):
                     for t in spktimes:
-                        axtrace.axvline(t - 0.5, color=rcols[sch-1])
+                        axtrace.axvline(t - 0.5, color=rcols[sch-1], zorder=-1)
                         # axspike.axvline(t - 0.5, color=rcols[sch])
             if hasattr(self, 'sztimes'):
                 rcols = ('red', 'green', 'violet')
@@ -640,7 +640,7 @@ class Gui(ImagingSession):
             for sch, spktimes in zip(self.spiketime_channels, self.spiketimes):
                 for t in spktimes:
                     for axx in (axr, axs):
-                        axx.axvline(t - 0.5, color=rcols[sch-1])
+                        axx.axvline(t - 0.5, color=rcols[sch-1], zorder=-1)
         if hasattr(self, 'sztimes'):
             rcols = ('red', 'green', 'violet')
             for sch, spktimes in zip(self.sztime_channels, self.sztimes):

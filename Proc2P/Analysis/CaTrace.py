@@ -11,6 +11,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from Proc2P.Bruker.ConfigVars import CF
 from matplotlib import pyplot as plt
+from _Dependencies.S2P.dcnv import oasis
 
 
 class CaTrace(object):
@@ -39,7 +40,7 @@ class CaTrace(object):
         self.tag = tag
         self.pf = self.opPath + f'{prefix}_trace_{tag}-ch{ch}'  # folder name
         self.sync = Sync(path, prefix)
-        self.keys = ['bsl', 'rel', 'ntr', 'trace', 'smtr', ]
+        self.keys = ['bsl', 'rel', 'ntr', 'trace', 'smtr',]
         self.verbose = verbose
         self.bsltype = bsltype
         self.exclude = exclude
@@ -50,6 +51,14 @@ class CaTrace(object):
 
     # def open_trace(self):
     #     self.open_raw(trace=numpy.load(self.pf))
+
+    def deconvolve(self, batch=1000, tau=0.75, fs=None):
+        X = self.rel
+        if fs is None:
+            fs = float(self.version_info['fps'])
+        self.nnd = oasis(X - numpy.min(X, axis=0), batch_size=batch, tau=tau, fs=fs)
+
+
 
     def open_raw(self, trace=None):
         # init containers and pool
@@ -286,6 +295,8 @@ class Worker(Process):
                 ontr = numpy.copy(ntr)
                 # ewma
                 smtr = numpy.array(pandas.DataFrame(ntr).ewm(span=CF.fps).mean()[0])
+                # deconvolution
+                # nnd = oasis(ntr-numpy.nanmin(ntr, axis=0), batch_size=1000, tau=0.75, fs=fps)
 
             result = {'trace': data, 'bsl': bsl, 'rel': rel, 'ntr': ntr, 'smtr': smtr}
             self.res_queue.put((c, result))

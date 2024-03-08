@@ -13,7 +13,7 @@ build a list of mice that contains the procedures done on them'''
 # labguru API token. Expires in 30 days. Request a new one if necessary and paste here.
 lg_api_token = "8a7e4cb392f54c19f159510279b513eab3e60e4b"
 # lg_api_token = config["lg_token"]
-savepath = 'D:\Shares\Data\_Processed/_InjectionList'
+savepath = 'D:\Shares\Data\_Processed/MouseData/_InjectionList'
 def pprint(x):
     print(json.dumps(x, indent=2))
 

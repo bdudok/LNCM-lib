@@ -295,7 +295,8 @@ class ImagingSession(object):
             brmean[:] = numpy.nan
             for i, frame in enumerate(nzr):
                 if (length < frame < (self.ca.frames - length)):
-                    y = param[c][frame - int(length / 2):frame + int(length / 2)]
+                    i0 = frame - int(length / 2)
+                    y = param[c][i0:i0+length]
                     brmean[i, :] = y
             brflat = numpy.nanmean(brmean, axis=0)
             brflat -= brflat.min()
