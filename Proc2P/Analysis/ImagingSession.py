@@ -121,6 +121,10 @@ class ImagingSession(object):
                 self.has_behavior = True
 
     def startstop(self, *args, **kwargs):
+        cf = {'gap': int(10*self.fps), 'duration': int(5*self.fps), 'speed_threshold': 2}
+        for key, value in cf.items():
+            if key not in kwargs:
+                kwargs[key] = value
         return startstop(self.pos.speed, **kwargs)
 
     def get_preview(self):
@@ -321,12 +325,15 @@ class ImagingSession(object):
         self.zscores[self.pltnum] = zscores
         return zscores
 
-    def qc(self, trim=10):
+    def qc(self, trim=10, nnd=None):
         '''returns a bool mask for cells that pass qc
         trim: if >0, remove cells that are close to the top or bottom row to avoid artefacts
         '''
 
         qc_pass = numpy.any(numpy.nan_to_num(self.getparam('ntr')) > 3, axis=1)
+        if hasattr(self.ca, 'nnd') and nnd is not None:
+            nnd_pass = numpy.any(self.ca.nnd > nnd, axis=1)
+            qc_pass = numpy.logical_and(nnd_pass, qc_pass)
         if trim:
             if not self.rois.image_loaded:
                 self.rois.load_image()
