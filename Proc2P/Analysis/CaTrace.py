@@ -188,6 +188,7 @@ class CaTrace(object):
                 self.version_info[key] = value
         else:
             self.version_info = {'v': '<4', 'bsltype': 'original'}
+        return True
 
     def repair_outliers(self):
         pass

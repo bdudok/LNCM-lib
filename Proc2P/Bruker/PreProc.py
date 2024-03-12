@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy
 import os
 import pandas
+from sklearn import cluster
 import xml.etree.ElementTree as ET
 from Proc2P.Treadmill import TreadmillRead, rsync
 from Proc2P.utils import lprint
@@ -16,7 +17,7 @@ PreProcess: load xml files, save all frame times, sync signals and metadata into
 class PreProc:
     __name__ = 'PreProc'
 
-    def __init__(self, dpath, procpath, prefix, btag='000', rsync_channel=0, led_channel=1, ):
+    def __init__(self, dpath, procpath, prefix, btag='000', rsync_channel=0, led_channel=1, debug=False):
         self.dpath = os.path.join(dpath, prefix + f'-{btag}/')  # raw data
         self.procpath = os.path.join(procpath, prefix) + '/'  # output processed data
         self.prefix = prefix  # recorder prefix tag
@@ -33,14 +34,15 @@ class PreProc:
         if not os.path.exists(self.procpath):
             os.mkdir(self.procpath)
 
-        # init sessioninfo, preprocess if empty
-        self.si = SessionInfo(self.procpath, prefix)
-        self.is_processed = self.si.load()
-        if not self.is_processed:
-            self.skip_analysis = False
-            self.preprocess()
-        else:
-            self.load_metadata()
+        if not debug:
+            # init sessioninfo, preprocess if empty
+            self.si = SessionInfo(self.procpath, prefix)
+            self.is_processed = self.si.load()
+            if not self.is_processed:
+                self.skip_analysis = False
+                self.preprocess()
+            else:
+                self.load_metadata()
 
     def preprocess(self, tm_fig=True):
         '''
@@ -134,6 +136,8 @@ class PreProc:
         self.found_output.append('ADC')
 
         # get opto info
+        # After introducing photostim device, opto can come from either mark points, or the device.
+        # LED power is analog in MarkPoints, PWM by device. parse the voltage separately.
         opto = sequence.find('MarkPoints')
         self.has_opto = opto is not None
         if self.has_opto:
@@ -179,13 +183,43 @@ class PreProc:
         self.fs = int(rate.text)
 
         # LED pulses
+        # the way opto is parsed; parse_TTLs needs to be called after parse_frametimes so that has_opto is set
         if self.led_channel is not None:
             trace = vdat[f' Input {self.led_channel}'].values
             vmax = 5.0  # 5V command is 100%LED
-            pos = numpy.where(numpy.convolve(trace > vmax * 0.05, [1, -1]) == 1)[0] #rising edges
+            bintrace = trace > (vmax * 0.05)
+            pos = numpy.where(numpy.convolve(bintrace, [1, -1]) == 1)[0] #rising edges
             if len(pos):
-                stimframes = numpy.searchsorted(self.frametimes * self.fs, pos) - 1  # convert to 0 indexing
-                led_op = pandas.DataFrame({'Intensity': trace[pos] / vmax, 'ImgFrame': stimframes}, index=[pos])
+                if self.has_opto:
+                    #case: using analog modulation with MarkPoints, find rising edges as stim starts
+                    stimframes = numpy.searchsorted(self.frametimes * self.fs, pos) - 1  # convert to 0 indexing
+                    led_op = pandas.DataFrame({'Intensity': trace[pos] / vmax, 'ImgFrame': stimframes}, index=[pos])
+                else:
+                    #case: using PWM modulation with external device. cluster within-frame signals and compute duty
+                    # PWM is 500 Hz
+                    clustering = cluster.DBSCAN(eps=self.fs/500*2, min_samples=2).fit(pos.reshape(-1, 1))
+                    labels = clustering.labels_
+                    nstims = labels.max() + 1
+                    intensities = numpy.zeros(nstims)
+                    durations = numpy.zeros(nstims)
+                    stimframes = numpy.zeros(nstims, dtype='int')
+                    posindex = numpy.zeros(nstims, dtype='int')
+                    for cid in range(nstims):
+                        x = pos[numpy.where(labels == cid)[0]]  # this is expected to be in order
+                        pwmfreq = numpy.diff(x).mean()
+                        posindex[cid] = x[0]
+                        stimframes[cid] = numpy.searchsorted(self.frametimes, x[0]/self.fs) - 1  # convert to 0 indexing
+                        intensities[cid] = bintrace[x[0]:int(x[-1]+pwmfreq)].mean()
+                        durations[cid] = (int(x[-1]+pwmfreq) - x[0]) / self.fs * 1000
+                    if nstims:
+                        self.has_opto = True
+                        self.opto_config = f'{round(durations.mean())} ms, {round(intensities.mean() * 100)} %'
+                        self.opto_name = 'ExternalDevice'
+                        self.found_output.append('Opto')
+
+                        led_op = pandas.DataFrame({'Intensity': intensities,
+                                                   'ImgFrame': stimframes, 'Duration': durations}, index=posindex)
+
                 led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
                 numpy.save(self.dpath + 'bad_frames.npy', stimframes)
                 numpy.save(self.procpath + self.prefix + '_bad_frames.npy', stimframes)
@@ -353,13 +387,13 @@ class SessionInfo:
 
 
 if __name__ == '__main__':
-    dpath = 'D:\Shares\Data\_RawData\Bruker\JEDI/'
+    dpath = 'D:\Shares\Data\_RawData\Bruker/testing/'
     procpath = 'D:\Shares\Data\_Processed/testing/'
-    prefix = 'PV10_2023-12-11_Fast_021'
+    prefix = 'OptoTest_2024-03-11_external ttl_000'
     btag = '000'
 
     if not os.path.exists(procpath):
         os.mkdir(procpath)
 
-    s = PreProc(dpath, procpath, prefix, btag, )
+    s = PreProc(dpath, procpath, prefix, btag, debug=True)
 

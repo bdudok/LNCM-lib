@@ -12,10 +12,11 @@ from Proc2P.Bruker.ConfigVars import CF
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Bruker.LoadEphys import Ephys
 from LFP import Filter
-from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel
+from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel, strip_ax
 from Proc2P.Analysis.Ripples import Ripples
 import time
 from scipy import stats
+
 
 
 class Pos:
@@ -59,11 +60,12 @@ class ImagingSession(object):
 
         # load processed traces
         self.ca = CaTrace(procpath, prefix, tag=tag, ch=ch)
-        self.ca.load()
+        self.has_ca = self.ca.load() is True
         self.ftimes = numpy.load(self.get_file_with_suffix('_FrameTimes.npy'))
 
         # load photostimulation if available:
-        self.map_opto()
+        if self.has_ca:
+            self.map_opto()
 
         #load treadmill speed
         self.has_behavior = False
@@ -110,9 +112,10 @@ class ImagingSession(object):
     def map_pos(self):
         self.pos = Pos(self.ca.sync, self.fps)
         if self.pos.speed is None:  # in case this data is missing
-            self.pos.speed = numpy.zeros(self.ca.frames)
-            self.pos.pos = numpy.zeros(self.ca.frames)
-            self.pos.movement = numpy.zeros(self.ca.frames)
+            if self.has_ca:
+                self.pos.speed = numpy.zeros(self.ca.frames)
+                self.pos.pos = numpy.zeros(self.ca.frames)
+                self.pos.movement = numpy.zeros(self.ca.frames)
         else:
             bdat = self.get_file_with_suffix('_bdat.json')
             if os.path.exists(bdat):
@@ -545,10 +548,62 @@ class ImagingSession(object):
         sfn = self.get_file_with_suffix(f'_ROI-{self.tag}_Ch{self.ca.ch}_{epc + 1}LFP.xlsx')
         df.to_excel(sfn)
 
+    def behavior_plot(self):
+        # draw pos, draw reward zones, correct licks
+        mins = numpy.arange(0, len(self.pos.pos)) / self.fps / 60
+        rz = self.bdat['RZ']
+        licks = numpy.array(self.bdat['licks'])
+        rewards = numpy.array(self.bdat['rewards'])
+        has_rewards = numpy.zeros(len(self.pos.pos), dtype='bool')
+        r_window = int(0.5*self.fps)
+        rlim = len(self.pos.pos) - r_window
+        for r in rewards:
+            if 0 < r < rlim:
+                has_rewards[r:r+r_window] = True
+
+        self.fig, ax = plt.subplots(4, 1, figsize=(9, 6),
+                                                           gridspec_kw={'height_ratios': [1, 0.5, 0.5, 0.5, ]},
+                                                           sharex=True)
+        for ca in ax[1:]:
+            strip_ax(ca, full=False)
+        (axp, axz, axr, axl,) = ax
+        axp.scatter(mins, self.pos.pos, s=2, c=self.pos.movement, cmap='winter')
+        axp.text(0, 0, f'{int(numpy.nan_to_num(self.pos.laps).max())} laps')
+
+        for z in rz:
+            axz.axvspan(*[x / self.fps / 60 for x in z], color='#e2efda', label='zones')
+        axz.text(0, -0.5, f'{len(rz)} zones')
+        axz.set_ylim(-0.6, 0.4)
+
+        axr.scatter(rewards / self.fps / 60, numpy.zeros(len(rewards)), marker="|", s=50, label='drops')
+        axr.text(0, -0.5, f'{len(rewards)} drops')
+        axr.set_ylim(-0.6, 0.4)
+
+        try:
+            licks = licks[numpy.where(numpy.nan_to_num(licks) > 0)]
+        except:
+            print(licks)
+            assert False
+        if len(licks):
+            axl.scatter(licks / self.fps / 60, numpy.zeros(len(licks)), marker="|", c=has_rewards[licks], s=50,
+                        cmap='bwr_r', label='licks')
+            axl.text(0, -0.5, f'{len(licks)} / {numpy.count_nonzero(has_rewards[licks])} licks')
+        axl.set_ylim(-0.6, 0.4)
+
+        axl.set_xlabel('Minutes')
+        for ca in ax[1:]:
+            ca.yaxis.set_ticklabels([])
+        axp.set_ylabel('Position')
+        axz.set_ylabel('Zones')
+        axr.set_ylabel('Drops')
+        axl.set_ylabel('Licks')
+        self.fig.suptitle(self.prefix)
+        self.fig.savefig(self.get_file_with_suffix('_behaviorplot.png'), dpi=300)
+        plt.close()
 
 if __name__ == '__main__':
-    procpath = 'D:\Shares\Data\_Processed/2P\JEDI/'
-    prefix = 'JEDI-PV16_2024-03-05_Fast_034'
-    tag = '1'
-    a = ImagingSession(procpath, prefix, tag=tag, ch=0, norip=False)
-    print(a.fps)
+    procpath = 'D:\Shares\Data\_Processed/2P\PVTot/'
+    prefix = 'PVtot9_2024-03-07_RF_224'
+    tag = 'skip'
+    a = ImagingSession(procpath, prefix, tag=tag)
+    a.behavior_plot()

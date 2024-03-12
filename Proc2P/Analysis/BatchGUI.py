@@ -766,7 +766,13 @@ class Util:
             TimeProfile(prefix, cfg)
 
     def export_treadmill_callback(self):
-        print('not implemented')
+        for i, prefix in enumerate(self.parent.filelist.prefix_list):
+            a = session_Gui(self.parent.filelist.wdir, prefix, tag='skip')
+            if a.has_behavior:
+                p = a.behavior_plot()
+                print(prefix, 'behavior plot saved.')
+            else:
+                print(prefix, 'behavior not available')
 
     def autosel_callback(self):
         wdir = self.parent.filelist.wdir
