@@ -46,14 +46,15 @@ def outlier_indices(values, thresh=3.5):
 
 def startstop(speed, duration=50, gap=150, ret_loc='actual', span=None, speed_threshold=0.05):
     '''
-    :param mov: binary gapless trace (length of frames) whether animal is running
+    :param speed
     :param duration: of run, in samples
     :param gap: of stop, in samples
     :param ret_loc: 'actual' gives frame with zero speed. need to specify speed for this
     :param span: slice of recording to analyze
     :return:
     '''
-    mov = gapless(speed, threshold=speed_threshold)
+    # binary gapless trace whether animal is running
+    mov = gapless(numpy.nan_to_num(speed), threshold=speed_threshold)
     if gap is None:
         gap = 150
     if span is None:

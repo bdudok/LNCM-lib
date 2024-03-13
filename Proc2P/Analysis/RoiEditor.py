@@ -860,7 +860,7 @@ class RoiEditor(object):
             lprint(self, f'opto excluding {len(bad_frames)} frames')
 
         else:
-            lprint(self, 'no opto')
+            # lprint(self, 'no opto')
             have_opto = False
         # find trim:
         # x0, x1, y0, y1 = 10, 15, 10, 10

@@ -42,9 +42,9 @@ $timespanF = new-timespan -days 10
 $timespanB = new-timespan -days 30
 if (((get-date) - $oldestFile.LastWriteTime) -gt $timespanF) {
     if (((get-date) - $latestBu.LastWriteTime) -gt $timespanB) {
-        mv $oldestFile ./30days/
+        mv ./10days/$oldestFile ./30days/
     }
-    else {rm $oldestFile}
+    else {rm ./10days/$oldestFile}
 }
 '''
 
@@ -81,7 +81,7 @@ if ext_drive_name in drive_names:
 #After OneDrive is expanded, also back up Processed there:
 dest_path = 'OneDrive:_ProcessedData/'
 source_path = 'D:\Shares\Data\_Processed/'
-dlist = ['2P', 'EEG']
+dlist = ['2P', 'EEG', 'MouseData']
 for d in dlist:
     script_s += get_cmd(d)
 

@@ -30,7 +30,7 @@ from Proc2P.Analysis.CaTrace import Worker as tr_Worker
 
 #for ephys
 from Proc2P.Bruker.LoadEphys import Ephys
-# from Ripples import Ripples, export_SCA
+from Ripples import Ripples#, export_SCA
 # from Spike_Sz_detect import Worker as SzDet_Worker
 
 # for views
@@ -85,8 +85,8 @@ class App:
         ls = self.session_cache
         ch = self.pltconfigs.config['ch'].get()
         norip = not self.pltconfigs.config['ShowRipples'].get()
-        epc = self.preview.get_ephys_channels()
-        hash = prefix + str(tag) + str(ch) + str(norip) + ''.join([str(x) for x in epc])
+        epc = self.preview.get_ephys_channel()
+        hash = prefix + str(tag) + str(ch) + str(norip) + str(epc)
         if hash in ls:
             del lu[lu.index(hash)]
             lu.append(hash)
@@ -480,32 +480,7 @@ class Traces:
 
         Button(self.frame, text="Run", command=self.execute_callback).grid(row=self.row(), sticky=N)
 
-        # Label(self.frame, text='Ripples').grid(row=self.row(), pady=10)
-        # Button(self.frame, text="Highlight", command=self.autosel_rip_callback).grid(row=self.row(), sticky=N)
 
-    #     Label(self.frame, text='Config').grid(row=self.row(), pady=10)
-    #     defs = (5, 3, 1)
-    #     self.cfgfields = ['tr1', 'tr2', 'y_scale']
-    #     for i, text in enumerate(self.cfgfields):
-    #         self.config[text] = StringVar()
-    #         row = self.row()
-    #         Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
-    #         Entry(self.frame, textvariable=self.config[text], width=3).grid(row=row, column=0, sticky=N + E)
-    #         self.config[text].set(str(defs[i]))
-    #     self.force = IntVar()
-    #     Checkbutton(self.frame, text='Force recompute', variable=self.force).grid(row=self.row(), sticky='N')
-    #     self.force.set(0)
-    #
-    #     Button(self.frame, text="Open Ripples", command=self.ripples_callback).grid(row=self.row(), sticky=N)
-    #     Button(self.frame, text="Display", command=self.ripples_enum_callback).grid(row=self.row(), sticky=N)
-    #
-    #     self.excl_spikes = IntVar()
-    #     Checkbutton(self.frame, text='Exclude spikes', variable=self.excl_spikes).grid(row=self.row(), sticky='N')
-    #     self.excl_spikes.set(0)
-    #     Button(self.frame, text="Detect recursive", command=self.ripples_rec_callback).grid(row=self.row(), sticky=N)
-    #     Button(self.frame, text="Load ripp. set", command=self.ripples_load_callback).grid(row=self.row(), sticky=N)
-    #     Button(self.frame, text="Save ripp. set", command=self.ripples_save_callback).grid(row=self.row(), sticky=N)
-    #     Button(self.frame, text="export to excel", command=self.ripples_export_callback).grid(row=self.row(), sticky=N)
     #
     #     Button(self.frame, text="M2 Score", command=self.m2score_callback).grid(row=self.row(), sticky=N, pady=10)
     #     Button(self.frame, text="OROT Score", command=self.orotscore_callback).grid(row=self.row(), sticky=N, pady=10)
@@ -580,39 +555,6 @@ class Traces:
                                                 bsltype, excl, sz_mode, peakdet,
                                                 invert,
                                                 tag)))
-
-    def ripples_callback(self):
-        prefix = self.parent.filelist.get_active()[1][0]
-        os.chdir(self.parent.filelist.wdir)
-        cfg = {}
-        for text in self.cfgfields:
-            try:
-                cfg[text] = int(self.config[text].get())
-            except:
-                print(text + ' is not a number')
-                return -1
-        self.ripples = Ripples(prefix, config=cfg, force=self.force.get(),
-                               ephys_channels=self.parent.preview.get_ephys_channels())
-        print(prefix, 'ripples loaded.')
-
-    def ripples_enum_callback(self):
-        self.ripples.enum_ripples(no_save=True)
-
-    def ripples_rec_callback(self):
-        self.ripples.rec_enum_ripples(exclude_spikes=self.excl_spikes.get())
-
-    def ripples_save_callback(self):
-        self.ripples.save_ripples()
-
-    def ripples_export_callback(self):
-        self.ripples.export_ripple_times()
-
-    def ripples_load_callback(self):
-        oloc = self.parent.filelist.wdir + self.ripples.prefix + '_ripples//'
-        fn = filedialog.askopenfilename(initialdir=oloc)
-        self.ripples.load_ripples(fn.split('/')[-1])
-        self.ripples.enum_ripples(no_save=True)
-
 
 class RoiDet:
     def __init__(self, parent, master, column):
@@ -824,7 +766,13 @@ class Util:
             TimeProfile(prefix, cfg)
 
     def export_treadmill_callback(self):
-        print('not implemented')
+        for i, prefix in enumerate(self.parent.filelist.prefix_list):
+            a = session_Gui(self.parent.filelist.wdir, prefix, tag='skip')
+            if a.has_behavior:
+                p = a.behavior_plot()
+                print(prefix, 'behavior plot saved.')
+            else:
+                print(prefix, 'behavior not available')
 
     def autosel_callback(self):
         wdir = self.parent.filelist.wdir
@@ -908,10 +856,10 @@ class Prev:
         #
         # Button(self.frame, text="Show MIP", command=self.showmip_callback).grid(row=self.row(), sticky=N)
 
-        Label(self.frame, text='Ephys channels').grid(row=self.row(), pady=10)
+        Label(self.frame, text='Ephys channel').grid(row=self.row(), pady=10)
         subframe = Frame(self.frame)
         subframe.grid(row=self.row(), column=0, sticky=N + W)
-        for i, text in enumerate(('Ch', 'of')):
+        for i, text in enumerate(('Ch',)):
             self.config[text] = StringVar()
             Label(subframe, text=text, width=2).grid(row=0, column=i * 2, sticky=N + W)
             Entry(subframe, textvariable=self.config[text], width=2).grid(row=0, column=i * 2 + 1, sticky=N + W)
@@ -941,8 +889,66 @@ class Prev:
         #     Entry(self.frame, textvariable=self.config[text], width=5).grid(row=row, column=0, sticky=N + E)
         #     self.config[text].set(str(defs[i]))
 
-    def get_ephys_channels(self):
-        return [int(self.config[text].get()) for text in ('Ch', 'of')]
+        Label(self.frame, text='Ripples').grid(row=self.row(), pady=10)
+
+        Label(self.frame, text='Config').grid(row=self.row(), pady=10)
+        defs = (5, 3, 1)
+        self.cfgfields = ['tr1', 'tr2', 'y_scale']
+        for i, text in enumerate(self.cfgfields):
+            self.config[text] = StringVar()
+            row = self.row()
+            Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
+            Entry(self.frame, textvariable=self.config[text], width=3).grid(row=row, column=0, sticky=N + E)
+            self.config[text].set(str(defs[i]))
+        self.force = IntVar()
+        Checkbutton(self.frame, text='Force recompute', variable=self.force).grid(row=self.row(), sticky='N')
+        self.force.set(0)
+
+        Button(self.frame, text="Open Ripples", command=self.ripples_callback).grid(row=self.row(), sticky=N)
+        Button(self.frame, text="Display", command=self.ripples_enum_callback).grid(row=self.row(), sticky=N)
+
+        self.excl_spikes = IntVar()
+        Checkbutton(self.frame, text='Exclude spikes', variable=self.excl_spikes).grid(row=self.row(), sticky='N')
+        self.excl_spikes.set(0)
+        Button(self.frame, text="Detect recursive", command=self.ripples_rec_callback).grid(row=self.row(), sticky=N)
+        Button(self.frame, text="Load ripp. set", command=self.ripples_load_callback).grid(row=self.row(), sticky=N)
+        Button(self.frame, text="Save ripp. set", command=self.ripples_save_callback).grid(row=self.row(), sticky=N)
+        Button(self.frame, text="export to excel", command=self.ripples_export_callback).grid(row=self.row(), sticky=N)
+
+    def get_ephys_channel(self):
+        return int(self.config['Ch'].get())
+
+    def ripples_callback(self):
+        prefix = self.parent.filelist.get_active()[1][0]
+        cfg = {}
+        for text in self.cfgfields:
+            try:
+                cfg[text] = int(self.config[text].get())
+            except:
+                print(text + ' is not a number')
+                return -1
+        self.ripples = Ripples(self.parent.filelist.wdir, prefix, config=cfg, force=self.force.get(),
+                               ephys_channel=self.parent.preview.get_ephys_channel())
+        print(prefix, 'ripples loaded.')
+
+    def ripples_enum_callback(self):
+        self.ripples.enum_ripples(no_save=True)
+
+    def ripples_rec_callback(self):
+        self.ripples.rec_enum_ripples(exclude_spikes=self.excl_spikes.get())
+
+    def ripples_save_callback(self):
+        self.ripples.save_ripples()
+
+    def ripples_export_callback(self):
+        self.ripples.export_ripple_times()
+
+    def ripples_load_callback(self):
+        oloc = self.ripples.path
+        fn = filedialog.askopenfilename(initialdir=oloc)
+        self.ripples.load_ripples(fn.split('/')[-1])
+        self.ripples.enum_ripples(no_save=True)
+
 
     # def split_ephys_callback(self):
     #     split_ephys(filedialog.askdirectory(), self.get_ephys_channels()[1])
@@ -1015,7 +1021,7 @@ class Prev:
 
     def showtrace_callback(self):
         prefix = self.parent.filelist.get_active()[1][0]
-        self.parent.request_queue.put(('trace', (self.parent.filelist.wdir, prefix, self.get_ephys_channels())))
+        self.parent.request_queue.put(('trace', (self.parent.filelist.wdir, prefix, self.get_ephys_channel())))
 
     # def export_trace_callback(self):
     #     for prefix in self.parent.filelist.get_active()[1]:

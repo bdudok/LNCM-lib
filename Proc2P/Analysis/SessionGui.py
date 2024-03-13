@@ -65,7 +65,7 @@ class Gui(ImagingSession):
         # if hasattr(self, 'bdat'):
         #     self.licktrigger(param=graph_param)
         if hasattr(self, 'ripples'):
-            self.rippletrigger()
+            self.rippletrigger(ch=self.primary_ch)
         if self.kwargs.get('show_spiketimes', False):
             self.map_spiketimes()
         if self.kwargs.get('show_sz', False):
@@ -84,7 +84,7 @@ class Gui(ImagingSession):
             self.ncell.set_val(c)
             self.timefig.savefig(self.prefix + '_cell' + str(c) + '.png', dpi=600)
 
-    def runspeed(self, param=None, bins=5, binsize=5, span=None):
+    def runspeed(self, param=None, bins=5, binsize=1, span=None):
         param = self.getparam(param)
         if self.dualch and len(param.shape) == 3:
             param = param[..., self.primary_ch]
@@ -94,7 +94,7 @@ class Gui(ImagingSession):
         self.bin = numpy.empty((bins + 1, len(self.pos.pos)), dtype='bool')
         self.bin[0] = numpy.logical_not(self.pos.movement)
         for i in range(bins):
-            self.bin[i + 1] = (self.pos.speed > i * binsize) * (self.pos.speed < (i + 1) * binsize) * self.pos.movement
+            self.bin[i + 1] = (self.pos.smspd > i * binsize) * (self.pos.smspd < (i + 1) * binsize) * self.pos.movement
         print(param.shape)
         zscores = self.pull_means(param, span)
         self.speedrates = copy.copy(self.rates[self.pltnum])
@@ -289,7 +289,7 @@ class Gui(ImagingSession):
             rcols = ('red', 'green', 'violet')
             for sch, spktimes in zip(self.spiketime_channels, self.spiketimes):
                 for t in spktimes:
-                    axspeed.axvline(t - 0.5, color=rcols[sch-1])
+                    axspeed.axvline(t - 0.5, color=rcols[sch-1], zorder=-1)
         if hasattr(self, 'sztimes'):
             rcols = ('red', 'green', 'violet')
             for sch, spktimes in zip(self.sztime_channels, self.sztimes):
@@ -300,13 +300,13 @@ class Gui(ImagingSession):
                 self.spiketime_channels = self.sztime_channels
         if hasattr(self, 'ripples'):
             for t in self.ripple_frames:
-                axspeed.axvline(t - 0.5, color=ripcol)
+                axspeed.axvline(t - 0.5, color=ripcol, zorder=-1)
             if hasattr(self.ripples, 'theta'):
-                rpsm = pandas.DataFrame(self.theta_power).ewm(span=3).mean()
+                rpsm = pandas.DataFrame(self.ephys.theta_power).ewm(span=3).mean()
                 rpsm -= rpsm.min()
                 rpsm /= rpsm.max()
                 axspeed.plot(rpsm, label='ThetaPower', alpha=0.8)
-            rpsm = pandas.DataFrame(self.ripple_power).ewm(span=3).mean()
+            rpsm = pandas.DataFrame(self.ephys.ripple_power).ewm(span=3).mean()
             rpsm -= rpsm.min()
             rpsm /= rpsm.max()
             axspeed.plot(rpsm, label='RipplePower', alpha=0.8)
@@ -330,7 +330,7 @@ class Gui(ImagingSession):
         for ax in [axspeed, axrun,]:# axrpl]:
             ax.legend(loc='upper right', framealpha=self.colors['legendalpha'])
         # axpol.myvline = axpol.axvline(-self.pos.relpos[self.active_frame] * 6.28319, color='#790000')
-        axrpl.myvline = axrpl.axvline(CF.fps, color='black')
+        # axrpl.myvline = axrpl.axvline(CF.fps/2, color='black')
 
         # update active cell
         xvals = numpy.arange(self.ca.frames)
@@ -380,7 +380,7 @@ class Gui(ImagingSession):
                 rcols = ('red', 'green', 'violet')
                 for sch, spktimes in zip(self.spiketime_channels, self.spiketimes):
                     for t in spktimes:
-                        axtrace.axvline(t - 0.5, color=rcols[sch-1])
+                        axtrace.axvline(t - 0.5, color=rcols[sch-1], zorder=-1)
                         # axspike.axvline(t - 0.5, color=rcols[sch])
             if hasattr(self, 'sztimes'):
                 rcols = ('red', 'green', 'violet')
@@ -389,21 +389,24 @@ class Gui(ImagingSession):
                         axtrace.axvspan(t0, t1, color=rcols[sch - 1], alpha=0.5)
             if hasattr(self, 'ripples'):
                 for t in self.ripple_frames:
-                    axtrace.axvline(t - 0.5, color=ripcol)
-                    axspike.axvline(t - 0.5, color=ripcol)
+                    axtrace.axvline(t - 0.5, color=ripcol, zorder=-1)
+                    axspike.axvline(t - 0.5, color=ripcol, zorder=-1)
             # for ax in [axspike, axtrace]:
             #     ax.legend(loc='upper right', framealpha=self.colors['legendalpha'])
             # l_pol.set_ydata(self.polar(self.graph_param))
-            if not self.dualch:
-                l_run.set_ydata(self.speedrates[:, self.activecell])
-                # if hasattr(self, 'bdat'):
-                #     l_lck.set_ydata(self.lickrates['all'][:, self.activecell])
-                # if hasattr(self, 'ripples'):
-                #     l_rpl.set_ydata(self.ripplerates[:, self.activecell])
-                #     rrsp = int(numpy.nanmean(self.ripplerates[15:18, self.activecell]) * 100
-                #                / numpy.nanmean(self.ripplerates[0:15, self.activecell]))
-                #     axrpl.set_title(f'Ripple: {rrsp}%')
 
+            l_run.set_ydata(self.speedrates[:, self.activecell])
+            # if hasattr(self, 'bdat'):
+            #     l_lck.set_ydata(self.lickrates['all'][:, self.activecell])
+            if hasattr(self, 'ripples'):
+                l_rpl.set_ydata(self.ripplerates[:, self.activecell])
+                # rrsp = (numpy.nanmean(self.ripplerates[int(self.fps):int(self.fps+3), self.activecell]) * 100
+                #            / numpy.nanmean(self.ripplerates[0:int(self.fps), self.activecell]))
+                # if not numpy.isnan(rrsp):
+                #     axrpl.set_title(f'Ripple: {rrsp}%')
+                # else:
+                #     axrpl.set_title(f'Ripple')
+            if not self.dualch:
                 if hasattr(self, 'spiketimes'):
                     axrpl.cla()
                     rcols = ('red', 'green', 'violet')
@@ -623,11 +626,11 @@ class Gui(ImagingSession):
                     axr.axvline(t - 0.5, color='black')
                     axf.axvline(t - 0.5, color='black')
             if hasattr(self.ripples, 'theta'):
-                rpsm = pandas.DataFrame(self.theta_power).ewm(span=3).mean()
+                rpsm = pandas.DataFrame(self.ephys.theta_power).ewm(span=3).mean()
                 rpsm -= rpsm.min()
                 rpsm /= rpsm.max()
                 axs.plot(rpsm, label='ThetaPower', alpha=0.8)
-            rpsm = pandas.DataFrame(self.ripple_power).ewm(span=3).mean()
+            rpsm = pandas.DataFrame(self.ephys.ripple_power).ewm(span=3).mean()
             rpsm -= rpsm.min()
             rpsm /= rpsm.max()
             axs.plot(rpsm, label='RipplePower', alpha=0.8)
@@ -637,7 +640,7 @@ class Gui(ImagingSession):
             for sch, spktimes in zip(self.spiketime_channels, self.spiketimes):
                 for t in spktimes:
                     for axx in (axr, axs):
-                        axx.axvline(t - 0.5, color=rcols[sch-1])
+                        axx.axvline(t - 0.5, color=rcols[sch-1], zorder=-1)
         if hasattr(self, 'sztimes'):
             rcols = ('red', 'green', 'violet')
             for sch, spktimes in zip(self.sztime_channels, self.sztimes):
