@@ -604,7 +604,7 @@ class ImagingSession(object):
         axl.set_ylabel('Licks')
         self.fig.suptitle(self.prefix)
         self.fig.savefig(self.get_file_with_suffix('_behaviorplot.png'), dpi=300)
-        plt.close(self.fig)
+        self.fig.clf()
 
 if __name__ == '__main__':
     procpath = 'D:\Shares\Data\_Processed/2P\PVTot/'
