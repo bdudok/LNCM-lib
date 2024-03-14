@@ -348,7 +348,6 @@ class PreProc:
                 if not 0 < event_frame < len(self.frametimes)-1:
                     continue
                 if 'lick' in event.name:
-                    print(et, event_scopetime)
                     licks.append(event_frame)
                 elif event.name == 'reward':
                     rewards.append(event_frame)
