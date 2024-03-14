@@ -387,13 +387,15 @@ class SessionInfo:
 
 
 if __name__ == '__main__':
-    dpath = 'D:\Shares\Data\_RawData\Bruker/testing/'
+    dpath = 'D:\Shares\Data\_RawData\Bruker/testing/treadmill update test/'
     procpath = 'D:\Shares\Data\_Processed/testing/'
-    prefix = 'OptoTest_2024-03-11_external ttl_000'
+    prefix = 'JEDI-PV18_2024-03-13_Fast_043'
     btag = '000'
 
     if not os.path.exists(procpath):
         os.mkdir(procpath)
 
     s = PreProc(dpath, procpath, prefix, btag, debug=True)
+    self = s
+    tm = TreadmillRead.Treadmill(self.dpath, self.prefix)
 

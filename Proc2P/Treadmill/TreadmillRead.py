@@ -3,7 +3,7 @@ import os
 import numpy
 import numpy as np
 import pandas as pd
-from _Dependencies.PyControl.code.tools import data_import, session_plot
+from _Dependencies.PyControlv1.code.tools import data_import, session_plot
 from .ConfigVars import TR
 
 
@@ -17,22 +17,32 @@ class Treadmill:
         :param prefix: session name (ending with timestamp)
         '''
         self.path = path
+        self.pycontrol_version = 0
+        self.prefix = prefix
+        self.flist = os.listdir(path)
         # find pycontrol filename
-        ext = '.txt'
-        if not os.path.exists(path + prefix + ext):
-            longest = 0
-            for fn in os.listdir(path):
+        exts = ('.txt', '.tsv')
+        longest = 0
+        long_prefix = prefix
+        for ext in exts:
+            for fn in self.flist:
                 if prefix in fn and fn.endswith(ext) and '.log.' not in fn:
                     if longest < len(fn):
-                        prefix = fn[:-len(ext)]
+                        long_prefix = fn[:-len(ext)]
                         longest = len(fn)
-        self.prefix = prefix
-        self.filename = prefix + '.txt'
-        if not os.path.exists(self.path+self.filename):
+        v1fn = long_prefix + exts[0]
+        v2fn = long_prefix + exts[1]
+        if v1fn in self.flist:
+            self.prefix = prefix
+            self.filename = v1fn
+            self.pycontrol_version = 1
+        elif v2fn in self.flist:
+            self.filename = v2fn
+            self.pycontrol_version = 2
+        else:
             print('Treadmill files not found')
             self.filename = None
             return None
-        self.flist = os.listdir(path)
         self.d = d = data_import.Session(self.path + self.filename)
 
         d.analog = {}
@@ -116,5 +126,8 @@ class Treadmill:
     def export_plot(self):
         return session_plot.session_plot(self.path + self.filename, fig_no=1, return_fig=True)
 
-
+if __name__ == '__main__':
+    dpath = 'D:\Shares\Data\_RawData\Bruker/testing/treadmill update test/'
+    prefix = 'JEDI-PV18_2024-03-13_Fast_043'
+    tm = Treadmill(dpath, prefix)
 
