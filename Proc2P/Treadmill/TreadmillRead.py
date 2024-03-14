@@ -4,7 +4,9 @@ import numpy
 import numpy as np
 import pandas as pd
 from _Dependencies.PyControlv1.code.tools import data_import, session_plot
-from .ConfigVars import TR
+from _Dependencies.PyControlv2.code.tools import data_import as data_importv2
+from _Dependencies.PyControlv2.code.tools import session_plot as session_plotv2
+from Proc2P.Treadmill.ConfigVars import TR
 
 
 class Treadmill:
@@ -36,29 +38,38 @@ class Treadmill:
             self.prefix = prefix
             self.filename = v1fn
             self.pycontrol_version = 1
+            self.data_import_function = data_import
+            self.session_export_function = session_plot
         elif v2fn in self.flist:
             self.filename = v2fn
             self.pycontrol_version = 2
+            self.data_import_function = data_importv2
+            self.session_export_function = session_plotv2
         else:
             print('Treadmill files not found')
             self.filename = None
             return None
-        self.d = d = data_import.Session(self.path + self.filename)
-
-        d.analog = {}
-        for f in self.flist:
-            if self.prefix in f and f.endswith('.pca'):
-                tag = (f.split('_')[-1].split('.')[0])
-                d.analog[tag] = data_import.load_analog_data(self.path + f)
-        # store calibrated position
         if calib is None:
             self.calib = TR.calib_cm
         else:
             self.calib = calib
-        self.abspos = d.analog['pos'][:, 1] / self.calib  # cms
-        self.pos_tX = d.analog['pos'][:, 0] / 1000  # seconds
 
-        # convert to speed
+        self.d = d = self.data_import_function.Session(self.path + self.filename)
+        d.analog = {}
+        if self.pycontrol_version == 1:
+            for f in self.flist:
+                if self.prefix in f and f.endswith('.pca'):
+                    tag = (f.split('_')[-1].split('.')[0])
+                    d.analog[tag] = data_import.load_analog_data(self.path + f)
+            # store calibrated position
+            self.abspos = d.analog['pos'][:, 1] / self.calib  # cms
+            self.pos_tX = d.analog['pos'][:, 0] / 1000  # seconds
+        elif self.pycontrol_version == 2:
+            # we won't search for multiple analog races, implement later if necessary
+            self.abspos = numpy.load(self.path+self.filename[:-4]+'_pos.data.npy') / self.calib # cms
+            self.pos_tX = numpy.load(self.path+self.filename[:-4]+'_pos.time.npy')  # seconds
+
+            # convert to speed
         spd = np.diff(self.abspos)
         # remove overflow effect
         wh_turn = numpy.where(abs(spd) > 100)[0]
@@ -78,7 +89,7 @@ class Treadmill:
         self.laptimes = []
         self.laps = numpy.zeros(len(self.abspos), dtype='uint8')
         any_lap = False
-        if hasattr(d, 'print_lines'):
+        if hasattr(d, 'print_lines'): #v1
             for event in d.print_lines:
                 if 'lap_counter' in event:
                     e_time = int(event.split(' ')[0])
@@ -87,19 +98,19 @@ class Treadmill:
                         any_lap = True
                         self.lapends.append(e_idx)
                         self.laptimes.append(e_time)
-        elif hasattr(d, 'variables_df'):
-            for _, event in d.variables_df.iterrows():
-                if not numpy.isnan(event[('values', 'lap_counter')]):
-                    any_lap = True
-                    e_time = event['time'] * 1000
-                    e_idx = np.searchsorted(d.analog['pos'][:, 0], e_time)
-                    #TODO this implementation is required for pycontrol >2.0.
-                    # test the unit of e_time matches analog on both 1.8 and 2.0 input data
-                    #old version was in ms, new is in sec
-                    assert False
-                    if e_idx < len(self.abspos): #summary print at session end should be ignored
-                        self.lapends.append(e_idx)
-                        self.laptimes.append(e_time)
+        elif hasattr(d, 'variables_df'): #v2
+            any_lap = numpy.any(d.variables_df.loc[:, ('values', 'lap_counter')].gt(0))
+            if any_lap:
+                curr_lap = 0
+                for _, event in d.variables_df.iterrows():
+                    this_lap = event[('values', 'lap_counter')]
+                    if not numpy.isnan(this_lap) and this_lap > curr_lap:
+                        e_time = float(event['time'][0])
+                        e_idx = np.searchsorted(self.pos_tX, e_time)
+                        if e_idx < len(self.abspos): #summary print at session end should be ignored
+                            self.lapends.append(e_idx)
+                            self.laptimes.append(e_time)
+                            curr_lap = this_lap
         if any_lap:
             # find reset position, make that 0
             self.laplen = np.median(np.diff(self.abspos[self.lapends]))
@@ -121,13 +132,19 @@ class Treadmill:
         for event in self.d.events:
             if event.name == 'rsync':
                 t.append(event.time)
-        return numpy.array(t)
+        if self.pycontrol_version == 2:
+            return (numpy.array(t)*1000).astype('int')
+        return numpy.array(t).astype('int')
 
     def export_plot(self):
-        return session_plot.session_plot(self.path + self.filename, fig_no=1, return_fig=True)
+        if self.pycontrol_version == 1:
+            return self.session_export_function.session_plot(self.path + self.filename, fig_no=1, return_fig=True)
+        else:
+            return None
+
 
 if __name__ == '__main__':
-    dpath = 'D:\Shares\Data\_RawData\Bruker/testing/treadmill update test/'
+    dpath = 'D:\Shares\Data\_RawData\Bruker/testing/treadmill update test/JEDI-PV18_2024-03-13_Fast_043-000/'
     prefix = 'JEDI-PV18_2024-03-13_Fast_043'
     tm = Treadmill(dpath, prefix)
 
