@@ -145,7 +145,7 @@ class Cfg:
         Label(self.frame, text='Plot config').grid(row=self.row(), pady=10)
         Label(self.frame, text='Parameter').grid(row=self.row())
         MODES = ['Raw', u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F', 'EWMA',
-                 u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F (z)', 'smtr', ]
+                 u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F (z)', 'NND', 'smtr', ]
         self.config['param'] = StringVar()
         self.config['param'].set(MODES[-1])
         for r, text in enumerate(MODES):

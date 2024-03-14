@@ -151,8 +151,10 @@ class ImagingSession(object):
             elif param == 'smtr':
                 param = self.ca.smtr
             elif param == 'nnd':
-                if hasattr(self.ca, 'nnd'):
-                    param = self.ca.nnd
+                if not hasattr(self.ca, 'nnd'):
+                    self.ca.deconvolve(batch=1000, tau=0.75, fs=self.fps)
+                param = self.ca.nnd
+
             # elif param == 'peaks':
             #     self.disc_param = True
             #     param = numpy.nan_to_num(self.ca.peaks.astype('bool'))
@@ -581,6 +583,7 @@ class ImagingSession(object):
 
         try:
             licks = licks[numpy.where(numpy.nan_to_num(licks) > 0)]
+            licks = licks[numpy.where(licks < self.ca.frames)]
         except:
             print(licks)
             assert False
@@ -588,6 +591,8 @@ class ImagingSession(object):
             axl.scatter(licks / self.fps / 60, numpy.zeros(len(licks)), marker="|", c=has_rewards[licks], s=50,
                         cmap='bwr_r', label='licks')
             axl.text(0, -0.5, f'{len(licks)} / {numpy.count_nonzero(has_rewards[licks])} licks')
+        else:
+            axl.text(0, -0.5, f'{0} licks')
         axl.set_ylim(-0.6, 0.4)
 
         axl.set_xlabel('Minutes')
@@ -599,7 +604,7 @@ class ImagingSession(object):
         axl.set_ylabel('Licks')
         self.fig.suptitle(self.prefix)
         self.fig.savefig(self.get_file_with_suffix('_behaviorplot.png'), dpi=300)
-        plt.close()
+        plt.close(self.fig)
 
 if __name__ == '__main__':
     procpath = 'D:\Shares\Data\_Processed/2P\PVTot/'
