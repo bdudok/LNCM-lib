@@ -17,7 +17,8 @@ PreProcess: load xml files, save all frame times, sync signals and metadata into
 class PreProc:
     __name__ = 'PreProc'
 
-    def __init__(self, dpath, procpath, prefix, btag='000', rsync_channel=0, led_channel=1, debug=False):
+    def __init__(self, dpath, procpath, prefix, btag='000', rsync_channel=0, led_channel=1,
+                 debug=False, overwrite=False):
         self.dpath = os.path.join(dpath, prefix + f'-{btag}/')  # raw data
         self.procpath = os.path.join(procpath, prefix) + '/'  # output processed data
         self.prefix = prefix  # recorder prefix tag
@@ -37,8 +38,9 @@ class PreProc:
         if not debug:
             # init sessioninfo, preprocess if empty
             self.si = SessionInfo(self.procpath, prefix)
-            self.is_processed = self.si.load()
-            if not self.is_processed:
+            if not overwrite:
+                self.is_processed = self.si.load()
+            if overwrite or not self.is_processed:
                 self.skip_analysis = False
                 self.preprocess()
             else:
@@ -171,6 +173,31 @@ class PreProc:
             self.cam_file = vfn
             self.md_keys.append('cam_file')
             self.found_output.append('Camera')
+        tfn = self.dpath + self.prefix + '_CamTimers.npy'
+        if os.path.exists(tfn):
+            cam_frame_times = numpy.load(tfn)  # millis
+            self.parse_frametimes()
+            scope_frame_times = (self.frametimes * 1000).astype('int64')
+            cam_frames = numpy.zeros(len(cam_frame_times), dtype='int64')
+            scope_delay = cam_frame_times[0, 1]
+            self.md_keys.append('cam_speed_actual')
+            self.cam_speed_actual = (numpy.diff(cam_frame_times[:, 1]) / numpy.diff(cam_frame_times[:, 0])).mean()
+            # find the scope frame closes to each camera frame, by time
+            f0 = 0
+            for fi, (frame, time) in enumerate(cam_frame_times):
+                f1 = numpy.searchsorted(scope_frame_times[f0:], time - scope_delay)
+                lt0 = max(0, f0 + f1 - 1)
+                lt1 = min(len(scope_frame_times), f0 + f1 + 2)
+                tdiff = numpy.abs(scope_frame_times[lt0:lt1] - (time - scope_delay))
+                f = numpy.argmin(tdiff)
+                if tdiff[f] < self.cam_speed_actual:
+                    found_frame = lt0 + f
+                    cam_frames[fi] = found_frame
+                    f0 = found_frame
+                else:
+                    cam_frames[fi] = 0
+            numpy.save(self.procpath + self.prefix + '_cam_sync_frames.npy', cam_frames)
+            self.found_output.append('CameraTiming')
 
     def parse_TTLs(self):
         vdat = pandas.read_csv(self.dpath + self.voltage_data)
@@ -267,21 +294,25 @@ class PreProc:
         self.md_keys.append('lfp_units')
 
     def parse_treadmill(self, save_fig=True):
-        tm = TreadmillRead.Treadmill(self.dpath, self.prefix)
+        self.tm = tm = TreadmillRead.Treadmill(self.dpath, self.prefix)
         if tm.filename is None:
             return None
         self.treadmill_fn = tm.filename
         self.md_keys.append('treadmill_fn')
         #save figure
         if save_fig:
-            fig, ax = tm.export_plot()
+            if tm.pycontrol_version == 1:
+                fig, ax = tm.export_plot()
+            elif tm.pycontrol_version == 2:
+                fig, ax = plt.subplots()
+                ax.plot(tm.pos_tX, tm.abspos)
             fig.savefig(self.procpath + self.prefix + '_treadmill.png', dpi=300)
             plt.close()
         # read rSync
-        tm_rsync = tm.get_Rsync_times()
-        sc_rsync = (self.ttl_times * 1000).astype('int')
+        tm_rsync = tm.get_Rsync_times().astype('int') #ms
+        sc_rsync = (self.ttl_times * 1000).astype('int') #ms
         try:
-            align = rsync.Rsync_aligner(tm_rsync, sc_rsync)
+            self.align = align = rsync.Rsync_aligner(tm_rsync, sc_rsync)
             skip = False
         except:
             print('Treadmill pulse times:', tm_rsync)
@@ -308,11 +339,16 @@ class PreProc:
             for event in tm.d.events:
                 if numpy.isnan(event.time):
                     continue
-                event_scopetime = align.A_to_B(event.time) / 1000
+                if tm.pycontrol_version == 1:
+                    et = event.time
+                else:
+                    et = int(event.time * 1000) #lookup uses ms
+                event_scopetime = align.A_to_B(et) / 1000
                 event_frame = int(numpy.searchsorted(self.frametimes, event_scopetime))
                 if not 0 < event_frame < len(self.frametimes)-1:
                     continue
                 if 'lick' in event.name:
+                    print(et, event_scopetime)
                     licks.append(event_frame)
                 elif event.name == 'reward':
                     rewards.append(event_frame)
@@ -387,13 +423,17 @@ class SessionInfo:
 
 
 if __name__ == '__main__':
-    dpath = 'D:\Shares\Data\_RawData\Bruker/testing/'
+    dpath = 'D:\Shares\Data\_RawData\Bruker/testing/treadmill update test/'
     procpath = 'D:\Shares\Data\_Processed/testing/'
-    prefix = 'OptoTest_2024-03-11_external ttl_000'
+    prefix = 'PVTot7_2024-03-14_lfp_127'
     btag = '000'
 
     if not os.path.exists(procpath):
         os.mkdir(procpath)
 
-    s = PreProc(dpath, procpath, prefix, btag, debug=True)
+    s = PreProc(dpath, procpath, prefix, btag, debug=False, overwrite=True)
+    self = s
+
+
+
 
