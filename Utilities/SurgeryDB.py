@@ -10,8 +10,9 @@ from BaserowAPI.config import config
 '''download mouse, incjection, window, and immuno data from LG,
 build a list of mice that contains the procedures done on them'''
 
-# labguru API token. Expires in 30 days. Request a new one if necessary and paste here.
-lg_api_token = "8a7e4cb392f54c19f159510279b513eab3e60e4b"
+from Utilities.LG_API_token import token
+#labguru API token. Expires in 30 days. Request a new one if necessary (response:401) and paste here.
+lg_api_token = token
 # lg_api_token = config["lg_token"]
 savepath = 'D:\Shares\Data\_Processed/MouseData/_InjectionList'
 def pprint(x):
@@ -28,6 +29,9 @@ while next_page:
     print('Reading mice, page', next_page)
     resp = requests.get(f'{config["lg_mice_url"]}?token={lg_api_token}',
                         params={'page_size': pagesize, 'page': next_page})
+    if resp.status_code == 401:
+        print('LG API unauthorized; get new token')
+    assert resp.status_code == 200
     rjs = resp.json()
     mice_lg.append(pandas.DataFrame(rjs, index=numpy.arange(mouse_index, mouse_index+len(rjs))))
     if len(rjs) < pagesize:
@@ -235,5 +239,7 @@ for prot_type, prot_names in more_prot_names.items():
 
 #add remaining columns from labguru Mice collection
 m_out[pandas.MultiIndex.from_product([["Additional LabGuru Data"], additional_columns])] = m_in[additional_columns]
+out_fn = savepath + f'_{datetime.date.today().isoformat()}.xlsx'
+m_out.to_excel(out_fn)
+print('Spreadsheet saved in', out_fn)
 
-m_out.to_excel(savepath + f'_{datetime.date.today().isoformat()}.xlsx')
