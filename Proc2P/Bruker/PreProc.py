@@ -176,7 +176,6 @@ class PreProc:
         tfn = self.dpath + self.prefix + '_CamTimers.npy'
         if os.path.exists(tfn):
             cam_frame_times = numpy.load(tfn)  # millis
-            self.parse_frametimes()
             scope_frame_times = (self.frametimes * 1000).astype('int64')
             cam_frames = numpy.zeros(len(cam_frame_times), dtype='int64')
             scope_delay = cam_frame_times[0, 1]
