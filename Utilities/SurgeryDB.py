@@ -178,13 +178,19 @@ for ii, item in v_df.iterrows():
 more_prot_names = {
     'Window': ('Imaging window implant', ),
     'Electrode': ('Electrode implant', ),
-    'Immuno': ('Fluorescent Immunostaining', )
+    'Immuno': ('Fluorescent Immunostaining', ),
+    'Kainate': ('Intrahippocampal kainate injection', 'Intra-amygdala kainate injection', ),
 }
+kainate_handles = ('IHK', 'IAK') #match the prot list
+match_kainate_type = {}
 for prot_type, prot_names in more_prot_names.items():
     more_experiments = {}
     #get experiments for each protocol
     prots = protocols.loc[protocols['name'].isin(prot_names)]
     for _, expitem in prots.iterrows():
+        this_prot = expitem['name']
+        if prot_type == 'Kainate':
+            kainate_type = kainate_handles[prot_names.index(this_prot)]
         resp = requests.get(f'{config["lg_api_root"]}{expitem["api_url"]}?token={lg_api_token}', )
         rjs = resp.json()
         links = rjs['links']
@@ -193,6 +199,8 @@ for prot_type, prot_names in more_prot_names.items():
                                 params={'token': lg_api_token})
             for exp in resp.json():
                 more_experiments[exp["id"]] = exp
+                if prot_type == 'Kainate':
+                    match_kainate_type[exp["id"]] = kainate_type
         print(f'Got {len(links)} {prot_type} experiments')
     #iterate samples to find linked exps
     more_dataframes = []
@@ -208,7 +216,10 @@ for prot_type, prot_names in more_prot_names.items():
         # make sure that the id links to the correct mouse
         assert this_mouse[("Mouse Data", "name")] == sample["name"]
         # add experiment details to output
-        expdat = pandas.DataFrame({'ExpName': '', 'ExpDate': ''}, index=[this_mouse.name])
+        if prot_type == 'Kainate':
+            expdat = pandas.DataFrame({'ExpName': '', 'ExpDate': '', 'ExpType': ''}, index=[this_mouse.name])
+        else:
+            expdat = pandas.DataFrame({'ExpName': '', 'ExpDate': ''}, index=[this_mouse.name])
         # check if the experiment is of current type
         n_exps = 0
         for expid in expids:
@@ -218,6 +229,12 @@ for prot_type, prot_names in more_prot_names.items():
                     expdat.iloc[0]['ExpName'] += this_exp['name']
                 else:
                     expdat.iloc[0]['ExpName'] += ', ' + this_exp['name']
+                if prot_type == 'Kainate':
+                    kainate_type = match_kainate_type[expid]
+                    if expdat.iloc[0]['ExpType'] == '':
+                        expdat.iloc[0]['ExpType'] += kainate_type
+                    else:
+                        expdat.iloc[0]['ExpType'] += ', ' + kainate_type
                 # get date
                 expdate = this_exp['name'].split(' ')[0]
                 for date_field in ('start_date', 'created_at'):
@@ -227,6 +244,7 @@ for prot_type, prot_names in more_prot_names.items():
                     expdat.iloc[0]['ExpDate'] += expdate
                 else:
                     expdat.iloc[0]['ExpName'] += ', ' + expdate
+
         more_dataframes.append(expdat)
 
     m_df = pandas.concat(more_dataframes)
