@@ -2,9 +2,9 @@ import json
 import requests
 import pandas
 from BaserowAPI.config import config
-
+from Utilities.LG_API_token import token
 #labguru API token. Expires in 30 days. Request a new one if necessary (response:401) and paste here.
-lg_api_token = "8a7e4cb392f54c19f159510279b513eab3e60e4b"
+lg_api_token = token
 # lg_api_token = config["lg_token"]
 
 #get list of mice from LG
@@ -14,6 +14,9 @@ next_page = 1
 while next_page:
     resp = requests.get(f'{config["lg_mice_url"]}?token={lg_api_token}',
                         params={'page_size': pagesize, 'page': next_page})
+    if resp.status_code == 401:
+        print('LG API unauthorized; get new token')
+    assert resp.status_code == 200
     rjs = resp.json()
     mice_lg.append(pandas.DataFrame(rjs))
     if len(rjs) < pagesize:

@@ -564,13 +564,16 @@ class Gui(ImagingSession):
         if hm:
             sortedhm = numpy.empty((len(corder), self.ca.frames))
             for i, c in enumerate(corder):
+                hmparam = param[c]
+                if self.dualch:
+                    hmparam = hmparam[:, self.primary_ch]
                 if self.disc_param:
-                    sortedhm[i] = param[c]
+                    sortedhm[i] = hmparam
                 else:
-                    if numpy.nanmax(param[c]) > 0:
-                        sortedhm[i] = param[c] / numpy.nanstd(param[c])
+                    if numpy.nanmax(hmparam) > 0:
+                        sortedhm[i] = hmparam / numpy.nanstd(hmparam)
                     else:
-                        sortedhm[i] = param[c]
+                        sortedhm[i] = hmparam
             if not hasattr(self.ca, 'version_info'):
                 sortedhm -= max(0, numpy.nanmin(sortedhm))
             elif self.ca.version_info['bsltype'] == 'original':

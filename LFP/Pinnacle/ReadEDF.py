@@ -63,6 +63,6 @@ class EDF:
             self.raw_trace = None
 
 if __name__ == '__main__':
-    path = 'D:\Shares\Data\_RawData\Pinnacle\Tottering\Tot6_Tottering++/'
-    fn = 'Tot6_0014_2023-12-27_11_00_59_TS_2023-12-27_11_00_59_export.edf'
-    a = EDF(path+fn)
+    path = 'D:\Shares\Data\_RawData\Pinnacle\Kainate\VKPV6/2024-03-25/'
+    fn = 'VKPV6_2024-03-25_2024-03-25_12_31_50_TS_2024-03-25_14_31_50_export.edf'
+    a = EDF(path, fn)

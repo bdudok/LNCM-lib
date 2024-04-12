@@ -176,7 +176,6 @@ class PreProc:
         tfn = self.dpath + self.prefix + '_CamTimers.npy'
         if os.path.exists(tfn):
             cam_frame_times = numpy.load(tfn)  # millis
-            self.parse_frametimes()
             scope_frame_times = (self.frametimes * 1000).astype('int64')
             cam_frames = numpy.zeros(len(cam_frame_times), dtype='int64')
             scope_delay = cam_frame_times[0, 1]
@@ -348,7 +347,6 @@ class PreProc:
                 if not 0 < event_frame < len(self.frametimes)-1:
                     continue
                 if 'lick' in event.name:
-                    print(et, event_scopetime)
                     licks.append(event_frame)
                 elif event.name == 'reward':
                     rewards.append(event_frame)
