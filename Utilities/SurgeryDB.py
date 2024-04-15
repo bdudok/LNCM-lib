@@ -209,7 +209,8 @@ for prot_type, prot_names in more_prot_names.items():
         is_mouse = False
         for sample in samples_jsons[sid]:
             is_mouse = sample['container']['name'] == 'Mice'
-            break
+            if is_mouse:
+                break
         if not is_mouse:
             continue
         this_mouse = m_out.loc[m_out[("Mouse Data", "id")] == sid].iloc[0]
@@ -258,6 +259,17 @@ for prot_type, prot_names in more_prot_names.items():
 #add remaining columns from labguru Mice collection
 m_out[pandas.MultiIndex.from_product([["Additional LabGuru Data"], additional_columns])] = m_in[additional_columns]
 out_fn = savepath + f'_{datetime.date.today().isoformat()}.xlsx'
-m_out.to_excel(out_fn)
+#color date columns
+colorcols = (("Injection Data", "InjDate"), ("Window", "ExpDate"),  ("Electrode", "ExpDate"),  ("Immuno", "ExpDate"),
+             ("Kainate", "ExpDate"))
+styles = []
+def sfunc(s):
+    isblank = s.eq('')
+    return ['' if x else 'background-color: green' for x in isblank]
+for col in colorcols:
+    styles.append(m_out.style.apply(sfunc, subset=[col]).export())
+m_out.style.use(styles[0]).use(styles[1]).use(styles[2]).use(styles[3]).use(styles[4]).to_excel(out_fn, freeze_panes=(2, 2))
+
+# m_out.to_excel(out_fn)
 print('Spreadsheet saved in', out_fn)
 
