@@ -65,7 +65,6 @@ for _, inj in inj_prot.iterrows():
     rjs = resp.json()
     links = rjs['links']
     for uuid in links:
-        # resp = requests.get(f'{config["lg_api_root"]}/api/v1/experiments?uuid={uuid}&token={lg_api_token})
         resp = requests.get(f'{config["lg_api_root"]}api/v1/experiments?uuid={uuid}',
                             params={'token': lg_api_token})
         for exp in resp.json():
@@ -86,7 +85,8 @@ while next_page:
     else:
         next_page += 1
     for sample in rjs:
-        sid = sample['item']['url']#sample["item_id"] #using the url to avoid collision - for example a virus and a mouse can have the same id.
+        sid = sample['item']['url']#sample["item_id"] #using the url to avoid collision
+        # - for example a virus and a mouse can have the same id.
         if sid not in exp_samples:
             exp_samples[sid] = []
         if sid not in samples_jsons:
@@ -118,25 +118,17 @@ v_dataframes = []
 for sid, expids in exp_samples.items():
     if not 'mice' in sid:
         continue #skip this sample if it's not a mouse
-    # for sample in samples_jsons[sid]: #we don't actually need the sample for anything
-    #     if 'mice' in sample['item']['url']:
-    #         break
+    #match sample id to mouse dataframe
     this_mouse = m_out.loc[m_out[("Mouse Data", "id")].eq(int(sid.split('/')[-1]))].iloc[0]
-    #make sure that the id links to the correct mouse
-    # assert this_mouse[("Mouse Data", "name")] == sample["item"]["name"] this is not required,
-    # only triggered if name has been changed
-    # assert 'BD1' not in sample["item"]["name"]
     # loop experiments linked to this sample and find an injection
     this_exp = None
     for expid in expids:
         if expid in experiments:
             if this_exp is None:
+                #there shouldn't be multiple AAV injections on each mouse, so we'll stop at first.
                 this_exp = experiments[expid]
-            else:
-                print('Multiple injections found', sid, expid)
     if this_exp is None:
-        print('No injection found for sample', sid)
-        continue
+        continue #not every mouse is AAV injected
     # add experiment details to output
     expdat = pandas.DataFrame({'ExpName': this_exp['name']}, index=[this_mouse.name])
     #get date
@@ -161,11 +153,6 @@ for sid, expids in exp_samples.items():
     v_dataframes.append(expdat)
 
 #add injection dat to output
-# add_columns = pandas.MultiIndex.from_product([["Injection Data"], expdat.columns])
-# for addcol, col in zip(add_columns, expdat.columns):
-#     if addcol not in m_out.columns:
-#         m_out[addcol] = pandas.Series()
-# m_out.loc[this_mouse.name, add_columns] = expdat
 
 v_df = pandas.concat(v_dataframes)
 nan_df = v_df.copy()
@@ -176,7 +163,7 @@ for col in add_cols:
 for ii, item in v_df.iterrows():
     m_out.loc[item.name, add_cols] = item
 
-#add more experiments
+#add more experiments. I guess I could nest AAV into this
 more_prot_names = {
     'Window': ('Imaging window implant', ),
     'Electrode': ('Electrode implant', ),
@@ -262,6 +249,8 @@ def sfunc(s):
     return ['' if x else 'background-color: green' for x in isblank]
 for col in colorcols:
     styles.append(m_out.style.apply(sfunc, subset=[col]).export())
+#the only way I found to apply multiple styles is to chain them. calling it on the return in a for loop does not work
+# the sfunc is evaluated at the time of saving, so can't use a global color in the for loop to give them different colors
 m_out.style.use(styles[0]).use(styles[1]).use(styles[2]).use(styles[3]).use(styles[4]).to_excel(out_fn, freeze_panes=(2, 2))
 
 # m_out.to_excel(out_fn)
