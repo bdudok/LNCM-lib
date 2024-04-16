@@ -10,6 +10,8 @@ from BaserowAPI.config import config
 '''download mouse, incjection, window, and immuno data from LG,
 build a list of mice that contains the procedures done on them'''
 
+pandas.options.mode.chained_assignment = None #because nested column names, this warning is falsely triggered by .loc assignments
+
 from Utilities.LG_API_token import token
 #labguru API token. Expires in 30 days. Request a new one if necessary (response:401) and paste here.
 lg_api_token = token
@@ -90,7 +92,7 @@ while next_page:
         if sid not in samples_jsons:
             samples_jsons[sid] = []
         exp_samples[sid].append(sample["experiment_id"])
-        samples_jsons[sid].append(sample)
+        samples_jsons[sid].append(sample) #these contain every experiment a given sample is linked to
 
 # create mouse output table
 m_in = mice_lg.dropna(how='all', axis=1)
@@ -114,28 +116,31 @@ print('Formatted output spreadsheet')
 # iterate through samples, and add experiment info to each included mouse
 v_dataframes = []
 for sid, expids in exp_samples.items():
-    # check if this sample is a mouse
+    # check if this sample is a mouse. if so, it should be a mouse in at least one occurrence
     is_mouse = False
     for sample in samples_jsons[sid]:
-        is_mouse = sample['container']['name'] == 'Mice'
-        break
+        is_mouse = 'mice' in sample['item']['url']
+        if is_mouse:
+            break
     if not is_mouse:
-        continue
+        continue #skip this sample if it's not a mouse
     this_mouse = m_out.loc[m_out[("Mouse Data", "id")] == sid].iloc[0]
     #make sure that the id links to the correct mouse
-    assert this_mouse[("Mouse Data", "name")] == sample["name"]
-    # check if the experiment is an injection
+    assert this_mouse[("Mouse Data", "name")] == sample["item"]["name"]
+    assert 'BD1' not in sample["item"]["name"]
+    # loop experiments linked to this sample and find an injection
     this_exp = None
     for expid in expids:
-        if expid in experiments and is_mouse:
+        if expid in experiments:
             if this_exp is None:
                 this_exp = experiments[expid]
             else:
                 print('Multiple injections found', expid)
-    if this_exp is None: #should not be possible
+    if this_exp is None:
         print('No injection found for sample', sample["name"])
         continue
     # add experiment details to output
+    #todo brek here to check pv15
     expdat = pandas.DataFrame({'ExpName': this_exp['name']}, index=[this_mouse.name])
     #get date
     expdate = this_exp['name'].split(' ')[0]
