@@ -86,7 +86,7 @@ while next_page:
     else:
         next_page += 1
     for sample in rjs:
-        sid = sample['item']['url']#sample["item_id"] #using the url to avoid collision - for example a virus and a mouse can have the same id.
+        sid = sample["item_id"]
         if sid not in exp_samples:
             exp_samples[sid] = []
         if sid not in samples_jsons:
@@ -116,16 +116,18 @@ print('Formatted output spreadsheet')
 # iterate through samples, and add experiment info to each included mouse
 v_dataframes = []
 for sid, expids in exp_samples.items():
-    if not 'mice' in sid:
+    # check if this sample is a mouse. if so, it should be a mouse in at least one occurrence
+    is_mouse = False
+    for sample in samples_jsons[sid]:
+        is_mouse = 'mice' in sample['item']['url']
+        if is_mouse:
+            break
+    if not is_mouse:
         continue #skip this sample if it's not a mouse
-    # for sample in samples_jsons[sid]: #we don't actually need the sample for anything
-    #     if 'mice' in sample['item']['url']:
-    #         break
-    this_mouse = m_out.loc[m_out[("Mouse Data", "id")].eq(int(sid.split('/')[-1]))].iloc[0]
+    this_mouse = m_out.loc[m_out[("Mouse Data", "id")] == sid].iloc[0]
     #make sure that the id links to the correct mouse
-    # assert this_mouse[("Mouse Data", "name")] == sample["item"]["name"] this is not required,
-    # only triggered if name has been changed
-    # assert 'BD1' not in sample["item"]["name"]
+    assert this_mouse[("Mouse Data", "name")] == sample["item"]["name"]
+    assert 'BD1' not in sample["item"]["name"]
     # loop experiments linked to this sample and find an injection
     this_exp = None
     for expid in expids:
@@ -133,11 +135,12 @@ for sid, expids in exp_samples.items():
             if this_exp is None:
                 this_exp = experiments[expid]
             else:
-                print('Multiple injections found', sid, expid)
+                print('Multiple injections found', expid)
     if this_exp is None:
-        print('No injection found for sample', sid)
+        print('No injection found for sample', sample["name"])
         continue
     # add experiment details to output
+    #todo brek here to check pv15
     expdat = pandas.DataFrame({'ExpName': this_exp['name']}, index=[this_mouse.name])
     #get date
     expdate = this_exp['name'].split(' ')[0]
@@ -207,9 +210,17 @@ for prot_type, prot_names in more_prot_names.items():
     #iterate samples to find linked exps
     more_dataframes = []
     for sid, expids in exp_samples.items():
-        if not 'mice' in sid:
-            continue  # skip this sample if it's not a mouse
-        this_mouse = m_out.loc[m_out[("Mouse Data", "id")].eq(int(sid.split('/')[-1]))].iloc[0]
+        # check if this sample is a mouse
+        is_mouse = False
+        for sample in samples_jsons[sid]:
+            is_mouse = sample['container']['name'] == 'Mice'
+            if is_mouse:
+                break
+        if not is_mouse:
+            continue
+        this_mouse = m_out.loc[m_out[("Mouse Data", "id")] == sid].iloc[0]
+        # make sure that the id links to the correct mouse
+        assert this_mouse[("Mouse Data", "name")] == sample["name"]
         # add experiment details to output
         if prot_type == 'Kainate':
             expdat = pandas.DataFrame({'ExpName': '', 'ExpDate': '', 'ExpType': ''}, index=[this_mouse.name])
@@ -218,7 +229,7 @@ for prot_type, prot_names in more_prot_names.items():
         # check if the experiment is of current type
         n_exps = 0
         for expid in expids:
-            if expid in more_experiments:
+            if expid in more_experiments and is_mouse:
                 this_exp = more_experiments[expid]
                 if expdat.iloc[0]['ExpName'] == '':
                     expdat.iloc[0]['ExpName'] += this_exp['name']
