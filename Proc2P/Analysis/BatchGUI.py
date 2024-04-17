@@ -1461,9 +1461,8 @@ class play_stack:
 
 
 class play_ephys:
-    def __init__(self, path, prefix, channels=[1, 1], export=False):
+    def __init__(self, path, prefix, ch=1, export=False):
         os.chdir(path)
-        ch, n_channels = channels
         ephys = Ephys(path, prefix, channel=ch)
         display_fps = 25
         self.fs = 2000
