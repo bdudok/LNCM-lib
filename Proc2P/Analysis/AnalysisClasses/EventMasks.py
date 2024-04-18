@@ -15,13 +15,13 @@ def PhotoStimTrain(a, w):
     return masks_from_list(a, w, event_frames)
 
 def LFPSpikes(a, w, ch=1):
-    df = read_excel(a.get_file_with_suffix(f'Ch{ch}_spiketimes.xlsx'))
+    df = read_excel(a.get_file_with_suffix(f'_Ch{ch}_spiketimes.xlsx'))
     st = df['SpikeTimes(s)'].values
     event_frames = [a.timetoframe(x) for x in st]
     return nonoverlap_from_list(a, w, event_frames, decay=int(a.CF.fps*0.2), eps=int(a.CF.fps), exclude_move=True)
 
-def Seizures(a, w):
-    df = read_excel(a.get_file_with_suffix('_seizure_times.xlsx'))
+def Seizures(a, w, ch=1):
+    df = read_excel(a.get_file_with_suffix(f'_ch{ch}_seizure_times.xlsx'))
     st = df['Sz.Start(s)'].values
     event_frames = [a.timetoframe(x) for x in st]
     return nonoverlap_from_list(a, w, event_frames, decay=int(a.CF.fps*0.2), eps=int(a.CF.fps), exclude_move=True)
@@ -214,3 +214,11 @@ def mask_from_list_nosession(w, event_list, trace_len, decay=6, eps=16, min_n=No
             # set actual indices
             mask[frame_index, w - w0:w + w1] = numpy.arange(first_frame, last_frame)
     return events, mask
+
+if __name__ == '__main__':
+    processed_path = 'D:\Shares\Data\_Processed/2P\PVTot/'
+    prefix = 'PVTot7_2024-02-07_lfpOpto_178'
+    from Proc2P.Analysis.ImagingSession import ImagingSession
+    a = ImagingSession(processed_path, prefix, tag='IN')
+    event, mask = LFPSpikes(a, 150)
+    print(len(event))

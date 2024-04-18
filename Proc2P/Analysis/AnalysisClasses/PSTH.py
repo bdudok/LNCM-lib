@@ -343,6 +343,9 @@ class PSTH:
 
     def get_numpy_name(self, prefix, tag, ch, weight=False):
         str_builder = [self.identifier, prefix, tag, ch, self.trigger_name, self.param_key, self.window_w]
+        if self.mask_function_kwargs is not None:
+            stripchars = r'"{:} ' + "'"
+            str_builder.append(''.join([x for x in str(self.mask_function_kwargs) if x not in stripchars]))
         fn = self.wdir + '_'.join([str(s) for s in str_builder])
         if weight:
             return fn + '_weights.npy'
