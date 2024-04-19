@@ -278,7 +278,12 @@ class PreProc:
             trace = [self.vdat[f' Input {ch}'].values for ch in self.lfp_channels]
             # get the frame for each sample
             # use int for this. data range is +-10 V, 1000x gain. data*1000 is in microvolt (raw). int16 range is 32k
-            ephys = - numpy.ones((len(self.lfp_channels) + 1, len(trace[0])), dtype='int16')
+            #but because we store the frame in the same array:
+            if len(self.frametimes) > numpy.iinfo(numpy.int16).max:
+                dtype = 'int32'
+            else:
+                dtype = 'int16'
+            ephys = - numpy.ones((len(self.lfp_channels) + 1, len(trace[0])), dtype=dtype)
             # get the frame number for each sample
             for ti, t in enumerate(self.frametimes):
                 ephys[0, int(t * self.fs):int((t + 1) * self.fs)] = ti

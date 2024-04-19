@@ -413,6 +413,8 @@ class Gui(ImagingSession):
                     rcols = ('red', 'green', 'violet')
                     for schi, sch in enumerate(self.spiketime_channels):
                         length = int(2 * self.fps)
+                        if length%2:
+                            length+=1
                         nzr = []
                         for t in self.spiketimes[schi]:
                             if t > 100 and t < self.ca.frames - 100:
