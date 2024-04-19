@@ -340,7 +340,7 @@ class GUI_main(QtWidgets.QMainWindow):
         sz_times = sz_times_raw.astype('int32')
         tx = (t*fs).astype('int64')
         Xrate = framesize/1000
-        X = numpy.arange(0, len(sz_burden) * Xrate, Xrate)
+        X = numpy.arange(0, len(sz_burden)) * Xrate
         time_xvals = numpy.arange(0, len(self.spikedet.trace)) / fs
 
         #plot data
