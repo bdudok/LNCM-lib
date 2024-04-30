@@ -8,7 +8,9 @@ import pandas
 from BaserowAPI.config import config
 
 '''download mouse, incjection, window, and immuno data from LG,
-build a list of mice that contains the procedures done on them'''
+build a list of mice that contains the procedures done on them
+run in suite2p env (py311)
+'''
 
 pandas.options.mode.chained_assignment = None #because nested column names, this warning is falsely triggered by .loc assignments
 

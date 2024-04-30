@@ -91,8 +91,8 @@ def pull_signals(path, prefix, tag=None, ch='All', raw=False):
             start = int(t * chunk_len)
             if start / nframes > next_report:
                 elapsed = datetime.datetime.now() - t0
-                speed = (elapsed / ncells / len(channels) / start).microseconds
-                print(f'Pulling {prefix}:{int(next_report*100):2d}% ({speed} microseconds / cell / frame)')
+                speed = (elapsed / len(channels) / start).microseconds
+                print(f'Pulling {prefix}:{int(next_report*100):2d}% ({speed/1000:.1f} ms / frame)')
                 next_report += rep_size
             stop = int(min(nframes, start + chunk_len))
             inmem_data = numpy.array(im.imdat.get_channel(ch)[start:stop])
