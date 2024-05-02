@@ -474,8 +474,6 @@ class GUI_main(QtWidgets.QMainWindow):
     def mark_complete(self, i, color='#50a3a4'):
         self.prefix_list.item(i).setBackground(QtGui.QColor(color))
 
-    #TODO add load function
-
     def load_next_callback(self):
         self.current_selected_i += 1
         current_item = self.prefix_list.item(self.current_selected_i)
