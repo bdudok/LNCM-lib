@@ -80,6 +80,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.centralWidget().setLayout(horizontal_layout)
         if path is not None:
             self.select_path_callback(path)
+        self.settings_saved = False
         self.show()
 
     def set_defaults(self):
@@ -330,6 +331,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
 
     def update_plot1(self):
+        self.settings_saved = False
         print([self.get_field(field) for field in self.param_keys_sorted])
         #clear plot
         ax = self.FigCanvas1.ax
@@ -428,6 +430,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         with open(output_fn + '.json', 'w') as fp:
             json.dump(op_dict, fp)
+        self.settings_saved = True
 
         #save plot
         for ca in self.FigCanvas1.ax:
@@ -461,6 +464,8 @@ class GUI_main(QtWidgets.QMainWindow):
         if savetag == self.default_savetag:
             savetag = None
         #process the whole trace using current settings
+        if not self.settings_saved:
+            self.save_output_callback()
         opts = {}
         for key in self.param_keys_sorted:
             opts[key] = self.get_field(key)

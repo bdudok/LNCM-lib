@@ -86,7 +86,8 @@ class App:
         ch = self.pltconfigs.config['ch'].get()
         norip = not self.pltconfigs.config['ShowRipples'].get()
         epc = self.preview.get_ephys_channel()
-        hash = prefix + str(tag) + str(ch) + str(norip) + str(epc)
+        spiketag = self.pltconfigs.config['SpikeTag'].get()
+        hash = prefix + str(tag) + str(ch) + str(norip) + str(epc) + str(spiketag)
         if hash in ls:
             del lu[lu.index(hash)]
             lu.append(hash)
@@ -99,7 +100,7 @@ class App:
             print('Fetching', prefix, tag, ch)
             # print('Implement session GUI')
             # assert False
-            ls[hash] = session_Gui(self.filelist.wdir, prefix, tag=tag, norip=norip, ch=ch,
+            ls[hash] = session_Gui(self.filelist.wdir, prefix, tag=tag, norip=norip, ch=ch, spiketag=spiketag,
                                    show_placefields=self.pltconfigs.config['ShowPlaceFields'].get(),
                                    show_spiketimes=self.pltconfigs.config['ShowSpikeTimes'].get(),
                                    show_sz=self.pltconfigs.config['ShowSeizureTimes'].get()
@@ -181,6 +182,12 @@ class Cfg:
             self.config[text] = IntVar()
             Checkbutton(self.frame, text=text, variable=self.config[text]).grid(row=self.second_row(), column=1, sticky=W)
             self.config[text].set(0)
+
+        Label(self.frame, text='SpikeTag').grid(row=self.second_row(), column=1)
+        self.config['SpikeTag'] = StringVar()
+        self.st = Entry(self.frame, textvariable=self.config['SpikeTag'])
+        self.st.insert(0, 'None')
+        self.st.grid(row=self.second_row(), column=1, sticky=N)
 
         Label(self.frame, text='Skin').grid(row=self.second_row(), column=1)
         MODES = ['dark', 'light',]

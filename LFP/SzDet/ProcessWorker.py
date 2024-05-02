@@ -37,7 +37,7 @@ def run_detection_edf(edf: ReadEDF, opts, save_envelope=False, savetag=None):
                     ('dur', 'Dur'), ('dist', 'Dist'),):
         kwargs[kw] = float(item[key])
     spikes = spikedet.get_spikes(**kwargs)
-    spikedet.spiketimes_to_excel(path, prefix, ch=ch)
+    spikedet.spiketimes_to_excel(path, prefix, ch=ch, savetag=savetag)
     if save_envelope:
         numpy.save(output_fn + f'_Ch{ch}_envelope.npy', spikedet.env)
 
@@ -75,9 +75,9 @@ def run_detection_ephys(ephys: LoadEphys, opts, save_envelope=False, savetag=Non
                     ('dur', 'Dur'), ('dist', 'Dist'),):
         kwargs[kw] = float(item[key])
     spikes = spikedet.get_spikes(**kwargs)
-    spikedet.spiketimes_to_excel(path, prefix, ch=ch)
+    spikedet.spiketimes_to_excel(path, prefix, ch=ch, savetag=savetag)
     if save_envelope:
-        numpy.save(output_fn + f'_ch{ch}_envelope.npy', spikedet.env)
+        numpy.save(output_fn + f'_Ch{ch}_envelope.npy', spikedet.env)
 
     # detect seizures
     kwargs = {}
@@ -85,8 +85,8 @@ def run_detection_ephys(ephys: LoadEphys, opts, save_envelope=False, savetag=Non
         kwargs[kw] = float(item[key])
     sz_burden, sz_times = InstRate.SpikeTrace(spikes, int(item['SzDet.Framesize']), **kwargs)
 
-    numpy.save(output_fn + f'_ch{ch}_sz_burden.npy', sz_burden)
+    numpy.save(output_fn + f'_Ch{ch}_sz_burden.npy', sz_burden)
     op = pandas.DataFrame(sz_times, columns=('Sz.Start(s)', 'Sz.Stop(s)'))
-    op.to_excel(output_fn + f'_ch{ch}_seizure_times.xlsx')
+    op.to_excel(output_fn + f'_Ch{ch}_seizure_times.xlsx')
     ts = datetime.datetime.now().isoformat(timespec='seconds')
     print(ts, f'Ch {ch} Done.')
