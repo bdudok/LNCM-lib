@@ -278,7 +278,12 @@ class PreProc:
             trace = [self.vdat[f' Input {ch}'].values for ch in self.lfp_channels]
             # get the frame for each sample
             # use int for this. data range is +-10 V, 1000x gain. data*1000 is in microvolt (raw). int16 range is 32k
-            ephys = - numpy.ones((len(self.lfp_channels) + 1, len(trace[0])), dtype='int16')
+            #but because we store the frame in the same array:
+            if len(self.frametimes) > numpy.iinfo(numpy.int16).max:
+                dtype = 'int32'
+            else:
+                dtype = 'int16'
+            ephys = - numpy.ones((len(self.lfp_channels) + 1, len(trace[0])), dtype=dtype)
             # get the frame number for each sample
             for ti, t in enumerate(self.frametimes):
                 ephys[0, int(t * self.fs):int((t + 1) * self.fs)] = ti
@@ -421,17 +426,17 @@ class SessionInfo:
 
 
 if __name__ == '__main__':
-    dpath = 'D:\Shares\Data\_RawData\Bruker/testing/treadmill update test/'
+    dpath = 'D:\Shares\Data\_RawData\Bruker\JEDI/'
     procpath = 'D:\Shares\Data\_Processed/testing/'
-    prefix = 'PVTot7_2024-03-14_lfp_127'
+    prefix = 'JEDI-PV21_2024-04-18_Fast_050'
     btag = '000'
 
-    if not os.path.exists(procpath):
-        os.mkdir(procpath)
+    # if not os.path.exists(procpath):
+    #     os.mkdir(procpath)
+    #
+    # s = PreProc(dpath, procpath, prefix, btag, debug=False, overwrite=True)
+    # self = s
 
-    s = PreProc(dpath, procpath, prefix, btag, debug=False, overwrite=True)
-    self = s
-
-
+    tm = TreadmillRead.Treadmill(os.path.join(dpath, prefix + f'-{btag}/'), prefix)  # raw data, prefix)
 
 

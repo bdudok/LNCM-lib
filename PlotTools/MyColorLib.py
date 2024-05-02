@@ -103,6 +103,8 @@ def clib(key, skin=None):
                   'mountains7': '#e2e3e4',
                   'CMYKred': '#ed1c24',
                   'CMYKgreen': '#00a651',
+                  'green': '#00FF00',
+                  'blue': '#0000FF',
                   'NegBlue': '#252783',
                   'PosRed': '#FF0000',
                   'axax_magenta': '#d734aa',

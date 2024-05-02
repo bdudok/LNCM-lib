@@ -8,7 +8,11 @@ import pandas
 from BaserowAPI.config import config
 
 '''download mouse, incjection, window, and immuno data from LG,
-build a list of mice that contains the procedures done on them'''
+build a list of mice that contains the procedures done on them
+run in suite2p env (py311)
+'''
+
+pandas.options.mode.chained_assignment = None #because nested column names, this warning is falsely triggered by .loc assignments
 
 from Utilities.LG_API_token import token
 #labguru API token. Expires in 30 days. Request a new one if necessary (response:401) and paste here.
@@ -63,7 +67,6 @@ for _, inj in inj_prot.iterrows():
     rjs = resp.json()
     links = rjs['links']
     for uuid in links:
-        # resp = requests.get(f'{config["lg_api_root"]}/api/v1/experiments?uuid={uuid}&token={lg_api_token})
         resp = requests.get(f'{config["lg_api_root"]}api/v1/experiments?uuid={uuid}',
                             params={'token': lg_api_token})
         for exp in resp.json():
@@ -84,13 +87,14 @@ while next_page:
     else:
         next_page += 1
     for sample in rjs:
-        sid = sample["item_id"]
+        sid = sample['item']['url']#sample["item_id"] #using the url to avoid collision
+        # - for example a virus and a mouse can have the same id.
         if sid not in exp_samples:
             exp_samples[sid] = []
         if sid not in samples_jsons:
             samples_jsons[sid] = []
         exp_samples[sid].append(sample["experiment_id"])
-        samples_jsons[sid].append(sample)
+        samples_jsons[sid].append(sample) #these contain every experiment a given sample is linked to
 
 # create mouse output table
 m_in = mice_lg.dropna(how='all', axis=1)
@@ -114,27 +118,19 @@ print('Formatted output spreadsheet')
 # iterate through samples, and add experiment info to each included mouse
 v_dataframes = []
 for sid, expids in exp_samples.items():
-    # check if this sample is a mouse
-    is_mouse = False
-    for sample in samples_jsons[sid]:
-        is_mouse = sample['container']['name'] == 'Mice'
-        break
-    if not is_mouse:
-        continue
-    this_mouse = m_out.loc[m_out[("Mouse Data", "id")] == sid].iloc[0]
-    #make sure that the id links to the correct mouse
-    assert this_mouse[("Mouse Data", "name")] == sample["name"]
-    # check if the experiment is an injection
+    if not 'mice' in sid:
+        continue #skip this sample if it's not a mouse
+    #match sample id to mouse dataframe
+    this_mouse = m_out.loc[m_out[("Mouse Data", "id")].eq(int(sid.split('/')[-1]))].iloc[0]
+    # loop experiments linked to this sample and find an injection
     this_exp = None
     for expid in expids:
-        if expid in experiments and is_mouse:
+        if expid in experiments:
             if this_exp is None:
+                #there shouldn't be multiple AAV injections on each mouse, so we'll stop at first.
                 this_exp = experiments[expid]
-            else:
-                print('Multiple injections found', expid)
-    if this_exp is None: #should not be possible
-        print('No injection found for sample', sample["name"])
-        continue
+    if this_exp is None:
+        continue #not every mouse is AAV injected
     # add experiment details to output
     expdat = pandas.DataFrame({'ExpName': this_exp['name']}, index=[this_mouse.name])
     #get date
@@ -159,11 +155,6 @@ for sid, expids in exp_samples.items():
     v_dataframes.append(expdat)
 
 #add injection dat to output
-# add_columns = pandas.MultiIndex.from_product([["Injection Data"], expdat.columns])
-# for addcol, col in zip(add_columns, expdat.columns):
-#     if addcol not in m_out.columns:
-#         m_out[addcol] = pandas.Series()
-# m_out.loc[this_mouse.name, add_columns] = expdat
 
 v_df = pandas.concat(v_dataframes)
 nan_df = v_df.copy()
@@ -174,17 +165,23 @@ for col in add_cols:
 for ii, item in v_df.iterrows():
     m_out.loc[item.name, add_cols] = item
 
-#add more experiments
+#add more experiments. I guess I could nest AAV into this
 more_prot_names = {
     'Window': ('Imaging window implant', ),
     'Electrode': ('Electrode implant', ),
-    'Immuno': ('Fluorescent Immunostaining', )
+    'Immuno': ('Fluorescent Immunostaining', ),
+    'Kainate': ('Intrahippocampal kainate injection', 'Intra-amygdala kainate injection', ),
 }
+kainate_handles = ('IHK', 'IAK') #match the prot list
+match_kainate_type = {}
 for prot_type, prot_names in more_prot_names.items():
     more_experiments = {}
     #get experiments for each protocol
     prots = protocols.loc[protocols['name'].isin(prot_names)]
     for _, expitem in prots.iterrows():
+        this_prot = expitem['name']
+        if prot_type == 'Kainate':
+            kainate_type = kainate_handles[prot_names.index(this_prot)]
         resp = requests.get(f'{config["lg_api_root"]}{expitem["api_url"]}?token={lg_api_token}', )
         rjs = resp.json()
         links = rjs['links']
@@ -193,31 +190,35 @@ for prot_type, prot_names in more_prot_names.items():
                                 params={'token': lg_api_token})
             for exp in resp.json():
                 more_experiments[exp["id"]] = exp
+                if prot_type == 'Kainate':
+                    match_kainate_type[exp["id"]] = kainate_type
         print(f'Got {len(links)} {prot_type} experiments')
     #iterate samples to find linked exps
     more_dataframes = []
     for sid, expids in exp_samples.items():
-        # check if this sample is a mouse
-        is_mouse = False
-        for sample in samples_jsons[sid]:
-            is_mouse = sample['container']['name'] == 'Mice'
-            break
-        if not is_mouse:
-            continue
-        this_mouse = m_out.loc[m_out[("Mouse Data", "id")] == sid].iloc[0]
-        # make sure that the id links to the correct mouse
-        assert this_mouse[("Mouse Data", "name")] == sample["name"]
+        if not 'mice' in sid:
+            continue  # skip this sample if it's not a mouse
+        this_mouse = m_out.loc[m_out[("Mouse Data", "id")].eq(int(sid.split('/')[-1]))].iloc[0]
         # add experiment details to output
-        expdat = pandas.DataFrame({'ExpName': '', 'ExpDate': ''}, index=[this_mouse.name])
+        if prot_type == 'Kainate':
+            expdat = pandas.DataFrame({'ExpName': '', 'ExpDate': '', 'ExpType': ''}, index=[this_mouse.name])
+        else:
+            expdat = pandas.DataFrame({'ExpName': '', 'ExpDate': ''}, index=[this_mouse.name])
         # check if the experiment is of current type
         n_exps = 0
         for expid in expids:
-            if expid in more_experiments and is_mouse:
+            if expid in more_experiments:
                 this_exp = more_experiments[expid]
                 if expdat.iloc[0]['ExpName'] == '':
                     expdat.iloc[0]['ExpName'] += this_exp['name']
                 else:
                     expdat.iloc[0]['ExpName'] += ', ' + this_exp['name']
+                if prot_type == 'Kainate':
+                    kainate_type = match_kainate_type[expid]
+                    if expdat.iloc[0]['ExpType'] == '':
+                        expdat.iloc[0]['ExpType'] += kainate_type
+                    else:
+                        expdat.iloc[0]['ExpType'] += ', ' + kainate_type
                 # get date
                 expdate = this_exp['name'].split(' ')[0]
                 for date_field in ('start_date', 'created_at'):
@@ -227,6 +228,7 @@ for prot_type, prot_names in more_prot_names.items():
                     expdat.iloc[0]['ExpDate'] += expdate
                 else:
                     expdat.iloc[0]['ExpName'] += ', ' + expdate
+
         more_dataframes.append(expdat)
 
     m_df = pandas.concat(more_dataframes)
@@ -240,6 +242,19 @@ for prot_type, prot_names in more_prot_names.items():
 #add remaining columns from labguru Mice collection
 m_out[pandas.MultiIndex.from_product([["Additional LabGuru Data"], additional_columns])] = m_in[additional_columns]
 out_fn = savepath + f'_{datetime.date.today().isoformat()}.xlsx'
-m_out.to_excel(out_fn)
+#color date columns
+colorcols = (("Injection Data", "InjDate"), ("Window", "ExpDate"),  ("Electrode", "ExpDate"),  ("Immuno", "ExpDate"),
+             ("Kainate", "ExpDate"))
+styles = []
+def sfunc(s):
+    isblank = s.eq('')
+    return ['' if x else 'background-color: green' for x in isblank]
+for col in colorcols:
+    styles.append(m_out.style.apply(sfunc, subset=[col]).export())
+#the only way I found to apply multiple styles is to chain them. calling it on the return in a for loop does not work
+# the sfunc is evaluated at the time of saving, so can't use a global color in the for loop to give them different colors
+m_out.style.use(styles[0]).use(styles[1]).use(styles[2]).use(styles[3]).use(styles[4]).to_excel(out_fn, freeze_panes=(2, 2))
+
+# m_out.to_excel(out_fn)
 print('Spreadsheet saved in', out_fn)
 

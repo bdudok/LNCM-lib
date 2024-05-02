@@ -55,7 +55,8 @@ class Gui(ImagingSession):
             graph_param = param
         self.activecell = 0
         self.graph_param = graph_param
-        if hasattr(self.pos, 'laps') and numpy.nanmax(self.pos.laps) > 2 and self.kwargs.get('show_placefields'):
+        maxlaps = numpy.nanmax(self.pos.laps)
+        if self.kwargs.get('show_placefields') and hasattr(self.pos, 'laps') and maxlaps is not None and maxlaps > 2:
             self.using_laps = True
             self.placefields_smooth(param=graph_param, silent=True, gui=True)
             self.calc_MI(param=graph_param, selection='movement')
@@ -412,6 +413,8 @@ class Gui(ImagingSession):
                     rcols = ('red', 'green', 'violet')
                     for schi, sch in enumerate(self.spiketime_channels):
                         length = int(2 * self.fps)
+                        if length%2:
+                            length+=1
                         nzr = []
                         for t in self.spiketimes[schi]:
                             if t > 100 and t < self.ca.frames - 100:

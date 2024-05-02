@@ -215,12 +215,17 @@ class ImagingSession(object):
         '''
         suffix = '_spiketimes.xlsx'
         stfield = 'SpikeTimes(s)'
+        spiketag = self.kwargs.get('spiketag', None)
         n_channels = self.ephys.edat.shape[0] - 1
         fs = self.si.info['fs']
         self.spiketime_channels = []
         self.spiketimes = []
         for i in range(n_channels):
-            fname = self.get_file_with_suffix(f'_Ch{i+1}{suffix}')
+            if spiketag in (None, 'None'):
+                fullsuffix = f'_Ch{i+1}{suffix}'
+            else:
+                fullsuffix = f'_{spiketag}_Ch{i+1}{suffix}'
+            fname = self.get_file_with_suffix(fullsuffix)
             if os.path.exists(fname):
                 self.spiketime_channels.append(i+1)
                 stdat = read_excel(fname)
@@ -232,13 +237,19 @@ class ImagingSession(object):
         '''
         suffix = '_seizure_times.xlsx'
         stfield = ('Sz.Start(s)', 'Sz.Stop(s)')
+        spiketag = self.kwargs.get('spiketag', None)
         n_channels = self.ephys.edat.shape[0] - 1
         fs = self.si.info['fs']
         self.sztime_channels = []
         self.sztimes = []
         for i in range(n_channels):
-            fname = self.get_file_with_suffix(f'_ch{i+1}{suffix}')
-            if os.path.exists(fname):
+            if spiketag in (None, 'None'):
+                fullsuffix = f'_Ch{i+1}{suffix}'
+            else:
+                fullsuffix = f'_{spiketag}_Ch{i+1}{suffix}'
+            fname = self.get_file_with_suffix(fullsuffix)
+            if os.path.exists(fname): #this is not supposed to be case sensitive on Windows (confirmed). if it fails to open,
+                # fix ch vs Ch in name.
                 self.sztime_channels.append(i+1)
                 stdat = read_excel(fname)
                 sztimes = [self.ephys.edat[0, (stdat[x].values * fs).astype('int64')] for x in stfield]
