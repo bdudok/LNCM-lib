@@ -193,6 +193,9 @@ class GUI_main(QtWidgets.QMainWindow):
         return self.param_fields[label].text()
 
     def set_field(self, label, value):
+        self.param_fields[label].setText(str(value))
+
+    def set_result(self, label, value):
         self.result_fields[label].setText(str(value))
 
     def make_options_groupbox(self):
@@ -244,10 +247,22 @@ class GUI_main(QtWidgets.QMainWindow):
         self.is_sz_checkbox.setChecked(True)
         vbox.addWidget(self.is_sz_checkbox)
 
+        hbox = QtWidgets.QHBoxLayout()
+        hbox.addWidget(QLabel(label))
+
+
         hline = QtWidgets.QHBoxLayout()
+        hline.addWidget(QLabel('Tag'))
+        self.default_savetag = 'No tag'
+        self.savetag_field =  QLineEdit(self)
+        self.savetag_field.setText(self.default_savetag)
+        hline.addWidget(self.savetag_field)
         save_button = QPushButton('Save settings', )
         hline.addWidget(save_button)
         save_button.clicked.connect(self.save_output_callback)
+        load_button = QPushButton('Load settings', )
+        hline.addWidget(load_button)
+        load_button.clicked.connect(self.load_output_callback)
         proc_button = QPushButton('Process', )
         hline.addWidget(proc_button)
         proc_button.clicked.connect(self.process_callback)
@@ -378,9 +393,9 @@ class GUI_main(QtWidgets.QMainWindow):
         plt.tight_layout()
 
         #('Spikes', 'Seizures', 'Sz.Duration')
-        self.set_field('Spikes', len(t))
-        self.set_field('Seizures', len(sz_times))
-        self.set_field('Sz.Duration', f'{numpy.mean([sz[1]-sz[0] for sz in sz_times]):.2f}')
+        self.set_result('Spikes', len(t))
+        self.set_result('Seizures', len(sz_times))
+        self.set_result('Sz.Duration', f'{numpy.mean([sz[1] - sz[0] for sz in sz_times]):.2f}')
 
     def load_file_callback(self):
         current_item = self.prefix_list.selectedItems()[0]
@@ -389,8 +404,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.new_plot = True
         self.refresh_data()
 
-    def save_output_callback(self):
-        #save settings
+    def get_output_fn(self):
         if self.setup == 'Soltesz':
             output_fn = self.savepath + self.active_prefix + self.suffix
         elif self.setup == 'Pinnacle':
@@ -398,10 +412,20 @@ class GUI_main(QtWidgets.QMainWindow):
         elif self.setup == 'LNCM':
             output_fn = os.path.join(self.savepath, self.active_prefix, self.active_prefix +
                                      f'_Ch{self.get_field("Channel")}' + self.suffix)
+        #add tag
+        savetag = self.savetag_field.text()
+        if not savetag == self.default_savetag:
+            output_fn += f'_{savetag}'
+        return output_fn
+
+    def save_output_callback(self):
+        output_fn = self.get_output_fn()
+
         op_dict = {}
         for key in self.param_keys_sorted:
             op_dict[key] = self.get_field(key)
         op_dict['Included'] = self.is_sz_checkbox.isChecked()
+
         with open(output_fn + '.json', 'w') as fp:
             json.dump(op_dict, fp)
 
@@ -411,10 +435,31 @@ class GUI_main(QtWidgets.QMainWindow):
         self.FigCanvas1.fig.savefig(output_fn + '.png', dpi=300)
 
         self.mark_complete(self.current_selected_i)
-        if not self.setup == 'Pinnacle':
-            self.load_next_callback()
+        # if not self.setup == 'Pinnacle':
+        #     self.load_next_callback()
+
+    def load_file_callback(self):
+        current_item = self.prefix_list.selectedItems()[0]
+        self.active_prefix = current_item.text()
+        self.current_selected_i = self.prefix_list.currentRow()
+        self.new_plot = True
+        self.refresh_data()
+
+    def load_output_callback(self):
+        output_fn = self.get_output_fn()
+        with open(output_fn + '.json', 'r') as fp:
+            op_dict = json.load(fp)
+
+        for key in self.param_keys_sorted:
+            if key in op_dict:
+                self.set_field(key, op_dict[key])
+        self.is_sz_checkbox.setChecked(bool(op_dict['Included']))
+        self.update_plot1()
 
     def process_callback(self):
+        savetag = self.savetag_field.text()
+        if savetag == self.default_savetag:
+            savetag = None
         #process the whole trace using current settings
         opts = {}
         for key in self.param_keys_sorted:
@@ -422,12 +467,14 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.setup == 'Pinnacle':
             # tt = Process(target=ProcessSeizures, args=(self.edf, opts))
             # tt.start()
-            ProcessSeizures(self.edf, opts, format='edf')
+            ProcessSeizures(self.edf, opts, format='edf', savetag=savetag)
         elif self.setup == 'LNCM':
-            ProcessSeizures(self.ephys, opts, format='ephys', save_envelope=True)
+            ProcessSeizures(self.ephys, opts, format='ephys', save_envelope=True, savetag=savetag)
 
     def mark_complete(self, i, color='#50a3a4'):
         self.prefix_list.item(i).setBackground(QtGui.QColor(color))
+
+    #TODO add load function
 
     def load_next_callback(self):
         self.current_selected_i += 1
@@ -472,7 +519,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.raw_trace = raw_trace
         self.spikedet = SpikesPower.Detect(trace, fs=fs, lo=float(self.get_field('LoCut')),
                                                          hi=float(self.get_field('HiCut')))
-        self.set_field('Prefix', self.active_prefix)
+        self.set_result('Prefix', self.active_prefix)
         self.update_plot1()
 
 class SubplotsCanvas(FigureCanvasQTAgg):
