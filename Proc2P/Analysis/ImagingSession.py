@@ -12,10 +12,11 @@ from Proc2P.Bruker.ConfigVars import CF
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Bruker.LoadEphys import Ephys
 from LFP import Filter
-from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel, strip_ax
+from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel, strip_ax, ewma
 from Proc2P.Analysis.Ripples import Ripples
 import time
 from scipy import stats
+
 
 
 
@@ -34,6 +35,14 @@ class Pos:
         else:
             if self.pos is not None:
                 self.relpos = self.pos / numpy.nanmax(self.pos)
+
+    def drop_nan(self):
+        self.speed = numpy.nan_to_num(self.speed)
+        self.smspd = numpy.nan_to_num(self.smspd)
+        self.movement = numpy.nan_to_num(self.movement)
+        self.pos = numpy.nan_to_num(self.pos)
+        self.laps = numpy.nan_to_num(self.laps)
+
 
 
 class ImagingSession(object):
@@ -209,6 +218,17 @@ class ImagingSession(object):
         self.ephys = Ephys(self.procpath, self.prefix, channel=self.lfp_ch)
         self.has_ephys = self.ephys.trace is not None
 
+    def ewma_smooth(self, period):
+        if not self.dualch:
+            data = numpy.empty((self.ca.cells, self.ca.frames))
+            for c in range(self.ca.cells):
+                data[c, :] = ewma(self.ca.ntr[c], period)
+        else:
+            data = numpy.empty((self.ca.cells, self.ca.frames, 2))
+            for ch in range(2):
+                for c in range(self.ca.cells):
+                    data[c, :, ch] = ewma(self.ca.ntr[c, :, ch], period)
+        return data
     def map_spiketimes(self):
         '''
         Load existing spiketime excel files and convert to frames

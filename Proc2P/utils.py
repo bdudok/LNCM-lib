@@ -8,11 +8,17 @@ def lprint(obj, message, *args):
     for x in args:
         message += ' ' + str(x)
     if obj is None:
-        print(f'{ts}: {message}')
+        output = f'{ts}: {message}'
     else:
-        print(f'{ts} - {obj.__name__}: {message}')
+        output = f'{ts} - {obj.__name__}: {message}'
+    print(output)
+    return output
 
 from Proc2P.Legacy.Batch_Utils import strip_ax
+
+
+def norm(d):
+    return numpy.maximum(numpy.minimum(d / numpy.percentile(d, 99, axis=0), 1), 0)
 
 def gapless(trace, gap=5, threshold=0):
     '''makes binary trace closing small gaps
@@ -98,3 +104,7 @@ def read_excel(*args, **kwargs):
     if fn.endswith('csv'):
         return pandas.read_csv(*args, **kwargs)
     return pandas.read_excel(*args, **kwargs, engine='openpyxl')
+
+
+def ewma(trace, period=15):
+    return numpy.array(pandas.DataFrame(numpy.nan_to_num(trace)).ewm(span=period).mean()[0])
