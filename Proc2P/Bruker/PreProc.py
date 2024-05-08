@@ -338,6 +338,14 @@ class PreProc:
             self.log('Scope pulse times:', sc_rsync)
             self.lprint(self, 'RSync align error')
             skip = True
+        #try again limiting the treadmill ttls to length of scope (in case if was left running for long
+        try:
+            self.lprint(self, 'Attempting fixing RSync align error by limiting time...')
+            lim_sync = tm_rsync[numpy.where(tm_rsync < sc_rsync.max()+10000)]
+            self.align = align = rsync.Rsync_aligner(lim_sync, sc_rsync)
+            skip = False
+        except:
+            self.lprint(self, 'RSync align still failed')
         if not skip:
             self.frame_at_treadmill = align.B_to_A(self.frametimes * 1000)
             numpy.save(self.procpath + self.prefix + '_frame_tm_times.npy', self.frame_at_treadmill)
