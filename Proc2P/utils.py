@@ -1,8 +1,9 @@
+import os
 import datetime
 import numpy
 import pandas
 
-def lprint(obj, message, *args):
+def lprint(obj, message, *args, logger=None):
     '''Add timestamp and object name to print calls'''
     ts = datetime.datetime.now().isoformat(timespec='seconds')
     for x in args:
@@ -12,7 +13,23 @@ def lprint(obj, message, *args):
     else:
         output = f'{ts} - {obj.__name__}: {message}'
     print(output)
-    return output
+    if logger is None:
+        return output
+    else:
+        logger.log(output)
+
+class logger:
+    def __init__(self, filehandle=None):
+        self.fn = filehandle
+
+    def set_handle(self, procpath, prefix):
+        self.fn = os.path.join(procpath, prefix + '/', prefix + '_AnalysisLog.txt')
+
+    def log(self, message):
+        if not message.endswith('\n'):
+            message += '\n'
+        with open(self.fn, 'a') as f:
+            f.write(message)
 
 from Proc2P.Legacy.Batch_Utils import strip_ax
 

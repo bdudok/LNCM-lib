@@ -5,11 +5,14 @@ import os
 from multiprocessing import Process
 from time import time
 import datetime
+from Proc2P.utils import logger, lprint
 
 class Worker(Process):
+    __name__ = 'PullSignals'
     def __init__(self, queue):
         super(Worker, self).__init__()
         self.queue = queue
+        self.log = logger()
 
     def run(self):
         for job in iter(self.queue.get, None):
@@ -27,7 +30,10 @@ class Worker(Process):
                 tag = str(max(exs))
             else:
                 tag = roi
-            pull_signals(path, prefix, tag=tag, ch=ch)
+            self.log.set_handle(path, prefix)
+            retval = pull_signals(path, prefix, tag=tag, ch=ch)
+            if retval:
+                lprint(self, retval, logger=self.log)
 
 
 def pull_signals(path, prefix, tag=None, ch='All', raw=False):
@@ -77,7 +83,8 @@ def pull_signals(path, prefix, tag=None, ch='All', raw=False):
     traces = numpy.empty((ncells, nframes, nchannels))
     # print('Reading data from disk to memory...')
     # im.force_read()  # miniscope compatibility and improves performance if low on mem. moved to default force chunk read
-    print(f'Pulling {int(nframes*ncells*nchannels)} signals ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}...')
+    message = f'Pulling {int(nframes*ncells*nchannels)} signals ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}...'
+    print(message)
     # create chunks so that the same array is combed for each cell before moving on - data is memory mapped
     t0 = datetime.datetime.now()
     chunk_len = 500
@@ -106,7 +113,8 @@ def pull_signals(path, prefix, tag=None, ch='All', raw=False):
     speed = (elapsed / ncells / len(channels) / nframes).microseconds
     print(f'{prefix} finished in {minutes:.1f} minutes ({speed} microseconds / cell / frame)')
     # print(traces.shape)
-    return traces
+    message = f'Pulled {int(nframes)} frames ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}...'
+    return message
 
 if __name__ == '__main__':
     path = 'D:/Shares/Data/_Processed/2P/testing/'
