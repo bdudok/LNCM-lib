@@ -8,6 +8,7 @@ from matplotlib.widgets import RectangleSelector
 from PlotTools.Formatting import strip_ax
 from sklearn import cluster
 from Proc2P.Bruker.LoadEphys import Ephys
+from Proc2P.utils import lprint, logger
 
 
 class Event(object):
@@ -30,6 +31,7 @@ class UI(object):
 
 
 class Ripples(object):
+    __name__ = 'Ripples'
     def __init__(self, procpath, prefix, fs=2000, bands=('theta', 'ripple'), config=None, enum=False, force=False,
                  keep_ripples=False, ephys_channel=1, tag=None, strict_tag=False, load_minimal=False, **kwargs):
         if config is None:
@@ -47,6 +49,8 @@ class Ripples(object):
         self.bands = bands
         self.procpath = procpath
         self.prefix = prefix
+        self.log = logger()
+        self.log.set_handle(procpath, prefix)
         self.tag = tag
         self.strict_tag = strict_tag
         self.fs = fs
@@ -606,7 +610,8 @@ class Ripples(object):
             for i, p in enumerate(events):
                 ea[i, :] = p
         ea.tofile(self.path + ts)
-        print(ts, f'saved with {self.count_included()} events.')
+        lprint(self, f'{ts} saved with {self.count_included()} events. Tr1: {self.tr1}, Tr2:{self.tr2}',
+               logger=self.log)
 
     def export_ripple_times(self):
         if len(self.events) > 0:

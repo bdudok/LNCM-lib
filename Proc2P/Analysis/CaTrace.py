@@ -6,7 +6,7 @@ from scipy import signal
 import pandas
 import shutil
 from Proc2P.Bruker.SyncTools import Sync
-from Proc2P.utils import lprint, gapless, outlier_indices
+from Proc2P.utils import lprint, gapless, outlier_indices, logger
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from Proc2P.Bruker.ConfigVars import CF
@@ -25,6 +25,8 @@ class CaTrace(object):
         self.prefix = prefix
         self.opPath = os.path.join(self.path, self.prefix + '/')
         self.is_dual = False
+        self.log = logger()
+        self.log.set_handle(path, prefix)
         # parse channel
         if ch in (0, 'Ch2', 'First', 'Green'):
             ch = 0
@@ -89,7 +91,7 @@ class CaTrace(object):
         try:
             self.movement = gapless(self.sync.load('speed'))
         except:
-            lprint(self, 'movement not found')
+            lprint(self, 'movement not found', logger=self.log)
             self.movement = numpy.zeros(self.frames, dtype=numpy.bool)
         # save outlier data points to exclude from analysis:
         # mask with bad frames
@@ -131,7 +133,7 @@ class CaTrace(object):
                              'channel': str(self.ch),
                              'fps': str(CF.fps)}  # should contain only single strings as values
         numpy.save(self.pf + '//' + 'info', self.version_info)
-        lprint(self, self.prefix, self.cells, 'cells saved.')
+        lprint(self, self.prefix, self.cells, 'cells saved.', f'Tag: {self.tag}, Ch: {self.ch}', logger=self.log)
 
     def load(self):
         if not os.path.exists(self.pf):
@@ -279,7 +281,8 @@ class Worker(Process):
                     for i in range(frames):
                         bsl[i] = numpy.polyval(poly, i)
                     if numpy.any(bsl < 0):
-                        lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline')
+                        lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline',
+                               logger=self.log)
                         bsltype = 'original'
                 if bsltype in ['original', 'both']:  # both not implemented
                     for t in range(frames):

@@ -7,7 +7,7 @@ import pandas
 from sklearn import cluster
 import xml.etree.ElementTree as ET
 from Proc2P.Treadmill import TreadmillRead, rsync
-from Proc2P.utils import lprint
+from Proc2P.utils import lprint, get_user
 
 '''
 PreProcess: load xml files, save all frame times, sync signals and metadata into the analysis folder
@@ -23,6 +23,7 @@ class PreProc:
         self.procpath = os.path.join(procpath, prefix) + '/'  # output processed data
         self.prefix = prefix  # recorder prefix tag
         self.btag = btag  # tag appended by bruker (000 by default)
+        self.logstring = ''
 
         # setup config
         self.led_channel = led_channel
@@ -46,12 +47,27 @@ class PreProc:
             else:
                 self.load_metadata()
 
+    def log(self, s, *args):
+        if s not in ('', None):
+            for v in args:
+                s += str(v)
+            if not (s.endswith('\n') or s.endswith('\r')):
+                s += '\r\n'
+            self.logstring += s
+
+    def lprint(self, *args, **kwargs):
+        self.log(lprint(*args, **kwargs))
+    def save_log(self):
+        fn = self.procpath+self.prefix+f'_{get_user()}_PreProcLog.txt'
+        with open(fn, 'w') as f:
+            f.write(self.logstring)
+
     def preprocess(self, tm_fig=True):
         '''
         Convert the XML and voltage outputs to frametimes, timestamped events
         Saves bad_frames, FrameTimes, StimFrames, 2pTTLtimes, and sessiondata
         '''
-        lprint(self, 'Pre-processing ' + self.prefix)
+        self.lprint(self, 'Pre-processing ' + self.prefix)
         self.found_output = []
         self.parse_frametimes()
         self.parse_TTLs()
@@ -59,7 +75,9 @@ class PreProc:
         self.parse_treadmill(tm_fig)
         self.parse_cam()
         self.save_metadata()
-        print('Found:', ','.join(self.found_output))
+        self.lprint(self, 'Found:', ','.join(self.found_output))
+        self.save_log()
+
 
     def parse_frametimes(self):
         # find xml filename
@@ -165,7 +183,6 @@ class PreProc:
         # append metadata attribs
         self.md_keys.extend(['n_frames', 'voltage_name', 'has_opto', 'opto_name',
                              'framerate', 'linetime', 'channelnames'])
-
 
     def parse_cam(self):
         vfn = self.dpath+self.prefix+'.avi'
@@ -319,10 +336,19 @@ class PreProc:
             self.align = align = rsync.Rsync_aligner(tm_rsync, sc_rsync)
             skip = False
         except:
-            print('Treadmill pulse times:', tm_rsync)
-            print('Scope pulse times:', sc_rsync)
-            print('RSync align error')
+            self.log('Treadmill pulse times:', tm_rsync)
+            self.log('Scope pulse times:', sc_rsync)
+            self.lprint(self, 'RSync align error')
             skip = True
+        #try again limiting the treadmill ttls to length of scope (in case if was left running for long
+        if skip:
+            try:
+                self.lprint(self, 'Attempting fixing RSync align error by limiting time...')
+                lim_sync = tm_rsync[numpy.where(tm_rsync < sc_rsync.max()+10000)]
+                self.align = align = rsync.Rsync_aligner(lim_sync, sc_rsync)
+                skip = False
+            except:
+                self.lprint(self, 'RSync align still failed')
         if not skip:
             self.frame_at_treadmill = align.B_to_A(self.frametimes * 1000)
             numpy.save(self.procpath + self.prefix + '_frame_tm_times.npy', self.frame_at_treadmill)

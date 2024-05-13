@@ -1,7 +1,7 @@
 import tifffile
 
 from Proc2P.Analysis.LoadPolys import FrameDisplay
-from Proc2P.utils import lprint
+from Proc2P.utils import lprint, logger
 import matplotlib.path as mplpath
 import os
 import shutil
@@ -42,9 +42,11 @@ class Worker(Process):
 
     def run(self):
         for din in iter(self.queue.get, None):
-            lprint(self, din)
             path, prefix, apps, config = din
-            RoiEditor(path, prefix, ).autodetect(approach=apps, config=config)
+            log = logger()
+            log.set_handle(path, prefix)
+            lprint(self, 'Calling autodetect with:', din, logger=log)
+            RoiEditor(path, prefix, ).autodetect(approach=apps, config=config, log=log)
 
 
 class Lasso:
@@ -248,7 +250,8 @@ class Translate:
                     pass
         fn = self.tgt + '_saved_roi_' + str(max(exs) + 1)
         RoiEditor.save_roi(self.data, fn, self.rois.img.image.info['sz'], self.translate)
-        print(len(self.data), 'saved in', fn)
+        message = f'{len(self.data)} saved in {fn}'
+        print(message)
         if sbx:
             Process(target=save_sbx, args=(self.tgt, self.tim.shape, self.data, self.path)).start()
 
@@ -290,6 +293,8 @@ class Gui:
     def __init__(self, path, prefix, exporting=False):
         self.path = path
         self.prefix = prefix
+        self.log = logger()
+        self.log.set_handle(path, prefix)
         self.opPath = os.path.join(self.path, self.prefix + '/')
         self.psets = {}
         self.paths = {}
@@ -504,7 +509,7 @@ class Gui:
         fn = self.prefix + '_saved_roi_' + str(exi)
         RoiEditor.save_roi(self.saved_rois, self.opPath + fn, self.rois.img.image.info['sz'])
         msg = f'{len(self.saved_rois)} saved in {fn}'
-        print(msg)
+        lprint(self, msg, logger=self.log)
         return msg
 
     def gammaChange(self, v):
@@ -847,7 +852,7 @@ class RoiEditor(object):
     def get_pic(self):
         return self.img.image.show_field()
 
-    def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config={}, exclude_opto=True):
+    def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config={}, exclude_opto=True, log=None):
         approach = list(approach)
         prefix = self.prefix
         im = self.img.image
@@ -858,7 +863,7 @@ class RoiEditor(object):
         if exclude_opto and os.path.exists(opto_name):
             have_opto = True
             bad_frames = numpy.load(opto_name)
-            lprint(self, f'opto excluding {len(bad_frames)} frames')
+            lprint(self, f'opto excluding {len(bad_frames)} frames', logger=log)
 
         else:
             # lprint(self, 'no opto')
@@ -927,6 +932,7 @@ class RoiEditor(object):
                 id /= numpy.percentile(id, 99)
                 nicepic[y0:-y1, x0:-x1, lut[2]] = numpy.minimum(id, 1) * 255
             cv2.imwrite(self.opPath + prefix + '_avgmax.tif', nicepic)
+            lprint(self, prefix, 'avgmax.tif saved', logger=log)
 
             # create SIMA object
             if os.path.exists(dsname) and not force_re:
@@ -964,7 +970,7 @@ class RoiEditor(object):
             if 'PC' in item:
                 if not all_def:
                     itemtag = item + '-'.join([str(config[pname]) for pname in pnames])
-            lprint(self, item, 'Size setting: diam', config['Diameter'], 'min:', config['MinSize'], 'max:', config['MaxSize'])
+            lprint(self, item, 'Size setting: diam', config['Diameter'], 'min:', config['MinSize'], 'max:', config['MaxSize'], logger=log)
 
             py_approach = sima.segment.PlaneCA1PC(channel=ch, verbose=False,
                                                   cut_min_size=int(config['MinSize']),
@@ -976,13 +982,13 @@ class RoiEditor(object):
                     rois = ds.segment(py_approach, 'pc_ROIs')
                     self.saveauto(rois, itemtag, x0, y0)
                 except AssertionError:
-                    lprint(self, 'CA1PC crashed for', prefix)
+                    lprint(self, 'CA1PC crashed for', prefix, logger=log)
             if 'iPC' in item:
                 try:
                     rois = ids.segment(py_approach, 'ipc_ROIs')
                     self.saveauto(rois, itemtag, x0, y0)
                 except AssertionError:
-                    lprint(self, 'CA1PC-i crashed for', prefix)
+                    lprint(self, 'CA1PC-i crashed for', prefix, logger=log)
             if 'IN' in item or 'STICA' in item:
                 # default params if not specified
                 if not 'comps' in config:
@@ -996,7 +1002,8 @@ class RoiEditor(object):
                 stica_approach.append(sima.segment.MergeOverlapping(threshold=0.5))
                 rois = ds.segment(stica_approach, 'stica_ROIs')
 
-                self.saveauto(rois, item, x0, y0, filter=50 * 50)
+                retval = self.saveauto(rois, item, x0, y0, filter=50 * 50)
+                lprint(self, retval, logger=log)
 
         # clean up sima folders
         ds, ids = None, None
@@ -1018,7 +1025,7 @@ class RoiEditor(object):
             elif Polygon(roi).area < filter:
                 nrs.append(roi)
         RoiEditor.save_roi(nrs, fn, self.img.image.info['sz'])
-        print(len(nrs), 'saved in', fn)
+        return f'{len(nrs)} ROIs saved in {fn}'
 
     def load_roiset(self):
         archive = zipfile.ZipFile(self.prefix + '_modrois.zip', 'r')

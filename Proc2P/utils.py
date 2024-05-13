@@ -1,18 +1,44 @@
+import os
 import datetime
 import numpy
 import pandas
 
-def lprint(obj, message, *args):
+def lprint(obj, message, *args, logger=None):
     '''Add timestamp and object name to print calls'''
     ts = datetime.datetime.now().isoformat(timespec='seconds')
     for x in args:
         message += ' ' + str(x)
     if obj is None:
-        print(f'{ts}: {message}')
+        output = f'{ts}: {message}'
     else:
-        print(f'{ts} - {obj.__name__}: {message}')
+        output = f'{ts} - {obj.__name__}: {message}'
+    print(output)
+    if logger is None:
+        return output
+    else:
+        logger.log(output)
+
+class logger:
+    def __init__(self, filehandle=None):
+        self.fn = filehandle
+
+    def set_handle(self, procpath, prefix):
+        self.fn = os.path.join(procpath, prefix + '/', prefix + f'_{get_user()}_AnalysisLog.txt')
+
+    def log(self, message):
+        if not message.endswith('\n'):
+            message += '\n'
+        with open(self.fn, 'a') as f:
+            f.write(message)
 
 from Proc2P.Legacy.Batch_Utils import strip_ax
+
+
+def get_user():
+    return os.environ.get('USERNAME')
+
+def norm(d):
+    return numpy.maximum(numpy.minimum(d / numpy.percentile(d, 99, axis=0), 1), 0)
 
 def gapless(trace, gap=5, threshold=0):
     '''makes binary trace closing small gaps
@@ -98,3 +124,7 @@ def read_excel(*args, **kwargs):
     if fn.endswith('csv'):
         return pandas.read_csv(*args, **kwargs)
     return pandas.read_excel(*args, **kwargs, engine='openpyxl')
+
+
+def ewma(trace, period=15):
+    return numpy.array(pandas.DataFrame(numpy.nan_to_num(trace)).ewm(span=period).mean()[0])

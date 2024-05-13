@@ -45,6 +45,8 @@ class Gui(ImagingSession):
                            'legendalpha': 0.8,
                            'trace-g': '#436fb6'}
         param = numpy.nan_to_num(self.getparam(param))
+        self.pos.drop_nan()
+        self.trimval = int(5*self.fps)
         if self.dualch:
             self.colors['trace-g'] = '#71c055'
             self.colors['trace-r'] = '#ed1e24'
@@ -62,7 +64,7 @@ class Gui(ImagingSession):
             self.calc_MI(param=graph_param, selection='movement')
         else:
             self.using_laps = False
-        self.runspeed(param=graph_param, span=(100, self.ca.frames - 100))
+        self.runspeed(param=graph_param, span=(self.trimval, self.ca.frames - self.trimval))
         # if hasattr(self, 'bdat'):
         #     self.licktrigger(param=graph_param)
         if hasattr(self, 'ripples'):
@@ -94,8 +96,14 @@ class Gui(ImagingSession):
         # find time points for each bin
         self.bin = numpy.empty((bins + 1, len(self.pos.pos)), dtype='bool')
         self.bin[0] = numpy.logical_not(self.pos.movement)
-        for i in range(bins):
-            self.bin[i + 1] = (self.pos.smspd > i * binsize) * (self.pos.smspd < (i + 1) * binsize) * self.pos.movement
+        try:
+            for i in range(bins):
+                self.bin[i + 1] = (self.pos.smspd > i * binsize) * (self.pos.smspd < (i + 1) * binsize) * self.pos.movement
+        except:
+            print(bins, binsize)
+            for vn, vv in zip (('bin', 'smspd', 'movement'), (self.bin, self.pos.smspd, self.pos.movement)):
+                print(vn, numpy.count_nonzero(numpy.isnan(vv)))
+            assert False
         print(param.shape)
         zscores = self.pull_means(param, span)
         self.speedrates = copy.copy(self.rates[self.pltnum])
@@ -253,8 +261,8 @@ class Gui(ImagingSession):
         # plot common data
         self.behavplot(axpos)
         rate_trim = numpy.nanmean(param, 0)
-        rate_trim[:100] = 0
-        rate_trim[-100:] = 0
+        rate_trim[:self.trimval] = 0
+        rate_trim[-self.trimval:] = 0
         ripcol = self.colors['rippletick']
         rateval = numpy.array(pandas.DataFrame(rate_trim).ewm(span=15).mean())
         rateval -= rateval.min()
@@ -417,7 +425,7 @@ class Gui(ImagingSession):
                             length+=1
                         nzr = []
                         for t in self.spiketimes[schi]:
-                            if t > 100 and t < self.ca.frames - 100:
+                            if t > self.trimval and t < self.ca.frames - self.trimval:
                                 if not self.pos.movement[t]:
                                     nzr.append(t)
                         brmean = numpy.zeros((len(nzr), length))
