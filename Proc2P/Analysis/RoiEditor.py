@@ -290,8 +290,10 @@ class Translate:
 
 
 class Gui:
-    def __init__(self, path, prefix, exporting=False):
+    __name__ = 'RoiEditorGUI'
+    def __init__(self, path, prefix, exporting=False, preferred_tag='1'):
         self.path = path
+        self.preferred_tag = preferred_tag
         self.prefix = prefix
         self.log = logger()
         self.log.set_handle(path, prefix)
@@ -495,18 +497,20 @@ class Gui:
             return -1
         # code moved to separate function, call that to save after determining file name
         # determine number for next file
-        exs = [0]
-        for f in os.listdir(self.opPath):
-            if self.prefix in f and '_saved_roi_' in f:
-                try:
-                    # ugly way to keep autodetected rois from breaking numbering
-                    exs.append(int(f[:-4].split('_')[-1]))
-                except:
-                    pass
-        exi = max(exs)+1
-        while os.path.exists(self.opPath + self.prefix + '_saved_roi_' + str(exi)):
-            exi += 1
-        fn = self.prefix + '_saved_roi_' + str(exi)
+        fn = self.prefix + '_saved_roi_' + self.preferred_tag
+        if os.path.exists(self.opPath + fn + '.npy'):
+            exs = [0]
+            for f in os.listdir(self.opPath):
+                if self.prefix in f and '_saved_roi_' in f:
+                    try:
+                        # ugly way to keep autodetected rois from breaking numbering
+                        exs.append(int(f[:-4].split('_')[-1]))
+                    except:
+                        pass
+            exi = max(exs)+1
+            while os.path.exists(self.opPath + self.prefix + '_saved_roi_' + str(exi) + '.npy'):
+                exi += 1
+            fn = self.prefix + '_saved_roi_' + str(exi)
         RoiEditor.save_roi(self.saved_rois, self.opPath + fn, self.rois.img.image.info['sz'])
         msg = f'{len(self.saved_rois)} saved in {fn}'
         lprint(self, msg, logger=self.log)
@@ -767,7 +771,8 @@ class Gui:
         exs = []
         for f in os.listdir(self.opPath):
             if self.prefix in f and '_saved_roi_' in f:
-                exs.append(f)
+                if os.path.getsize(self.opPath + f) > 128:
+                    exs.append(f)
         exs.sort()
         for nf, f in enumerate(exs):
             polys = RoiEditor.load_roi(self.opPath + f)

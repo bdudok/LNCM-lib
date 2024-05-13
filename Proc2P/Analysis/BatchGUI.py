@@ -684,7 +684,8 @@ class RoiEd:
 
     def roied_callback(self):
         prefix = self.parent.filelist.get_active()[1][0]
-        self.gui = roi_Gui(self.parent.filelist.wdir, prefix)
+        tag = self.parent.roiconvert.config['roi_name'].get()
+        self.gui = roi_Gui(self.parent.filelist.wdir, prefix, preferred_tag=tag)
         if self.gui.loop(client='gui'):
             self.save_callback()
             self.sbx_callback()
