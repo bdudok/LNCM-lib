@@ -7,7 +7,7 @@ import pandas
 from sklearn import cluster
 import xml.etree.ElementTree as ET
 from Proc2P.Treadmill import TreadmillRead, rsync
-from Proc2P.utils import lprint
+from Proc2P.utils import lprint, get_user
 
 '''
 PreProcess: load xml files, save all frame times, sync signals and metadata into the analysis folder
@@ -48,17 +48,17 @@ class PreProc:
                 self.load_metadata()
 
     def log(self, s, *args):
-        if s is not None:
+        if s not in ('', None):
             for v in args:
                 s += str(v)
-            if not s.endswith('\n'):
+            if not (s.endswith('\n') or s.endswith('\r')):
                 s += '\r\n'
             self.logstring += s
 
     def lprint(self, *args, **kwargs):
         self.log(lprint(*args, **kwargs))
     def save_log(self):
-        fn = self.procpath+self.prefix+'_PreProcLog.txt'
+        fn = self.procpath+self.prefix+f'_{get_user()}_PreProcLog.txt'
         with open(fn, 'w') as f:
             f.write(self.logstring)
 

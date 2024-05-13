@@ -23,7 +23,7 @@ class logger:
         self.fn = filehandle
 
     def set_handle(self, procpath, prefix):
-        self.fn = os.path.join(procpath, prefix + '/', prefix + '_AnalysisLog.txt')
+        self.fn = os.path.join(procpath, prefix + '/', prefix + f'_{get_user()}_AnalysisLog.txt')
 
     def log(self, message):
         if not message.endswith('\n'):
@@ -33,6 +33,9 @@ class logger:
 
 from Proc2P.Legacy.Batch_Utils import strip_ax
 
+
+def get_user():
+    return os.environ.get('USERNAME')
 
 def norm(d):
     return numpy.maximum(numpy.minimum(d / numpy.percentile(d, 99, axis=0), 1), 0)
