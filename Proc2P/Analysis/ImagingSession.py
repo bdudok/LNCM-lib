@@ -142,6 +142,11 @@ class ImagingSession(object):
     def get_preview(self):
         return self.rois.get_preview()
 
+    def get_photons(self):
+        fn = self.get_file_with_suffix('_PhotonTransfer.xlsx')
+        if os.path.exists(fn):
+            return read_excel(fn)
+
     def getparam(self, param):
         opn = param
         self.disc_param = False
