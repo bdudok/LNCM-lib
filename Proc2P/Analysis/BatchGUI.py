@@ -15,6 +15,7 @@ import pandas
 from multiprocessing import Queue, Process, cpu_count, freeze_support, set_start_method
 # from MotionCorrect import Worker as mc_Worker
 # from MotionCorrect import CleanupWorker
+from Proc2P.Analysis.AnalysisClasses.PhotonTransfer import ExportPhotonTransfer
 
 # for roiedit
 from Proc2P.Analysis.RoiEditor import RoiEditor, Translate
@@ -27,6 +28,7 @@ from Proc2P.Analysis.PullSignals import Worker as pull_Worker
 # for traces
 from Proc2P.Analysis.CaTrace import CaTrace
 from Proc2P.Analysis.CaTrace import Worker as tr_Worker
+
 
 #for ephys
 from Proc2P.Bruker.LoadEphys import Ephys
@@ -735,6 +737,7 @@ class Util:
             Radiobutton(self.frame, text=text, variable=self.channels, value=text).grid(row=self.row(), sticky=N + W)
 
         Button(self.frame, text="Export Stop", command=self.exportstop_callback).grid(row=self.row(), sticky=N)
+        Button(self.frame, text="Export PhotonTransfer", command=self.exportphoton_callback).grid(row=self.row(), sticky=N)
 
         Label(self.frame, text='Preview').grid(row=self.row(), pady=10)
         Button(self.frame, text="Show", command=self.show_callback).grid(row=self.row(), sticky=N)
@@ -801,8 +804,14 @@ class Util:
 
     def exportstop_callback(self):
         for prefix in self.parent.filelist.get_active()[1]:
+            print(prefix, ': Export Stop queued')
             self.parent.request_queue.put(('exportstop', (self.parent.filelist.wdir, prefix, 'stop',
                                                           self.channels.get())))
+
+    def exportphoton_callback(self):
+        for prefix in self.parent.filelist.get_active()[1]:
+            print(prefix, ': Export Photon Transfer queued')
+            self.parent.request_queue.put(('exportphoton', (self.parent.filelist.wdir, prefix)))
 
 
     def export_list_callback(self):
@@ -1683,6 +1692,9 @@ if __name__ == '__main__':
             #     Process(target=calc_m2_index, args=job[:-1]).start()
             # else:
             Process(target=exportstop, args=job).start()
+        elif jobtype == 'exportphoton':
+            print(job)
+            Process(target=ExportPhotonTransfer, args=job).start()
         # elif jobtype == 'sbxconvert':
         #     Process(target=roi_Gui, args=job).start()
         # elif jobtype == 'opto':
