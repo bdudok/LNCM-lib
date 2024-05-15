@@ -43,6 +43,15 @@ class Pos:
         self.pos = numpy.nan_to_num(self.pos)
         self.laps = numpy.nan_to_num(self.laps)
 
+    def get_total_distance(self):
+        tdt = 0
+        wh_notna = numpy.where(numpy.logical_not(numpy.isnan(self.laps)))
+        pos = self.pos[wh_notna]
+        laps = self.laps[wh_notna].astype('int64')
+        for l in numpy.unique(laps):
+            curr_lap = pos[laps == l]
+            tdt += curr_lap.max() - curr_lap.min()
+        return int(tdt)
 
 
 class ImagingSession(object):

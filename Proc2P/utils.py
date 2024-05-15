@@ -38,7 +38,11 @@ def get_user():
     return os.environ.get('USERNAME')
 
 def norm(d):
-    return numpy.maximum(numpy.minimum(d / numpy.percentile(d, 99, axis=0), 1), 0)
+    wh_notna = numpy.logical_not(numpy.isnan(d))
+    y = numpy.empty(d.shape)
+    y[:] = numpy.nan
+    y[wh_notna] = numpy.maximum(numpy.minimum(d[wh_notna] / numpy.percentile(d[wh_notna], 99, axis=0), 1), 0)
+    return y
 
 def gapless(trace, gap=5, threshold=0):
     '''makes binary trace closing small gaps
