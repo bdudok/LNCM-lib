@@ -46,11 +46,14 @@ class Pos:
     def get_total_distance(self):
         tdt = 0
         wh_notna = numpy.where(numpy.logical_not(numpy.isnan(self.laps)))
-        pos = self.pos[wh_notna]
-        laps = self.laps[wh_notna].astype('int64')
-        for l in numpy.unique(laps):
-            curr_lap = pos[laps == l]
-            tdt += curr_lap.max() - curr_lap.min()
+        if len(wh_notna[0]) > 10:
+            pos = self.pos[wh_notna]
+            laps = self.laps[wh_notna].astype('int64')
+            for l in numpy.unique(laps):
+                curr_lap = pos[laps == l]
+                tdt += numpy.nan_to_num(numpy.nanmax(curr_lap) - numpy.nanmin(curr_lap))
+        if numpy.isnan(tdt):
+            tdt = 0
         return int(tdt)
 
 
