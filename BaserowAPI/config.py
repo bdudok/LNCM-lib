@@ -1,4 +1,4 @@
-from Utilities.LG_API_token import baserow_token
+from LG_API_token import baserow_token
 config = {
   "http": "http://10.18.4.112:5001",
   "api_token": baserow_token,
