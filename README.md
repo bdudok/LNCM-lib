@@ -38,7 +38,7 @@ GUI for processing and inspecting ImagingSession
 # See also from the lab:
 
 ## Recorder
-Scripts for controlling cameras and acquisition
+Apps for controlling cameras and acquisition
 https://github.com/bdudok/Recorder.git
 
 ## Treadmill control
