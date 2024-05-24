@@ -69,12 +69,13 @@ for drive_letter in drive_list:
 
 #processed data forders to LNCM1
 #update LabGuru when changing what's backed up on disk
+#disks are mounted to NTFS folders to avoid copying to other disk
 ext_drive_name = 'LNCM1'
 if ext_drive_name in drive_names:
     dest_path = f'E:\ExtDrives/{ext_drive_name}/_Processed/'
     source_path = 'D:\Shares\Data\_Processed/'
     dlist = ['2P/PVTot', '2P/SncgTot', '2P/SncgDREADD', '2P/SncgOpto',
-             '2P/JEDI', '2P/VADER', 'EEG/Tottering']
+             '2P/JEDI', '2P/VADER', 'EEG/Tottering', 'EEG/Kainate - VKPV']
     for d in dlist:
         script_s += get_cmd(d)
 

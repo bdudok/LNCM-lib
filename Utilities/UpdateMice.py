@@ -2,7 +2,7 @@ import json
 import requests
 import pandas
 from BaserowAPI.config import config
-from Utilities.LG_API_token import token
+from Utilities.LG_API_token import token #token file should be in .gitignore to avoid exposing tokens.
 #labguru API token. Expires in 30 days. Request a new one if necessary (response:401) and paste here.
 lg_api_token = token
 # lg_api_token = config["lg_token"]

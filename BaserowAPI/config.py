@@ -1,7 +1,7 @@
+from Utilities.LG_API_token import baserow_token
 config = {
   "http": "http://10.18.4.112:5001",
-  "api_token": "rYmuWM77kFSvObkWiq2gMPbJOUp09gxT",
-  "lg_token": "a4d5d5e0104196c0378d238e06d1c2055038a369",  # only valid for 30 days
+  "api_token": baserow_token,
   "session_url": "http://10.18.4.112:5001/api/database/rows/table/490/?user_field_names=true",
   "mice_url": "http://10.18.4.112:5001/api/database/rows/table/492/?user_field_names=true",
   "FieldID": {
