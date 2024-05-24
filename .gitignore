@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 #token
-Utilities/LG_API_token.py
+../2p_code/Utilities/LG_API_token.py
 
 # C extensions
 *.so
