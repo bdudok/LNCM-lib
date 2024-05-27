@@ -242,4 +242,4 @@ fabric.properties
 
 #repo specifics
 /Proc2P/scratch_path.txt
-/LG_API_token.py
+/BaserowAPI/LG_API_token.py
