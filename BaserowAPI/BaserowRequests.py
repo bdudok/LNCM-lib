@@ -1,4 +1,5 @@
 import json
+import os
 import requests
 import pandas
 from BaserowAPI.config import config
@@ -34,6 +35,43 @@ class GetSessions:
 
         self.results = pandas.DataFrame(resp.json()['results'])
         return self.results
+
+    def get_session(self, prefix):
+        '''
+        :param tag: string to search Image.ID
+        :return: DataFrame of the search result
+        '''
+        params = {f"filter__field_{self.get_field('Image.ID')}__equal": prefix}
+        resp = requests.get(config['session_url'],
+            headers={"Authorization": self.auth_string},
+            params=params
+        )
+        self.results = pandas.DataFrame(resp.json()['results'])
+        return self.results
+class PutLogEntries:
+    def __init__(self):
+        self.auth_string = f"Token {config['logger_token']}"
+        self.username = os.environ.get('USERNAME')
+
+    def put(self, sessionID, imtag, message='', sourceclass='',):
+        put_json = {
+            "Name": imtag,
+            "Message": message,
+            "Class": sourceclass,
+            "Session": [
+                int(sessionID)
+            ],
+            "User": self.username
+        }
+
+        return requests.post(
+            config['log_url'],
+            headers={
+                "Authorization": self.auth_string,
+                "Content-Type": "application/json"
+            },
+            json=put_json
+        )
 
 
 if __name__ == '__main__':

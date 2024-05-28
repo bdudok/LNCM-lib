@@ -10,7 +10,8 @@ config = {
       'Task': 4639,
       'Mouse.ID': 4616,
       'InclTag': 4519,
-      'Project': 4637
+      'Project': 4637,
+      'Image.ID': 4517
   },
   "LogID": {
         'Name': 4995,
