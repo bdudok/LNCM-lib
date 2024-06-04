@@ -96,8 +96,6 @@ if __name__ == '__main__':
         # preprocess session
         s = PreProc.PreProc(dpath, processed_path, prefix, btag, overwrite=overwrite_preproc)
         if pre_only:
-            if s.is_processed:
-                s.preprocess()
             continue
 
         # clean destination for scratch files

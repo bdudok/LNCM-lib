@@ -47,12 +47,14 @@ class PreProc:
             else:
                 self.load_metadata()
 
+
+
     def log(self, s, *args):
         if s not in ('', None):
             for v in args:
                 s += str(v)
             if not (s.endswith('\n') or s.endswith('\r')):
-                s += '\r\n'
+                s += '\n'
             self.logstring += s
 
     def lprint(self, *args, **kwargs):
@@ -77,6 +79,7 @@ class PreProc:
         self.save_metadata()
         self.lprint(self, 'Found:', ','.join(self.found_output))
         self.save_log()
+        self.is_processed = True
 
 
     def parse_frametimes(self):
