@@ -114,6 +114,7 @@ class ImagingSession(object):
         self.colors = {}
 
         self.preview = None
+        self.version = 'LNCM'
 
     def get_file_with_suffix(self, suffix):
         return os.path.join(self.path, self.prefix + suffix)
