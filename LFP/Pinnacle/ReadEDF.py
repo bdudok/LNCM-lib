@@ -45,7 +45,10 @@ class EDF:
             rejection_step = int(self.rejection_ops['rejection_step'] * self.fs)
             rejection_tail = int(self.rejection_ops['rejection_tail'] * self.fs)
             rejection_factor = self.rejection_ops['rejection_factor']
-            min_n = int(rejection_step * rejection_factor)
+            if rejection_factor > 1.1:
+                min_n = int(rejection_factor) #use factor as n of samples
+            else:
+                min_n = int(rejection_step * rejection_factor) #use factor as ratio
 
             bad_index = numpy.where(numpy.absolute(tr) > rejection_value)[0]
             if len(bad_index) > min_n:
@@ -53,8 +56,8 @@ class EDF:
                 labels = clustering.labels_
                 for cid in range(labels.max() + 1):
                     x = bad_index[numpy.where(labels == cid)[0]]  # this is expected to be in order
-                    r_start = max(0, x.min() - rejection_step)
-                    r_stop = min(len(tr), x.max() + rejection_tail)
+                    r_start = int(max(0, x.min() - rejection_step))
+                    r_stop = int(min(len(tr), x.max() + rejection_tail))
                     tr[r_start:r_stop] = 0
             self.trace = tr
             self.raw_trace = self.data[chi]
