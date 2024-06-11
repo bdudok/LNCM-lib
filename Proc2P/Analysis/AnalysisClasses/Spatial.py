@@ -121,6 +121,10 @@ class Spatial:
         self.prefix = session.prefix
         self.tag = session.tag
         self.session = session
+        if hasattr(session, 'fps'):
+            self.fps = session.fps
+        else:
+            self.fps = fps #for hard coded fps import with scanbox
         self.getdir()
         if not os.path.exists(self.dir):
             os.mkdir(self.dir)
@@ -147,31 +151,36 @@ class Spatial:
         pc, loc = self.session.get_place_cell_order(pf_calc_bins=bins, loc=True)
         self.set_PCs(pc, loc)
 
-    def det_PC(self):
+    def det_PC(self, use_param='nnd'):
         assert self.session is not None
         # pick place cells
         bins = 9
         shuffle = 30
         a = self.session
-        wh = numpy.where(a.pos.movement[100:-100])[0] + 100
+        wh_mov = numpy.where(a.pos.movement[100:-100])[0] + 100 #limit to samples when mouse running
+        wh = wh_mov[numpy.where(numpy.logical_not(numpy.isnan(self.pos[wh_mov])))] #exclude any nan pos
         x = a.pos.pos[wh]
         x = numpy.maximum(0, x)
         x = numpy.minimum(1, x / numpy.percentile(x, 99))
         statistical_is_placecell = numpy.zeros(a.ca.cells, dtype='bool')
+        Y = a.getparam(use_param)
         for c in range(a.ca.cells):
-            y = numpy.nan_to_num(a.ca.nnd[c][wh])
-            if y.sum() < 3:
+            yraw = Y[c][wh]
+            wh2 = numpy.where(numpy.logical_not(numpy.isnan(yraw)))[0]
+            if yraw[wh2].sum() < 3:
                 continue
+            y = yraw[wh2] - yraw[wh2].min()
             p = numpy.percentile(y, 99)
-            if p < 1:
-                continue
+            if 'LNCM' not in a.version:
+                if p < 1: #this only necessary with old Oasis decon. new has values 0-1
+                    continue
             y = numpy.minimum(1, y / p)
-            c_xy = numpy.histogram2d(x, y, bins)[0]
+            c_xy = numpy.histogram2d(x[wh2], y, bins)[0]
             mis = mutual_info_score(None, None, contingency=c_xy)
             shuff_mis = []
             for _ in range(shuffle):
                 numpy.random.shuffle(y)
-                shuff_mis.append(mutual_info_score(None, None, contingency=numpy.histogram2d(x, y, bins)[0]))
+                shuff_mis.append(mutual_info_score(None, None, contingency=numpy.histogram2d(x[wh2], y, bins)[0]))
             statistical_is_placecell[c] = mis > numpy.nanpercentile(shuff_mis, 95)
         # measure location dependent activity
         incl = numpy.where(statistical_is_placecell)[0]
@@ -183,7 +192,9 @@ class Spatial:
                 d = 1 - a.reldist(bi * binsize, x[wi])
                 weights[wi] = numpy.e ** (1 - 1 / (d ** 2))
             for ci, c in enumerate(incl):
-                rates[bi, ci] = numpy.average(a.ca.rel[c, wh], weights=weights)
+                yraw = a.ca.rel[c, wh]
+                wh2 = numpy.where(numpy.logical_not(numpy.isnan(yraw)))[0]
+                rates[bi, ci] = numpy.average(yraw[wh2], weights=weights[wh2])
         locs = numpy.argmax(rates, axis=0)
         corder = numpy.argsort(locs)
         self.set_PCs(incl[corder], locs[corder])
@@ -236,6 +247,7 @@ class Spatial:
         '''hires estimation of max location with weighted distances'''
         rates = numpy.empty((bins, len(self.cells)))
         wh = numpy.where(self.session.pos.movement[100:-100])[0] + 100
+        wh = wh[numpy.logical_not(numpy.isnan(self.pos[wh]))]
         x = self.pos[wh]
         binsize = 1.0 / bins
         for bi in range(bins):
@@ -332,12 +344,35 @@ class Spatial:
             return mis > numpy.nanpercentile(shuff_mis, 95)
         return mis / numpy.nanmean(shuff_mis)
 
+    def roll_mean(self, tag):
+        '''
+        :param tag: a previously pulled mean array
+        :return: each line rolled so that peaks align
+        '''
+        Y = self.cache['ba-'+tag]
+        RY = numpy.empty(Y.shape, Y.dtype)
+        rolls = []
+        target_loc = Y.shape[1] / 2
+        for i, line in enumerate(Y):
+            gline = gaussian_filter(line, sigma=3, mode='wrap')
+            roll = int(target_loc - numpy.argmax(gline))
+            RY[i] = numpy.roll(line, roll)
+            rolls.append(roll)
+        return RY, rolls
+
+    def apply_roll(self, tag, rolls):
+        Y = self.cache['ba-' + tag]
+        RY = numpy.empty(Y.shape, Y.dtype)
+        for i, line in enumerate(Y):
+            RY[i] = numpy.roll(line, rolls[i])
+        return RY
+
     def pull_mean(self, param='rel', res=None, pull_session=None, pull_cells=None, save_tag=None, nan_policy='omit',
                   where='run', overwrite=False, trim=100, norm_trace=False):
         '''distance dependent mean activity for all cells. Leave session and cells None to pull on current.
         pass session and index list to pull from matched cells in a second ImagingSession'''
         if 'rd' not in self.cache:
-            self.reldist_array()
+            self.reldist_array() # a lut of the distances betwee
         if res is None:
             res = self.resolution
         if pull_session is None:
@@ -379,6 +414,7 @@ class Spatial:
                 else:
                     wh = numpy.copy(where)
                     where = 'man'
+            wh = wh[numpy.logical_not(numpy.isnan(self.pos[wh]))]
 
             ba = numpy.empty((len(pull_cells), res))
             bins = numpy.linspace(-0.5, 0.5, res + 1)
@@ -426,7 +462,7 @@ class Spatial:
             for ci, c in enumerate(self.cells):
                 # cluster frames for onset detection
                 event_t = numpy.where(Y[c, trim:-trim] > 0.5)[0] + trim
-                if len(event_t) < fps:
+                if len(event_t) < self.fps:
                     continue
                 clustering = cluster.DBSCAN(eps=clust_w, min_samples=2).fit(event_t.reshape(-1, 1))
                 if clustering.labels_.max() < 1:
@@ -460,7 +496,7 @@ class Spatial:
         '''mean transients, distance dependent. Leave session and cells None to pull on current.
         pass session and index list to pull from matched cells in a second ImagingSession'''
         if w is None:
-            w = int(5 * fps)
+            w = int(5 * self.fps)
         if pull_session is None:
             pull_session = self.session
         if pull_cells is None:
@@ -503,6 +539,7 @@ class Spatial:
         else:
             if where == 'run':
                 wh = numpy.where(self.session.pos.movement[100:-100])[0] + 100
+            wh = wh[numpy.logical_not(numpy.isnan(self.pos[wh]))]
             Y = pull_session.getparam(param)
             laps = numpy.unique(self.session.pos.laps[wh])
             ba = numpy.empty((len(laps), len(pull_cells), res))
@@ -529,6 +566,7 @@ class Spatial:
     def pull_loc_rate(self, bins=50):
         a = self.session
         wh = numpy.where(a.pos.movement[100:-100])[0] + 100
+        wh = wh[numpy.logical_not(numpy.isnan(self.pos[wh]))]
         x = a.pos.pos[wh]
         x = numpy.maximum(0, x)
         x = numpy.minimum(1, x / numpy.percentile(x, 99))

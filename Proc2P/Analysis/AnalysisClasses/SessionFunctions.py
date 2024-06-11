@@ -1,3 +1,6 @@
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import matplotlib.path as mplpath
 from Proc2P.Analysis.AnalysisClasses import PhotoStim, EventMasks, PSTH
 from Proc2P.Analysis.ImagingSession import ImagingSession
 import numpy
@@ -62,3 +65,30 @@ def stoprun_scores(session:ImagingSession, param='ntr', ret_loc='actual', mode='
                                     numpy.nanmax(param[:, max(0, start - 100):start], axis=1)
     stoprun_scores /= len(stops)
     return stoprun_scores
+
+def pull_image_with_ROI(session:ImagingSession, image, c, show=False):
+    '''
+    :param session: an instance with ROI set loaded
+    :param image: a 2D array matching the coordinates of the ImageingSession movie
+    :param c: cell index
+    :return: average pixel value inside cell
+    '''
+    poly = session.rois.polys[c]
+    if show:
+        plt.figure()
+        plt.imshow(image, aspect='auto')
+        plt.gca().add_patch(patches.PathPatch(mplpath.Path(session.rois.polys[0]), ec='white', lw=1, fill=False))
+    mask = get_mask(poly, image)
+    return numpy.nanmean(image[mask]), mask
+
+def get_mask(poly, image):
+    #calculate binary mask
+    binmask = numpy.zeros(image.shape, dtype='bool')
+    left, top = poly.min(axis=0)
+    right, bottom = poly.max(axis=0)
+    pip = mplpath.Path(poly) #note that this swaps it
+    for y in range(left, right):
+        for x in range(top, bottom):
+            if pip.contains_point([y, x]):
+                binmask[x, y] = True
+    return binmask

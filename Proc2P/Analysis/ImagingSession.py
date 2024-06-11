@@ -43,6 +43,18 @@ class Pos:
         self.pos = numpy.nan_to_num(self.pos)
         self.laps = numpy.nan_to_num(self.laps)
 
+    def get_total_distance(self):
+        tdt = 0
+        wh_notna = numpy.where(numpy.logical_not(numpy.isnan(self.laps)))
+        if len(wh_notna[0]) > 10:
+            pos = self.pos[wh_notna]
+            laps = self.laps[wh_notna].astype('int64')
+            for l in numpy.unique(laps):
+                curr_lap = pos[laps == l]
+                tdt += numpy.nan_to_num(numpy.nanmax(curr_lap) - numpy.nanmin(curr_lap))
+        if numpy.isnan(tdt):
+            tdt = 0
+        return int(tdt)
 
 
 class ImagingSession(object):
@@ -102,6 +114,7 @@ class ImagingSession(object):
         self.colors = {}
 
         self.preview = None
+        self.version = 'LNCM'
 
     def get_file_with_suffix(self, suffix):
         return os.path.join(self.path, self.prefix + suffix)
@@ -141,6 +154,11 @@ class ImagingSession(object):
 
     def get_preview(self):
         return self.rois.get_preview()
+
+    def get_photons(self):
+        fn = self.get_file_with_suffix('_PhotonTransfer.xlsx')
+        if os.path.exists(fn):
+            return read_excel(fn)
 
     def getparam(self, param):
         opn = param
