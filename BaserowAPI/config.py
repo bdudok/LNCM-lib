@@ -1,4 +1,11 @@
-from BaserowAPI.LG_API_token import baserow_token, baserow_logger_token
+try:
+    from BaserowAPI.LG_API_token import baserow_token, baserow_logger_token
+except:
+    baserow_token = ''
+    baserow_logger_token = ''
+    print('Importing API tokens failed. For using Baserow, create a LG_API_token.py file in BaserowAPI. ')
+    print('This file should define the baserow_token and baserow_logger_token variables')
+    print('Do not push tokens to GitHub.')
 config = {
   "http": "http://10.18.4.112:5001",
   "api_token": baserow_token,

@@ -496,11 +496,10 @@ class GUI_main(QtWidgets.QMainWindow):
             r = LoadEphys.Ephys(self.savepath, self.active_prefix, channel=chi)
             self.ephys = r
         elif self.setup == 'Pinnacle':
-            r = ReadEDF.EDF(self.savepath, self.active_prefix, rejection_ops=self.param)
+            chi = int(self.get_field('Channel'))
+            r = ReadEDF.EDF(self.savepath, self.active_prefix, rejection_ops=self.param, ch=chi-1)
             self.param['fs'] = r.fs
             self.param['Channels'] = r.channels
-            chi = int(self.get_field('Channel'))
-            r.set_channel(chi-1)
             chstr = f'{r.active_channel}; {chi}/{len(r.channels)}'
             self.channel_name_label.setText(chstr + ' (Use Open to change channels)')
             self.edf = r
@@ -511,7 +510,7 @@ class GUI_main(QtWidgets.QMainWindow):
         if hasattr(r, 'raw_trace'):
             raw_trace = r.raw_trace
         else:
-            raw_trace = None
+            raw_trace = trace
         if plotdur != 'all':
             t_want = int(fs * 60 * float(plotdur)) #10 minutes
             print(t_want)

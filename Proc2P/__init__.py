@@ -14,5 +14,6 @@ from scipy import stats
 # from .Legacy.MyColorLib import get_color
 
 from BaserowAPI.BaserowRequests import GetSessions
-from Proc2P.utils import read_excel, lprint
+from Proc2P.utils import read_excel, lprint, norm
+from PlotTools.MyColorLib import get_color
 from PlotTools import *

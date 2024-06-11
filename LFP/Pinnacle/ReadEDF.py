@@ -5,7 +5,7 @@ from pyedflib import highlevel
 
 class EDF:
     __name__ = 'ReadEDF'
-    def __init__(self, path, prefix, rejection_ops=None):
+    def __init__(self, path, prefix, rejection_ops=None, ch=0):
         self.path = path
         self.prefix = prefix
         if not prefix.endswith('.edf'):
@@ -16,7 +16,7 @@ class EDF:
         self.unit = d[1][0]['dimension']
         self.channels = [x['label'] for x in d[1]]
         self.rejection_ops = rejection_ops
-        self.set_channel(0)
+        self.set_channel(ch)
         self.d = d
 
     def get_TTL(self, channel='GPIO0'):
@@ -31,6 +31,7 @@ class EDF:
 
     def set_channel(self, ch):
         if type(ch) is int:
+            assert ch < len(self.channels)
             chi = ch
         else:
             if ch in self.channels:
