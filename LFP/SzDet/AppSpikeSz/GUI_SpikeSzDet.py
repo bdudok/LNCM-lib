@@ -489,18 +489,20 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def refresh_data(self):
         print(self.active_prefix)
+        ch = self.get_field('Channel')
         if self.setup == 'Soltesz':
             r = load_ephys(self.active_prefix)
         elif self.setup == 'LNCM':
-            chi = int(self.get_field('Channel'))
+            chi = int(ch)
             r = LoadEphys.Ephys(self.savepath, self.active_prefix, channel=chi)
             self.ephys = r
         elif self.setup == 'Pinnacle':
-            chi = int(self.get_field('Channel'))
-            r = ReadEDF.EDF(self.savepath, self.active_prefix, rejection_ops=self.param, ch=chi-1)
+            if ch.isdigit():
+                ch = int(ch)-1
+            r = ReadEDF.EDF(self.savepath, self.active_prefix, rejection_ops=self.param, ch=ch)
             self.param['fs'] = r.fs
             self.param['Channels'] = r.channels
-            chstr = f'{r.active_channel}; {chi}/{len(r.channels)}'
+            chstr = f'{r.active_channel}; {r.chi+1}/{len(r.channels)}'
             self.channel_name_label.setText(chstr + ' (Use Open to change channels)')
             self.edf = r
         #get example trace
