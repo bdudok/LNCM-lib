@@ -31,14 +31,16 @@ class EDF:
 
     def set_channel(self, ch):
         if type(ch) is int:
-            assert ch < len(self.channels)
+            assert ch < len(self.channels), f'Channel {ch} not available. Channels: {self.channels}'
             chi = ch
         else:
-            if ch in self.channels:
-               chi = self.channels.index(ch)
-            else:
-                print(f'Channel {ch} not found. available: {self.channels}')
-                assert False
+            chi = None
+            for ni, chn in enumerate(self.channels):
+                if ch in chn:
+                    chi = ni
+                    break
+            assert chi is not None, f'Channel {ch} not found. available: {self.channels}'
+        self.chi = chi
         self.active_channel = self.channels[chi]
         if self.rejection_ops is not None and 'rejection_value' in self.rejection_ops:
             tr = numpy.copy(self.data[chi])
