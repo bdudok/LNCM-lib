@@ -139,13 +139,18 @@ class Spatial:
     def getdir(self):
         self.dir = f'{self.path + self.prefix}-{self.tag}-Spatial/'
 
-    def set_PCs(self, cells, loc=None):
+    def set_PCs(self, cells, loc=None, sort=False):
         self.cells = numpy.array(cells)
-        self.hash = hash(self.cells.tostring())
         if loc is not None:
             if loc == 'pull':
                 loc = self.locmax(self.resolution)
             self.loc = numpy.array(loc)
+        if sort:
+            corder = numpy.argsort(loc)
+            self.cells = self.cells[corder]
+            self.loc = self.loc[corder]
+            self.proximity_weighted_rates = self.proximity_weighted_rates[:, corder]
+        self.hash = hash(self.cells.tostring())
 
     def auto_PC(self, bins=25):
         pc, loc = self.session.get_place_cell_order(pf_calc_bins=bins, loc=True)
@@ -184,20 +189,7 @@ class Spatial:
             statistical_is_placecell[c] = mis > numpy.nanpercentile(shuff_mis, 95)
         # measure location dependent activity
         incl = numpy.where(statistical_is_placecell)[0]
-        rates = numpy.empty((bins, len(incl)))
-        binsize = 1.0 / bins
-        for bi in range(bins):
-            weights = numpy.empty(len(wh))
-            for wi, t in enumerate(wh):
-                d = 1 - a.reldist(bi * binsize, x[wi])
-                weights[wi] = numpy.e ** (1 - 1 / (d ** 2))
-            for ci, c in enumerate(incl):
-                yraw = a.ca.rel[c, wh]
-                wh2 = numpy.where(numpy.logical_not(numpy.isnan(yraw)))[0]
-                rates[bi, ci] = numpy.average(yraw[wh2], weights=weights[wh2])
-        locs = numpy.argmax(rates, axis=0)
-        corder = numpy.argsort(locs)
-        self.set_PCs(incl[corder], locs[corder])
+        self.set_PCs(incl, loc='pull', sort=True)
 
     def save_named_set(self, tag):
         assert self.cells is not None
@@ -259,6 +251,7 @@ class Spatial:
                 y = self.session.ca.rel[c, wh]
                 incl = numpy.logical_not(numpy.isnan(y))
                 rates[bi, ci] = numpy.average(y[incl], weights=weights[incl])
+        self.proximity_weighted_rates = rates
         return numpy.argmax(rates, axis=0)
 
     def reldist_array(self):
@@ -347,17 +340,18 @@ class Spatial:
     def roll_mean(self, tag):
         '''
         :param tag: a previously pulled mean array
-        :return: each line rolled so that peaks align
+        :return: each line rolled to preferred location
         '''
         Y = self.cache['ba-'+tag]
         RY = numpy.empty(Y.shape, Y.dtype)
         rolls = []
-        target_loc = Y.shape[1] / 2
         for i, line in enumerate(Y):
-            gline = gaussian_filter(line, sigma=3, mode='wrap')
-            roll = int(target_loc - numpy.argmax(gline))
+            target_loc = self.loc[i] / self.resolution
+            # gline = gaussian_filter(line, sigma=3, mode='wrap')
+            roll = int((target_loc-0.5)*len(line))
             RY[i] = numpy.roll(line, roll)
             rolls.append(roll)
+        plt.imshow(RY)
         return RY, rolls
 
     def apply_roll(self, tag, rolls):
@@ -366,6 +360,37 @@ class Spatial:
         for i, line in enumerate(Y):
             RY[i] = numpy.roll(line, rolls[i])
         return RY
+
+    def inspect_cell(self, c, tag='CA'):
+        '''
+        plot the cell's trace, overlaid with position and preferred location
+        :param c: cell index (within session)
+        :param tag: pulled average
+        :return: plot
+        '''
+        assert c in self.cells, f'Cell {c} is not in the loaded place cell set'
+        cache_tag = f'ba-{tag}'
+        assert cache_tag in self.cache, f'Averages are not pulled for {cache_tag}'
+        x = self.pos
+        cell_index = list(self.cells).index(c)
+        y = norm(gaussian_filter(self.session.ca.smtr[c], int(self.session.fps + 1)))
+        locmean = self.cache[cache_tag][cell_index]
+        loc = numpy.argmax(locmean) / len(locmean)
+        dist = (1-abs(self.cache['rd'][cell_index])*2)
+        fig, ax = plt.subplots(figsize=(16, 4))
+        ca = ax
+        seconds = numpy.arange(len(y)) / self.session.fps
+        ca.axhline(loc, color='black', linewidth=3, alpha=0.3)
+        strip_ax(ca, full=False)
+        ca.scatter(seconds, x, color=get_color('black'), marker='o', s=1, label='position')
+        ca.plot(seconds, dist, color=get_color('sunset3'), label='proximity', alpha=0.6)
+        ca.plot(seconds, y, color=get_color('CMYKgreen'), label='DF/F', linewidth=2, alpha=0.6)
+
+        fig.suptitle(f'{self.session.prefix} c{c}')
+        ca.set_xlabel('Time (s)')
+        ca.legend(loc='upper left')
+        plt.tight_layout()
+        return fig, ax
 
     def pull_mean(self, param='rel', res=None, pull_session=None, pull_cells=None, save_tag=None, nan_policy='omit',
                   where='run', overwrite=False, trim=100, norm_trace=False):
@@ -419,13 +444,13 @@ class Spatial:
             ba = numpy.empty((len(pull_cells), res))
             bins = numpy.linspace(-0.5, 0.5, res + 1)
             for ci, c in enumerate(pull_cells):
-                xdat = rd[ci, wh]
+                xdat = rd[ci, wh] # ci because the dists are taken from the original preferred location
                 ydat = Y[c, wh]
                 if nan_policy == 'omit':
                     incldat = numpy.logical_not(numpy.isnan(ydat))
                     xdat = xdat[incldat]
                     ydat = ydat[incldat]
-                if nan_policy == 'tozero':
+                elif nan_policy == 'tozero':
                     ydat = numpy.nan_to_num(ydat)
                 if norm_trace:
                     ymeas = gaussian_filter(ydat, sigma=15)
