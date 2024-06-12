@@ -351,7 +351,6 @@ class Spatial:
             roll = int((target_loc-0.5)*len(line))
             RY[i] = numpy.roll(line, roll)
             rolls.append(roll)
-        plt.imshow(RY)
         return RY, rolls
 
     def apply_roll(self, tag, rolls):
