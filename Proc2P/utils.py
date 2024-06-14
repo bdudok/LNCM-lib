@@ -133,3 +133,15 @@ def read_excel(*args, **kwargs):
 
 def ewma(trace, period=15):
     return numpy.array(pandas.DataFrame(numpy.nan_to_num(trace)).ewm(span=period).mean()[0])
+
+def p_lookup(p):
+    if numpy.isnan(p):
+        return 'nan'
+    elif p < 0.001:
+        return '***'
+    elif p < 0.01:
+        return '**'
+    elif p < 0.05:
+        return '*'
+    else:
+        return 'n.s.'
