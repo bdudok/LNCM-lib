@@ -410,7 +410,7 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.setup == 'Soltesz':
             output_fn = self.savepath + self.active_prefix + self.suffix
         elif self.setup == 'Pinnacle':
-            output_fn = self.savepath + self.active_prefix + f'_Ch{self.get_field("Channel")}' + self.suffix
+            output_fn = self.savepath + self.active_prefix + f'_Ch{self.param["channel_index"]}' + self.suffix
         elif self.setup == 'LNCM':
             output_fn = os.path.join(self.savepath, self.active_prefix, self.active_prefix +
                                      f'_Ch{self.get_field("Channel")}' + self.suffix)
@@ -469,6 +469,7 @@ class GUI_main(QtWidgets.QMainWindow):
         opts = {}
         for key in self.param_keys_sorted:
             opts[key] = self.get_field(key)
+        opts['channel_index'] = self.param['channel_index']
         if self.setup == 'Pinnacle':
             # tt = Process(target=ProcessSeizures, args=(self.edf, opts))
             # tt.start()
@@ -502,6 +503,7 @@ class GUI_main(QtWidgets.QMainWindow):
             r = ReadEDF.EDF(self.savepath, self.active_prefix, rejection_ops=self.param, ch=ch)
             self.param['fs'] = r.fs
             self.param['Channels'] = r.channels
+            self.param['channel_index'] = r.chi + 1
             chstr = f'{r.active_channel}; {r.chi+1}/{len(r.channels)}'
             self.channel_name_label.setText(chstr + ' (Use Open to change channels)')
             self.edf = r

@@ -26,7 +26,7 @@ def run_detection_edf(edf: ReadEDF, opts, save_envelope=False, savetag=None):
         output_fn = path + prefix
     else:
         output_fn = path + prefix + '_' + savetag
-    ch = int(item['Channel'])
+    ch = int(item['channel_index'])
     print(ts, 'Processing', prefix)
     kwargs = {}
     for kw, key in (('lo', 'LoCut'), ('hi', 'HiCut'),):
