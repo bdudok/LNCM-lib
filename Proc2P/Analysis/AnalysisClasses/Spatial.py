@@ -9,6 +9,8 @@ from sklearn.metrics import mutual_info_score
 from sklearn import cluster
 from scipy.stats import binned_statistic
 from scipy.ndimage import gaussian_filter
+from sklearn.preprocessing import StandardScaler
+from sklearn.naive_bayes import MultinomialNB
 
 
 
@@ -152,44 +154,51 @@ class Spatial:
             self.proximity_weighted_rates = self.proximity_weighted_rates[:, corder]
         self.hash = hash(self.cells.tostring())
 
-    def auto_PC(self, bins=25):
-        pc, loc = self.session.get_place_cell_order(pf_calc_bins=bins, loc=True)
-        self.set_PCs(pc, loc)
-
     def det_PC(self, use_param='nnd'):
         assert self.session is not None
         # pick place cells
-        bins = 9
-        shuffle = 30
-        a = self.session
-        wh_mov = numpy.where(a.pos.movement[100:-100])[0] + 100 #limit to samples when mouse running
-        wh = wh_mov[numpy.where(numpy.logical_not(numpy.isnan(self.pos[wh_mov])))] #exclude any nan pos
-        x = a.pos.pos[wh]
-        x = numpy.maximum(0, x)
-        x = numpy.minimum(1, x / numpy.percentile(x, 99))
-        statistical_is_placecell = numpy.zeros(a.ca.cells, dtype='bool')
-        Y = a.getparam(use_param)
-        for c in range(a.ca.cells):
-            yraw = Y[c][wh]
+        wh = self.get_run_frames()
+        X = self.pos[wh]
+        Y = self.session.getparam(use_param)[:, wh]
+        mis, statistical_is_placecell = self.calc_MI_cells(X, Y, bins=9, shuffle=30)
+        # measure location dependent activity
+        incl = numpy.where(statistical_is_placecell)[0]
+        self.set_PCs(incl, loc='pull', sort=True)
+
+    def get_run_frames(self):
+        wh_mov = numpy.where(self.session.pos.movement[100:-100])[0] + 100 #limit to samples when mouse running
+        return wh_mov[numpy.where(numpy.logical_not(numpy.isnan(self.pos[wh_mov])))] #exclude any nan pos
+
+    @staticmethod
+    def calc_MI_cells(X, Y, bins=9, shuffle=30):
+        '''
+        compute the mutual information and its significance
+        :param X: position (0-1) of each frame
+        :param Y: array of cells, in the same frames where X is provided
+        :param bins: for the MI histogram
+        :param shuffle: for computing significance
+        :return: MI values, bool for significance
+        '''
+        statistical_is_placecell = numpy.zeros(len(Y), dtype='bool')
+        mutual_info_raw = numpy.empty((len(Y), 2))
+        mutual_info_raw[:] = numpy.nan
+        for c in range(len(Y)):
+            yraw = Y[c]
             wh2 = numpy.where(numpy.logical_not(numpy.isnan(yraw)))[0]
             if yraw[wh2].sum() < 3:
                 continue
             y = yraw[wh2] - yraw[wh2].min()
             p = numpy.percentile(y, 99)
-            if 'LNCM' not in a.version:
-                if p < 1: #this only necessary with old Oasis decon. new has values 0-1
-                    continue
             y = numpy.minimum(1, y / p)
-            c_xy = numpy.histogram2d(x[wh2], y, bins)[0]
+            c_xy = numpy.histogram2d(X[wh2], y, bins)[0]
             mis = mutual_info_score(None, None, contingency=c_xy)
             shuff_mis = []
             for _ in range(shuffle):
                 numpy.random.shuffle(y)
-                shuff_mis.append(mutual_info_score(None, None, contingency=numpy.histogram2d(x[wh2], y, bins)[0]))
+                shuff_mis.append(mutual_info_score(None, None, contingency=numpy.histogram2d(X[wh2], y, bins)[0]))
             statistical_is_placecell[c] = mis > numpy.nanpercentile(shuff_mis, 95)
-        # measure location dependent activity
-        incl = numpy.where(statistical_is_placecell)[0]
-        self.set_PCs(incl, loc='pull', sort=True)
+            mutual_info_raw[c] = mis, numpy.nanmean(shuff_mis)
+        return mutual_info_raw, statistical_is_placecell
 
     def save_named_set(self, tag):
         assert self.cells is not None
@@ -347,7 +356,6 @@ class Spatial:
         rolls = []
         for i, line in enumerate(Y):
             target_loc = self.loc[i] / self.resolution
-            # gline = gaussian_filter(line, sigma=3, mode='wrap')
             roll = int((target_loc-0.5)*len(line))
             RY[i] = numpy.roll(line, roll)
             rolls.append(roll)
@@ -605,6 +613,74 @@ class Spatial:
             for ci, c in enumerate(incl):
                 rates[bi, ci] = numpy.average(a.ca.rel[c, wh], weights=weights)
         return rates
+
+    def decoding_R(self, cell_list=None, frames_list=None, n_bins=25, pf_calc_param='smtr', clf=None, ret_raw=False,
+                   resp_matrix=None):
+        '''decode position in each lap trained by other laps, returns r of all frames from all laps'''
+        if cell_list is None:
+            cell_list = numpy.arange(self.session.ca.cells)
+        else:
+            cell_list = numpy.array(cell_list)
+
+        if frames_list is None:
+            wh = numpy.where(self.session.pos.movement[100:-100])[0] + 100
+            wh = wh[numpy.logical_not(numpy.isnan(self.pos[wh]))]
+            all_frames = wh
+        else:
+            all_frames = numpy.array(frames_list)
+
+        if clf is None:
+            clf = MultinomialNB()
+
+        # calcium in place cells during running
+        if resp_matrix is None:
+            ca = self.session.getparam(pf_calc_param)[cell_list][:, all_frames].transpose()
+            ca = numpy.nan_to_num(ca)
+        else:
+            ca = resp_matrix.transpose()
+        X = StandardScaler().fit_transform(ca)
+        X = numpy.maximum(0, X)
+
+        # train and test with each lap retained
+        laps = numpy.unique(self.session.pos.laps[all_frames])
+        actual, predicted = [], []
+        Y = (n_bins * self.session.pos.relpos[all_frames]).astype(int)  # binned position
+        for li, lap in enumerate(laps):
+            training_frames = numpy.where(self.session.pos.laps[all_frames] != lap)
+            retained_frames = numpy.where(self.session.pos.laps[all_frames] == lap)
+
+            clf.fit(X[training_frames], Y[training_frames])
+            actual.extend(Y[retained_frames])
+            predicted.extend(clf.predict(X[retained_frames]))
+        actual = numpy.array(actual)
+        predicted = numpy.array(predicted)
+        r_good = numpy.where(numpy.abs(predicted - actual) < n_bins * 0.75)  # discard corners
+        rval = stats.spearmanr(actual[r_good], predicted[r_good])[0]
+        fig, ax = plt.subplots(nrows=2, gridspec_kw={'height_ratios': [0.3, 1]})
+        ca = ax[0]
+        strip_ax(ca, full=False)
+        x = numpy.arange(len(actual)) / self.session.fps
+        ca.scatter(x, actual, color='black', marker='o', s=1)
+        ca.scatter(x, predicted, color='red', marker='o', s=1)
+        ca = ax[1]
+        ca.hist2d(actual, predicted, bins=n_bins)
+        ca.set_aspect('equal')
+        ca.set_xlabel('Actual position (bin)')
+        ca.set_ylabel('Decoded position (bin)')
+        ca.set_title(f'{self.session.prefix} r={rval:.2f}')
+        return rval, actual, predicted, fig
+
+    def placefield_properties(self, tag='CA'):
+        Y = self.cache[f'ba-{tag}']
+        props = numpy.empty((len(Y), 2))  # contrast and width (in rates and intensities)
+        props[:] = numpy.nan
+        for ci, y in enumerate(Y):
+            gline = gaussian_filter(numpy.nan_to_num(y), sigma=3, mode='wrap')
+            z = (gline - numpy.nanmean(gline)) / numpy.nanstd(gline)
+            if gline.max() > 0:
+                props[ci, 0] = z.max() - z.mean()  # contrast activity
+                props[ci, 1] = (z > 1).mean()  # number of >SD bins
+        return props
 
 # # testing
 # if __name__ == '__main__':

@@ -36,18 +36,45 @@ class GetSessions:
         self.results = pandas.DataFrame(resp.json()['results'])
         return self.results
 
-    def get_session(self, prefix):
+    def get_session(self, prefix, match='contains'):
         '''
         :param tag: string to search Image.ID
+        :param match: 'equal' or 'contains'
         :return: DataFrame of the search result
         '''
-        params = {f"filter__field_{self.get_field('Image.ID')}__equal": prefix}
+        params = {f"filter__field_{self.get_field('Image.ID')}__{match}": prefix}
         resp = requests.get(config['session_url'],
             headers={"Authorization": self.auth_string},
             params=params
         )
         self.results = pandas.DataFrame(resp.json()['results'])
         return self.results
+
+    def get_mouse(self, item, mtag=None):
+        '''
+        get a mouse entry from the DB
+        :param item: pass a session to get the animal it's linked to (or pass None and set mtag)
+        :param mtag: if set, look up mouse based on name
+        :return: DataFrame of the search result
+        '''
+        if mtag is not None:
+            params = {f"filter__field_{config['MouseID']['Mouse.ID']}__contains": mtag}
+            resp = requests.get(config['mice_url'],
+                                headers={"Authorization": self.auth_string},
+                                params=params
+                                )
+            self.results = pandas.DataFrame(resp.json()['results'])
+            return self.results
+        else:
+            mid = item['Mouse.ID'][0]['id']
+            url = config['mice_url'].split('?')
+            params = {f"filter__field_{self.get_field('Mouse.ID')}__equals": mtag}
+            resp = requests.get(f'{url[0]}{mid}/?{url[1]}',
+                headers={"Authorization": self.auth_string},
+            )
+            return resp.json()
+
+
 class PutLogEntries:
     def __init__(self):
         self.auth_string = f"Token {config['logger_token']}"

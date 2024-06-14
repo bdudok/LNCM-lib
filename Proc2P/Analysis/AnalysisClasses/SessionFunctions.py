@@ -92,3 +92,4 @@ def get_mask(poly, image):
             if pip.contains_point([y, x]):
                 binmask[x, y] = True
     return binmask
+

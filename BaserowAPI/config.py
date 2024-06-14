@@ -26,6 +26,9 @@ config = {
         'Class': 4998,
         'Created on': 4999
   },
+  "MouseID": {
+        'Mouse.ID': 4570,
+    },
   "lg_api_root": "https://my.labguru.com/",
   "lg_mice_url": "https://my.labguru.com/api/v1/biocollections/Mice",
   "lg_protocol_url": "https://my.labguru.com/api/v1/protocols",
