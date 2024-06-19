@@ -96,8 +96,9 @@ class CaTrace(object):
         # save outlier data points to exclude from analysis:
         # mask with bad frames
         self.ol_index = []
-        bad_frames = self.sync.load('opto')
+        bad_frames = self.sync.load('opto', suppress=True)
         if bad_frames is not None:
+            lprint(self, f'{len(bad_frames)} opto frames excluded from baseline fit', logger=self.log)
             self.ol_index.extend(bad_frames)
         self.ol_index.extend(outlier_indices(numpy.nanmean(self.trace, axis=0), thresh=12))
 
