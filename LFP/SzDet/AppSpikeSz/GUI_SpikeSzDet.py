@@ -495,6 +495,7 @@ class GUI_main(QtWidgets.QMainWindow):
             r = load_ephys(self.active_prefix)
         elif self.setup == 'LNCM':
             chi = int(ch)
+            self.param['channel_index'] = chi
             r = LoadEphys.Ephys(self.savepath, self.active_prefix, channel=chi)
             self.ephys = r
         elif self.setup == 'Pinnacle':
