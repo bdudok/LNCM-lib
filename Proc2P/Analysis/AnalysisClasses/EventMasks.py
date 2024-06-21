@@ -215,6 +215,70 @@ def mask_from_list_nosession(w, event_list, trace_len, decay=6, eps=16, min_n=No
             mask[frame_index, w - w0:w + w1] = numpy.arange(first_frame, last_frame)
     return events, mask
 
+def all_ripples_immobility(a, w, cluster_eps = 1):
+    '''After adding all single ripples, add ripple clusters by cluster
+    Ripples are not overlapping. when they are close, split by an empirically set decay (we cut 1/4 sev after ripple)
+    '''
+    event_t = []
+    for ripple_frame in a.ripple_frames:
+        if 100 + w < ripple_frame < a.ca.frames - 100 - w:
+            if not a.pos.movement[ripple_frame]:
+                event_t.append(ripple_frame)  # used for clustering only
+    event_t = numpy.array(sorted(event_t))
+    clustering = cluster.DBSCAN(eps=int(a.fps * cluster_eps), min_samples=2).fit(event_t.reshape(-1, 1))
+    single_ripple_indices = numpy.where(clustering.labels_ < 0)[0]
+    filtered_event_t = [event_t[ri] for ri in single_ripple_indices]
+    for rci in range(clustering.labels_.max() + 1):
+        current_cluster = numpy.where(clustering.labels_ == rci)[0]
+        filtered_event_t.append(event_t[current_cluster[0]])
+    event_t = sorted(filtered_event_t)
+    decay_w = int(a.fps/4)
+    gap = int(a.fps)
+    event_number = len(event_t)
+    mask = numpy.zeros((event_number, 2 * w))
+    events = numpy.empty(event_number, dtype=numpy.int64)
+    mask[:] = numpy.nan
+    trim = min(100, w)
+    for ri, current_frame in enumerate(event_t):
+        if ri < event_number - 1:
+            last_frame = min(current_frame + w, event_t[ri + 1] - decay_w)
+        else:
+            last_frame = current_frame + w
+        if ri > 0:
+            first_frame = max(current_frame - w, event_t[ri - 1] + decay_w)
+        else:
+            first_frame = current_frame - w
+        i0 = max(trim, first_frame)
+        im = current_frame - i0
+        i1 = min(last_frame, a.ca.frames - trim)
+        try:
+            m = a.pos.movement[i0:i1]
+        except:
+            print(ri, current_frame, w, event_number)
+            assert False
+        # check if mouse was still all the time during the pre period and find last movement if not.
+        if numpy.any(m[:im - gap]):
+            w0 = gap + numpy.argmax(m[:im - gap][::-1])
+        else:
+            w0 = im
+        # find first movement frame after event
+        if numpy.any(m[im + gap:]):
+            w1 = numpy.argmax(m[im + gap:]) + gap
+        else:
+            w1 = i1 - current_frame
+        # set actual indices. in case of overlap,skip this.
+        if w0 > w:
+            continue
+        try:
+            mask[ri, w - w0:w + w1] = numpy.arange(current_frame - w0, current_frame + w1)
+        except:
+            print(ri, current_frame, w, w0, w1, mask.shape)
+            assert False
+        events[ri] = current_frame
+
+    return events, mask
+
+
 if __name__ == '__main__':
     processed_path = 'D:\Shares\Data\_Processed/2P\PVTot/'
     prefix = 'PVTot7_2024-02-07_lfpOpto_178'
