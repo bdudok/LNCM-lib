@@ -753,8 +753,8 @@ class Util:
         #                                                                                     sticky=N)
 
         Label(self.frame, text='Export Time profile').grid(row=self.row(), pady=10)
-        defs = (0, 1000, 256, 500)
-        self.cfgfields = ['Start', 'Stop', 'Line', 'Kernel']
+        defs = (0, 1000, 256, 500, 0)
+        self.cfgfields = ['Start', 'Stop', 'Line', 'Kernel', 'Channel']
         for i, text in enumerate(self.cfgfields):
             self.config[text] = StringVar()
             row = self.row()
@@ -774,7 +774,7 @@ class Util:
                 print(text + ' is not a number')
                 return -1
         for prefix in pflist:
-            TimeProfile(prefix, cfg)
+            TimeProfile(wdir, prefix, cfg)
 
     def export_treadmill_callback(self):
         for i, prefix in enumerate(self.parent.filelist.prefix_list):
