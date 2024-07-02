@@ -36,7 +36,7 @@ class Worker(Process):
                 lprint(self, retval, logger=self.log)
 
 
-def pull_signals(path, prefix, tag=None, ch='All', raw=False):
+def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False):
     #get binary mask
     opPath = os.path.join(path, prefix + '/')
     roi_name = opPath + f'{prefix}_saved_roi_{tag}.npy'
@@ -90,7 +90,9 @@ def pull_signals(path, prefix, tag=None, ch='All', raw=False):
     chunk_len = 500
     indices = []
     for c in range(ncells):
-        indices.append(binmask[c].nonzero())
+        x = binmask[c].nonzero()
+        assert len(x), f'Mask for c {c} is empty, export new ROI file.'
+        indices.append(x)
     rep_size = 0.20
     next_report = rep_size
     for chi, ch in enumerate(channels):
@@ -110,8 +112,8 @@ def pull_signals(path, prefix, tag=None, ch='All', raw=False):
     numpy.save(opPath + f'{prefix}_trace_{tag}', traces)
     elapsed = datetime.datetime.now() - t0
     minutes = datetime.timedelta.total_seconds(elapsed) / 60
-    speed = (elapsed / ncells / len(channels) / nframes).microseconds
-    print(f'{prefix} finished in {minutes:.1f} minutes ({speed} microseconds / cell / frame)')
+    speed = (elapsed / len(channels) / nframes).microseconds
+    print(f'{prefix} finished in {minutes:.1f} minutes ({speed/1000:.1f} ms / frame)')
     # print(traces.shape)
     message = f'Pulled {int(nframes)} frames ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}...'
     return message
