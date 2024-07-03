@@ -264,10 +264,12 @@ class ImagingSession(object):
             else:
                 fullsuffix = f'_{spiketag}_Ch{i+1}{suffix}'
             fname = self.get_file_with_suffix(fullsuffix)
+            self.spiketime_channels.append(i + 1)
             if os.path.exists(fname):
-                self.spiketime_channels.append(i+1)
                 stdat = read_excel(fname)
                 self.spiketimes.append(self.ephys.edat[0, (stdat[stfield].values * fs).astype('int64')])
+            else:
+                self.spiketimes.append(numpy.array([]))
 
     def map_seizuretimes(self):
         '''
@@ -286,12 +288,14 @@ class ImagingSession(object):
             else:
                 fullsuffix = f'_{spiketag}_Ch{i+1}{suffix}'
             fname = self.get_file_with_suffix(fullsuffix)
+            self.sztime_channels.append(i + 1)
             if os.path.exists(fname): #this is not supposed to be case sensitive on Windows (confirmed). if it fails to open,
                 # fix ch vs Ch in name.
-                self.sztime_channels.append(i+1)
                 stdat = read_excel(fname)
-                sztimes = [self.ephys.edat[0, (stdat[x].values * fs).astype('int64')] for x in stfield]
+                sztimes = [self.ephys.edat[0, (stdat[x].values * fs).astype('int64')] for x in stfield] #start and stop
                 self.sztimes.append(sztimes)
+            else:
+                self.sztimes.append([[], []])
 
 
     def map_ripples(self):
