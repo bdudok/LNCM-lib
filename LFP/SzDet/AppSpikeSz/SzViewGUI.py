@@ -60,6 +60,9 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.setup == 'Pinnacle':
             self.settings['rec_suffix'] = '_seizure_times.xlsx'
             self.settings['pardir'] = 'D:/Shares/Data/_Processed/EEG/'
+        elif self.setup == 'LNCM':
+            self.settings['rec_suffix'] = '_seizure_times.xlsx'
+            self.settings['pardir'] = 'D:/Shares/Data/_Processed/2P/'
         if self.user_defaults is not None:
             for key, value in self.user_defaults.items():
                 self.settings[key] = value
@@ -67,8 +70,10 @@ class GUI_main(QtWidgets.QMainWindow):
     def get_prefix(self, ps):
         if self.setup == 'Pinnacle':
             s1 = '.edf_Ch'
-            f1 = ps.find(s1)
-            return ps[:f1], ps[f1+len(s1):][0]
+        elif self.setup == 'LNCM':
+            s1 = '_Ch'
+        f1 = ps.find(s1)
+        return ps[:f1], ps[f1+len(s1):][0]
 
     def make_szlist_groupbox(self):
         groupbox = QGroupBox('File list')
@@ -179,13 +184,15 @@ class GUI_main(QtWidgets.QMainWindow):
         fn = QtWidgets.QFileDialog.getOpenFileName(self, caption='Select Recording', directory=self.settings['pardir'],
                                                    filter=f'*{self.settings["rec_suffix"]}')
         self.wdir = os.path.dirname(fn[0])
+        if self.setup == 'LNCM':
+            self.wdir = os.path.dirname(self.wdir)+'/'
         self.prefix, self.ch = self.get_prefix(os.path.basename(fn[0]))
         self.path_label.setText(f'Loading data for {self.prefix} ... Please wait.')
         QApplication.processEvents()
         self.current_selected_i = None
 
         #load data
-        self.szdat = SzReviewData(self.wdir, self.prefix, self.ch)
+        self.szdat = SzReviewData(self.wdir, self.prefix, self.ch, setup=self.setup)
 
         #set list widget
         self.sz_list.clear()

@@ -453,6 +453,11 @@ class SessionInfo:
     def __setitem__(self, key, value):
         self.info[key] = value
 
+    def __contains__(self, key):
+        if hasattr(self, key):
+            return True
+        else:
+            return key in self.info
 
 if __name__ == '__main__':
     dpath = 'D:\Shares\Data\_RawData\Bruker\JEDI/'
