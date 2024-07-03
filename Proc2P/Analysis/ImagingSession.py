@@ -275,27 +275,35 @@ class ImagingSession(object):
         '''
         Load existing spiketime excel files and convert to frames
         '''
-        suffix = '_seizure_times.xlsx'
         stfield = ('Sz.Start(s)', 'Sz.Stop(s)')
         spiketag = self.kwargs.get('spiketag', None)
         n_channels = self.ephys.edat.shape[0] - 1
         fs = self.si.info['fs']
-        self.sztime_channels = []
-        self.sztimes = []
-        for i in range(n_channels):
-            if spiketag in (None, 'None'):
-                fullsuffix = f'_Ch{i+1}{suffix}'
-            else:
-                fullsuffix = f'_{spiketag}_Ch{i+1}{suffix}'
-            fname = self.get_file_with_suffix(fullsuffix)
-            self.sztime_channels.append(i + 1)
-            if os.path.exists(fname): #this is not supposed to be case sensitive on Windows (confirmed). if it fails to open,
-                # fix ch vs Ch in name.
-                stdat = read_excel(fname)
-                sztimes = [self.ephys.edat[0, (stdat[x].values * fs).astype('int64')] for x in stfield] #start and stop
-                self.sztimes.append(sztimes)
-            else:
-                self.sztimes.append([[], []])
+        for suffix, stfield, do_filter in zip(('_seizure_times_curated.xlsx', '_seizure_times.xlsx'),
+                                   (('Start', 'Stop'), ('Sz.Start(s)', 'Sz.Stop(s)')), (True, False)):
+            found_any = False
+            self.sztime_channels = []
+            self.sztimes = []
+            for i in range(n_channels):
+                if spiketag in (None, 'None'):
+                    fullsuffix = f'_Ch{i+1}{suffix}'
+                else:
+                    fullsuffix = f'_{spiketag}_Ch{i+1}{suffix}'
+                fname = self.get_file_with_suffix(fullsuffix)
+                self.sztime_channels.append(i + 1)
+                if os.path.exists(fname): #this is not supposed to be case sensitive on Windows (confirmed). if it fails to open,
+                    # fix ch vs Ch in name.
+                    found_any = True
+                    stdat = read_excel(fname)
+                    if do_filter:
+                        stdat = stdat.loc[~stdat['Included'].eq(False)]
+                    sztimes = [self.ephys.edat[0, (stdat[x].values * fs).astype('int64')] for x in stfield] #start and stop
+                    self.sztimes.append(sztimes)
+                else:
+                    self.sztimes.append([[], []])
+            if found_any:
+                print(f'using seizures from {fname}')
+                break
 
 
     def map_ripples(self):
