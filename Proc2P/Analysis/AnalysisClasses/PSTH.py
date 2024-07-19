@@ -217,7 +217,10 @@ class PSTH:
                 line = a.ca.get_npc(1)[:, 0]
                 fill_line = True
             elif self.param_key == 'rpw':
-                line = a.ripple_power
+                if hasattr(a, 'ripple_power'):
+                    line = a.ripple_power
+                else:
+                    line = a.ephys.ripple_power
                 fill_line = True
             elif self.param_key == 'ripp-n':
                 line = a.get_ripple_number_trace() * fps
