@@ -223,7 +223,7 @@ class PSTH:
                     line = a.ephys.ripple_power
                 fill_line = True
             elif self.param_key == 'ripp-n':
-                line = a.get_ripple_number_trace() * fps
+                line = a.get_ripple_number_trace() * a.fps
                 fill_line = True
             elif self.param_key == 'maxenv':
                 nframes = a.ca.frames
@@ -382,11 +382,12 @@ class PSTH:
             self.weights = weights[:data_counter]
 
     def get_data(self, group_criteria=None, group_by=None, avg_cells=False, return_indices=False, keep_all=False,
-                 weighted=False):
+                 weighted=False, baseline=None):
         '''group criteria provided as a list of key-value pairs applied sequentially
         group_by: average items that have the same value in the specified parameter
         return_indices: also return the original cell indices for each line
-        if group_by is specified, returns group keys instead of indices'''
+        if group_by is specified, returns group keys instead of indices
+        If baseline is specified as a slice, this period is subtracted from each individual event'''
         if group_criteria is None and group_by is None and avg_cells is False:
             data = self.data[:, :2 * self.window_w]
             if weighted:
@@ -443,6 +444,11 @@ class PSTH:
                     element_included = numpy.isin(self.get_unique_indices(), indices)
                     data[gi] = numpy.nanmean(self.data[element_included, :2 * self.window_w], axis=0)
                 cell_indices = groups
+        if baseline is not None:
+            nd = numpy.empty(data.shape, data.dtype)
+            for i in range(len(data)):
+                nd[i] = data[i] - numpy.nanmean(data[i][baseline])
+            data = numpy.copy(nd)
         if data is None:
             if return_indices:
                 return None, None
@@ -510,11 +516,11 @@ class PSTH:
         return mid, mid - err, mid + err
 
     def return_mean(self, group_criteria=None, spread_mode='SEM', mid_mode='mean', group_by=None, avg_cells=True,
-                    multiply=1, print_n=False, scale=False, use_n=None):
+                    multiply=1, print_n=False, scale=False, use_n=None, baseline=None):
         '''# filter data according to criteria, and calculate average of all lines.
         if group_by is specified, first average by that parameter.
         if avg cells, cell averages instead of all individual trace. has no effect with group_by'''
-        data = self.get_data(group_criteria=group_criteria, group_by=group_by, avg_cells=avg_cells)
+        data = self.get_data(group_criteria=group_criteria, group_by=group_by, avg_cells=avg_cells, baseline=baseline)
         if data is None:
             return None, None, None
         else:
