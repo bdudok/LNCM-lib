@@ -150,7 +150,8 @@ class PSTH:
         self.session_kwargs = kwargs
 
     def set_pull_function_kwargs(self, *args, **kwargs):
-        '''Specify kwargs that will be passed to any loader function called by pull_traces'''
+        '''Specify kwargs that will be passed to any loader function called by pull_traces
+        NB this is not for mask functions! for that, pass kwargs to set_triggers'''
         if None in args:
             self.pull_function_kwargs = {}
         self.pull_function_kwargs = kwargs

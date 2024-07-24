@@ -14,10 +14,14 @@ def PhotoStimTrain(a, w):
     event_frames = numpy.load(a.get_file_with_suffix('_photostim_trains.npy'))
     return masks_from_list(a, w, event_frames)
 
-def LFPSpikes(a, w, ch=1):
-    df = read_excel(a.get_file_with_suffix(f'_Ch{ch}_spiketimes.xlsx'))
-    st = df['SpikeTimes(s)'].values
-    event_frames = [a.timetoframe(x) for x in st]
+def LFPSpikes(a, w, ch=1, from_session=True):
+    if not from_session:
+        df = read_excel(a.get_file_with_suffix(f'_Ch{ch}_spiketimes.xlsx'))
+        st = df['SpikeTimes(s)'].values
+        event_frames = [a.timetoframe(x) for x in st]
+    else:
+        a.map_spiketimes()
+        event_frames = a.spiketimes[ch]
     return nonoverlap_from_list(a, w, event_frames, decay=int(a.CF.fps*0.2), eps=int(a.CF.fps), exclude_move=True)
 
 def Seizures(a, w, ch=1):
@@ -25,6 +29,11 @@ def Seizures(a, w, ch=1):
     st = df['Sz.Start(s)'].values
     event_frames = [a.timetoframe(x) for x in st]
     return nonoverlap_from_list(a, w, event_frames, decay=int(a.CF.fps*0.2), eps=int(a.CF.fps), exclude_move=True)
+
+def curated_sz_times(a, w, ch=0): #ch is 0 indexed
+    a.map_seizuretimes()
+    event_frames = a.sztimes[ch][0]
+    return nonoverlap_from_list(a, w, event_frames, decay=int(a.fps*0.5), eps=int(a.fps), exclude_move=True)
 
 
 def masks_from_list(a, w, event_list, exclude_movement=False):
