@@ -28,20 +28,25 @@ class CropVideo:
             self.n_frames = int(self.im.get(cv2.CAP_PROP_FRAME_COUNT))
             ret, self.frame = self.im.read()
             # shape to conform w .mat so rest works without mods
-            self.data = numpy.empty((self.n_frames, self.frame.shape[0], self.frame.shape[1]),
+            self.buffer_size = min(1000, self.n_frames)
+            self.buffer_offset = 0
+            self.data = numpy.empty((self.buffer_size, self.frame.shape[0], self.frame.shape[1]),
                                     dtype=self.frame.dtype)
-            # read all frames
+            # read first 100 frames
             self.i = 0
             while self.frame is not None and self.i < min(100, self.n_frames):
                     self.next_frame()
         self.eye_rect = None
 
     def next_frame(self):
-        self.data[self.i] = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
+        # #to avoid overallocation, this is now limited.
+        # Works for previews, but will need to implement rolling the buffer
+        assert self.i < self.buffer_size
+        self.data[self.i-self.buffer_offset] = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
         self.i += 1
         ret, self.frame = self.im.read()
     def buffer_frames(self):
-        while self.frame is not None and self.i < self.n_frames:
+        while self.frame is not None and self.i < self.buffer_size:
             self.next_frame()
     def crop(self):
         f0 = min(100, self.n_frames)
