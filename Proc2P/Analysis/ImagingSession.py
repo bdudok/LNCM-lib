@@ -136,6 +136,7 @@ class ImagingSession(object):
         if self.pos.speed is None:  # in case this data is missing
             if self.has_ca:
                 self.pos.speed = numpy.zeros(self.ca.frames)
+                self.pos.smspd = numpy.zeros(self.ca.frames)
                 self.pos.pos = numpy.zeros(self.ca.frames)
                 self.pos.movement = numpy.zeros(self.ca.frames)
         else:
