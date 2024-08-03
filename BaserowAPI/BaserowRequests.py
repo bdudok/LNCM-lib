@@ -100,6 +100,24 @@ class PutLogEntries:
             json=put_json
         )
 
+    def check(self, sessionID, source='ArchiveZip'):
+        '''Return True if the sessionID is already registered in BR as archived'''
+        params = {
+            f"filter__field_{config['LogID']['Name']}__contains": sessionID,
+            f"filter__field_{config['LogID']['Class']}__equal": source,
+        }
+
+        resp = requests.get(config['log_url'],
+            headers={
+                "Authorization": self.auth_string,
+            },
+            params=params
+        )
+
+
+        return pandas.DataFrame(resp.json())
+
+
 
 if __name__ == '__main__':
     project = 'Voltage'
