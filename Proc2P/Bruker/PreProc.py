@@ -235,6 +235,7 @@ class PreProc:
             vmax = 5.0  # 5V command is 100%LED
             bintrace = trace > (vmax * 0.05)
             pos = numpy.where(numpy.convolve(bintrace, [1, -1]) == 1)[0] #rising edges
+            stimframes = None
             if len(pos):
                 if self.has_opto:
                     #case: using analog modulation with MarkPoints, find rising edges as stim starts
@@ -262,13 +263,15 @@ class PreProc:
                         self.opto_config = f'{round(durations.mean())} ms, {round(intensities.mean() * 100)} %'
                         self.opto_name = 'ExternalDevice'
                         self.found_output.append('Opto')
-
-                        led_op = pandas.DataFrame({'Intensity': intensities,
-                                                   'ImgFrame': stimframes, 'Duration': durations}, index=posindex)
-
-                led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
-                numpy.save(self.dpath + 'bad_frames.npy', stimframes)
-                numpy.save(self.procpath + self.prefix + '_bad_frames.npy', stimframes)
+                        incl_stims = numpy.array([i for i, x in enumerate(stimframes) if 0 < x < self.n_frames])
+                        led_op = pandas.DataFrame({'Intensity': intensities[incl_stims],
+                                                   'ImgFrame': stimframes[incl_stims],
+                                                   'Duration': durations[incl_stims]}, index=posindex[incl_stims])
+                        stimframes = stimframes[incl_stims]
+                if stimframes is not None and len(stimframes):
+                    led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
+                    numpy.save(self.dpath + 'bad_frames.npy', stimframes)
+                    numpy.save(self.procpath + self.prefix + '_bad_frames.npy', stimframes)
                 self.found_output.append('StimPulses')
 
         # rsync times

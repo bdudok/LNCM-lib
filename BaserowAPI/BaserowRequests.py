@@ -34,6 +34,7 @@ class GetSessions:
         )
 
         self.results = pandas.DataFrame(resp.json()['results'])
+        self.results.sort_values('Image.ID', inplace=True)
         return self.results
 
     def get_session(self, prefix, match='contains'):
