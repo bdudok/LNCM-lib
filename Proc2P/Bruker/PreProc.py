@@ -244,7 +244,7 @@ class PreProc:
                 else:
                     #case: using PWM modulation with external device. cluster within-frame signals and compute duty
                     # PWM is 500 Hz
-                    clustering = cluster.DBSCAN(eps=self.fs/500*2, min_samples=2).fit(pos.reshape(-1, 1))
+                    clustering = cluster.DBSCAN(eps=self.fs/500*2, min_samples=1).fit(pos.reshape(-1, 1))
                     labels = clustering.labels_
                     nstims = labels.max() + 1
                     intensities = numpy.zeros(nstims)
