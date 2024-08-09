@@ -1,6 +1,7 @@
 import numpy
 from sklearn import cluster
 from Proc2P.utils import read_excel
+from sklearn.cluster import dbscan
 # from EyeTracking import clean_movement_map, clean_whisker_map, parse_triggers
 # from SCA_reader import get_spikes, find_clusters
 # from OEphys_reader import get_OEphys_events, get_tonepuff_events
@@ -12,6 +13,20 @@ from Proc2P.utils import read_excel
 
 def PhotoStimTrain(a, w):
     event_frames = numpy.load(a.get_file_with_suffix('_photostim_trains.npy'))
+    return masks_from_list(a, w, event_frames)
+
+def PhotoStimPulse(a, w, exclude_move=True):
+    if a.opto is None:
+        event_frames = []
+    else:
+        stims = numpy.where(a.opto)[0]
+        clustering = dbscan(stims.reshape(-1, 1), eps=1, min_samples=1)
+        n_trains = clustering[1].max() + 1
+        event_frames = numpy.ones(n_trains, dtype='int32') * -1  # start frame
+        for i in range(n_trains):
+            event_frames[i] = stims[numpy.searchsorted(clustering[1], i)]
+        if exclude_move:
+            event_frames = event_frames[~a.pos.movement[event_frames]]
     return masks_from_list(a, w, event_frames)
 
 def LFPSpikes(a, w, ch=1, from_session=True, exclude_move=True):

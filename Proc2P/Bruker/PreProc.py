@@ -255,9 +255,15 @@ class PreProc:
                         x = pos[numpy.where(labels == cid)[0]]  # this is expected to be in order
                         pwmfreq = numpy.diff(x).mean()
                         posindex[cid] = x[0]
-                        stimframes[cid] = numpy.searchsorted(self.frametimes, x[0]/self.fs) - 1  # convert to 0 indexing
-                        intensities[cid] = bintrace[x[0]:int(x[-1]+pwmfreq)].mean()
-                        durations[cid] = (int(x[-1]+pwmfreq) - x[0]) / self.fs * 1000
+                        stimframes[cid] = numpy.searchsorted(self.frametimes,
+                                                             x[0] / self.fs) - 1  # convert to 0 indexing
+                        if len(x) == 1:  # if this is PWM but 100%, it will be a single plateau.
+                            pulse_dur = numpy.argmax(trace[x[0]:] < (0.5*vmax)) #voltage is ~4.8 during pulse
+                            durations[cid] = pulse_dur / self.fs * 1000
+                            intensities[cid] = trace[x[0]:x[0] + pulse_dur].mean()
+                        else:
+                            intensities[cid] = bintrace[x[0]:int(x[-1]+pwmfreq)].mean()
+                            durations[cid] = (int(x[-1]+pwmfreq) - x[0]) / self.fs * 1000
                     if nstims:
                         self.has_opto = True
                         self.opto_config = f'{round(durations.mean())} ms, {round(intensities.mean() * 100)} %'
