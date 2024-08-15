@@ -78,14 +78,18 @@ def pull_image_with_ROI(session:ImagingSession, image, c, show=False):
         plt.figure()
         plt.imshow(image, aspect='auto')
         plt.gca().add_patch(patches.PathPatch(mplpath.Path(session.rois.polys[0]), ec='white', lw=1, fill=False))
+    #check if poly is at least 1 px wide
+    minsize = (session.rois.polys[0].max(axis=0) - session.rois.polys[0].min(axis=0)).min()
+    if numpy.isnan(minsize) or minsize < 2:
+        return None, None
     mask = get_mask(poly, image)
     return numpy.nanmean(image[mask]), mask
 
 def get_mask(poly, image):
     #calculate binary mask
     binmask = numpy.zeros(image.shape, dtype='bool')
-    left, top = poly.min(axis=0)
-    right, bottom = poly.max(axis=0)
+    left, top = poly.min(axis=0).astype('int')
+    right, bottom = poly.max(axis=0).astype('int')
     pip = mplpath.Path(poly) #note that this swaps it
     for y in range(left, right):
         for x in range(top, bottom):
