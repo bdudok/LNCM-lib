@@ -212,6 +212,7 @@ class Ripples(object):
         std = ftr.std()
         tr1 = self.tr1 * std
         tr2 = self.tr2 * std
+        pmax = int(len(self.envelope) - self.fs)
         while self.incl.sum() > 1:  # find new ones until a good one is found or the trace is used up
             # find max envelope not excluded:
             p1 = numpy.argmax(self.envelope * self.incl)
@@ -229,6 +230,12 @@ class Ripples(object):
             p2 = p1
             while True:
                 p = p2 + self.maxgap
+                if p > pmax:
+                    for p in range(p2, pmax):
+                        if self.envelope[p] > tr2:
+                            p2 = p
+                            break
+                    break
                 if self.envelope[p] > tr2:
                     p2 = p
                 else:
@@ -588,9 +595,11 @@ class Ripples(object):
                 i += 1
         return i
 
-    def save_ripples(self, overwrite=False):
+    def save_ripples(self, overwrite=False, tag=None):
         if self.prefix is None:
             return -1
+        if tag not in (None, ''):
+            self.tag = tag
         if (self.tag is not None) and os.path.exists(self.path + self.tag + '.ripples') and not overwrite:
             print(f'Ripple tag {self.tag} already exists, creating new timestamp')
             self.tag = None

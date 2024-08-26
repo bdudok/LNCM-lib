@@ -909,14 +909,21 @@ class Prev:
         Label(self.frame, text='Ripples').grid(row=self.row(), pady=10)
 
         Label(self.frame, text='Config').grid(row=self.row(), pady=10)
-        defs = (5, 3, 1)
-        self.cfgfields = ['tr1', 'tr2', 'y_scale']
+        defs = (5, 3, 1, )
+        self.cfgfields = ['tr1', 'tr2', 'y_scale',]
         for i, text in enumerate(self.cfgfields):
             self.config[text] = StringVar()
             row = self.row()
             Label(self.frame, text=text).grid(row=row, column=0, sticky=N + W)
             Entry(self.frame, textvariable=self.config[text], width=3).grid(row=row, column=0, sticky=N + E)
             self.config[text].set(str(defs[i]))
+        # add tag field
+        self.config['tag'] = StringVar()
+        row = self.row()
+        Label(self.frame, text='tag').grid(row=row, column=0, sticky=N + W)
+        Entry(self.frame, textvariable=self.config['tag'], width=3).grid(row=row, column=0, sticky=N + E)
+        self.config['tag'].set('')
+
         self.force = IntVar()
         Checkbutton(self.frame, text='Force recompute', variable=self.force).grid(row=self.row(), sticky='N')
         self.force.set(0)
@@ -955,7 +962,8 @@ class Prev:
         self.ripples.rec_enum_ripples(exclude_spikes=self.excl_spikes.get())
 
     def ripples_save_callback(self):
-        self.ripples.save_ripples()
+        tag = self.config['tag'].get()
+        self.ripples.save_ripples(tag=tag)
 
     def ripples_export_callback(self):
         self.ripples.export_ripple_times()
