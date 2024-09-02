@@ -17,7 +17,7 @@ from _Dependencies.S2P.dcnv import oasis
 class CaTrace(object):
     __name__ = 'CaTrace'
     def __init__(self, path, prefix, verbose=False, bsltype='poly', exclude=(0, 0), peakdet=False, ch=0, invert=False,
-                 tag=None):
+                 tag=None, last_bg=None):
         if verbose:
             print(f'Firing called with ch={ch}, tag={tag}')
         self.peakdet = peakdet  # removed peakdet from old Firing class, this doesn't do anything.
@@ -27,6 +27,7 @@ class CaTrace(object):
         self.is_dual = False
         self.log = logger()
         self.log.set_handle(path, prefix)
+        self.last_bg = last_bg # if True, will use the last ROI to correct for background before baseline fitting
         # parse channel
         if ch in (0, 'Ch2', 'First', 'Green'):
             ch = 0
@@ -59,8 +60,6 @@ class CaTrace(object):
         if fs is None:
             fs = float(self.version_info['fps'])
         self.nnd = oasis(X - numpy.min(X, axis=0), batch_size=batch, tau=tau, fs=fs)
-
-
 
     def open_raw(self, trace=None):
         # init containers and pool
@@ -103,9 +102,15 @@ class CaTrace(object):
         self.ol_index.extend(outlier_indices(numpy.nanmean(self.trace, axis=0), thresh=12))
 
     def pack_data(self, c):
-        tr = self.trace[c]
-        if self.invert:
-            tr = numpy.nanmax(tr) - tr
+        if self.last_bg is not None:
+            if self.last_bg is False:
+                pass
+            elif self.last_bg is True:
+                tr = self.trace[c] - self.trace[-1]
+            else:
+                raise ValueError(f'{self.last_bg} not implemented for bg correction')
+        else:
+            tr = self.trace[c]
         return c, tr, self.bsltype, self.movement, self.exclude, self.peakdet, self.ol_index
 
     def unpack_data(self, data):
@@ -115,7 +120,10 @@ class CaTrace(object):
             print('Saving cell ' + str(c))
         for att in self.keys:
             # print('saving', att, self.__getattribute__(att).shape, data[att].shape)
-            self.__getattribute__(att)[c] = data[att]
+            tr = data[att]
+            if self.invert:
+                tr = numpy.nanmax(tr) - tr
+            self.__getattribute__(att)[c] = tr
 
         self.computed_cells += 1
         if self.computed_cells == self.cells:
@@ -130,9 +138,10 @@ class CaTrace(object):
         os.mkdir(self.pf)
         for key in self.keys:
             numpy.save(self.pf + '//' + key, self.__getattribute__(key))
-        self.version_info = {'v': '11', 'bsltype': self.bsltype,
+        self.version_info = {'v': '12', 'bsltype': self.bsltype,
                              'channel': str(self.ch),
-                             'fps': str(CF.fps)}  # should contain only single strings as values
+                             'fps': str(CF.fps),
+                             'bg_corr':str(self.last_bg)}  # should contain only single strings as values
         numpy.save(self.pf + '//' + 'info', self.version_info)
         lprint(self, self.prefix, self.cells, 'cells saved.', f'Tag: {self.tag}, Ch: {self.ch}', logger=self.log)
 

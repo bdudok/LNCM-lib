@@ -223,6 +223,13 @@ class PSTH:
                 else:
                     line = a.ephys.ripple_power
                 fill_line = True
+            elif self.param_key == 'rpwz':
+                if hasattr(a, 'ripple_power'):
+                    line = a.ripple_power
+                else:
+                    line = a.ephys.ripple_power
+                fill_line = True
+                line /= numpy.nanstd(line)
             elif self.param_key == 'ripp-n':
                 line = a.get_ripple_number_trace() * a.fps
                 fill_line = True

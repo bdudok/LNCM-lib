@@ -481,6 +481,11 @@ class Traces:
         Checkbutton(self.frame, text='Detect all ROIs', variable=self.detect_signals).grid(row=self.row(), sticky=N)
         self.detect_signals.set(0)
 
+        Label(self.frame, text='Last ROI is background').grid(row=self.row())
+        self.last_bg = IntVar()
+        Checkbutton(self.frame, text='True', variable=self.last_bg).grid(row=self.row(), sticky=N)
+        self.last_bg.set(0)
+
         Label(self.frame, text='Invert (negative sensor)').grid(row=self.row())
         self.invert_channels = [IntVar(value=0), IntVar(value=0)]
         for bni, btn in enumerate(('Ch0(G)', 'Ch1(R)')):
@@ -554,6 +559,7 @@ class Traces:
                     if prefix in f and match_text in f and f.endswith('.npy'):
                         tags.append(f[f.find(match_text) + len(match_text):-4])
             peakdet = False#self.peakdet.get()
+            last_bg = bool(self.last_bg.get())
             invert = [x.get() for x in self.invert_channels]
             excl = (int(self.config[self.tracefields[0]].get()), int(self.config[self.tracefields[1]].get()))
             sz_mode = False#self.parent.mc.ignore_sat.get()
@@ -561,7 +567,7 @@ class Traces:
                 print(f'{prefix}: tag {tag} queued for processing traces.')
                 self.parent.request_queue.put(('firing',
                                                (self.parent.filelist.wdir, prefix,
-                                                bsltype, excl, sz_mode, peakdet,
+                                                bsltype, excl, sz_mode, peakdet, last_bg,
                                                 invert,
                                                 tag)))
 
@@ -1645,12 +1651,12 @@ if __name__ == '__main__':
                 pull_nworker += 1
             pull_queue.put(job)
         elif jobtype == 'firing':
-            path, prefix, bsltype, exclude, sz_mode, peakdet, invert, tag = job
+            path, prefix, bsltype, exclude, sz_mode, peakdet, last_bg, invert, tag = job
             os.chdir(path)
             run = False
             for ch in (0, 1):
                 a = CaTrace(path, prefix, bsltype=bsltype, exclude=exclude, peakdet=peakdet, ch=ch, tag=tag,
-                            invert=invert[ch])
+                            invert=invert[ch], last_bg=last_bg)
                 if a.open_raw() == -1:
                     continue
                 if os.path.exists(a.pf):
