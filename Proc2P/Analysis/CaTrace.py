@@ -104,7 +104,7 @@ class CaTrace(object):
     def pack_data(self, c):
         if self.last_bg is not None:
             if self.last_bg is False:
-                pass
+                tr = self.trace[c]
             elif self.last_bg is True:
                 tr = self.trace[c] - self.trace[-1]
             else:

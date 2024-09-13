@@ -256,7 +256,8 @@ class PreProc:
                         pwmfreq = numpy.diff(x).mean()
                         posindex[cid] = x[0]
                         stimframes[cid] = numpy.searchsorted(self.frametimes,
-                                                             x[0] / self.fs) - 1  # convert to 0 indexing
+                                                           x[0] / self.fs) - 1  # convert to 0 indexing
+                        '''#with gating and voltage imaging, there are stims with 0 duration. this should be fixed.'''
                         if len(x) == 1:  # if this is PWM but 100%, it will be a single plateau.
                             pulse_dur = numpy.argmax(trace[x[0]:] < (0.5*vmax)) #voltage is ~4.8 during pulse
                             durations[cid] = pulse_dur / self.fs * 1000
@@ -266,7 +267,7 @@ class PreProc:
                             durations[cid] = (int(x[-1]+pwmfreq) - x[0]) / self.fs * 1000
                     if nstims:
                         self.has_opto = True
-                        self.opto_config = f'{round(durations.mean())} ms, {round(intensities.mean() * 100)} %'
+                        self.opto_config = f'{round(numpy.nanmean(durations))} ms, {round(numpy.nanmean(intensities) * 100)} %'
                         self.opto_name = 'ExternalDevice'
                         self.found_output.append('Opto')
                         incl_stims = numpy.array([i for i, x in enumerate(stimframes) if 0 < x < self.n_frames])
