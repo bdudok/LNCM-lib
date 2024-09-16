@@ -138,7 +138,7 @@ class ImagingSession(object):
                 self.pos.speed = numpy.zeros(self.ca.frames)
                 self.pos.smspd = numpy.zeros(self.ca.frames)
                 self.pos.pos = numpy.zeros(self.ca.frames)
-                self.pos.movement = numpy.zeros(self.ca.frames)
+                self.pos.movement = numpy.zeros(self.ca.frames, dtype='bool')
         else:
             bdat = self.get_file_with_suffix('_bdat.json')
             if os.path.exists(bdat):

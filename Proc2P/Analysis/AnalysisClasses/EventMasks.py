@@ -25,7 +25,7 @@ def PhotoStimPulse(a, w, exclude_move=True):
         event_frames = numpy.ones(n_trains, dtype='int32') * -1  # start frame
         for i in range(n_trains):
             event_frames[i] = stims[numpy.searchsorted(clustering[1], i)]
-        if exclude_move:
+        if exclude_move and len(event_frames):
             event_frames = event_frames[~a.pos.movement[event_frames]]
     return masks_from_list(a, w, event_frames)
 
