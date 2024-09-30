@@ -82,6 +82,8 @@ class PutLogEntries:
         self.username = os.environ.get('USERNAME')
 
     def put(self, sessionID, imtag, message='', sourceclass='',):
+        if sessionID in (None, 'None'):
+            sessionID = 0
         put_json = {
             "Name": imtag,
             "Message": message,

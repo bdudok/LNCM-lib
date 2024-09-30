@@ -11,8 +11,13 @@ this does not export everything, read error messages and install missing depende
 
 # Start from scratch
 If cloning the conda  env doesn't work, here are the steps to start from scratch:
+<<<<<<< HEAD
+- conda create -n 2pcode36 python=3.6
+- conda activate 2pcode36
+=======
 - conda create -n py36 python=3.6
 - conda activate py36
+>>>>>>> origin/main
 
 - conda install shapely
 - pip install sima pandas
