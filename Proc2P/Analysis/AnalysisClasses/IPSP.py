@@ -5,15 +5,15 @@ import matplotlib.pyplot as plt
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.Analysis.AnalysisClasses import PhotoStim
 
-from Proc2P.utils import lprint
-from datetime import datetime
+from Proc2P.utils import logger, lprint
+
 from collections import namedtuple
 from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter
-from scipy import stats
+
 import pandas
 import numpy
-from sklearn.cluster import dbscan
+
 
 
 class IPSP:
@@ -28,23 +28,26 @@ class IPSP:
         if self.is_bg():
             self.n_cells -= 1
         self.set_defaults(config)
+        self.log = logger()
+        self.log.set_handle(self.session.procpath, self.session.prefix)
 
     def set_defaults(self, config):
         if not os.path.exists(self.wdir):
             os.mkdir(self.wdir)
         self.get_stimtimes()
-        self.config = namedtuple('Config', 'pre, post, param')
-        self.config.pre = int(self.session.fps * 100/1000)  # duration included before stim (frames)
-        self.config.post = int(self.session.fps * 200/1000)  # duration included after stim (frames)
-        self.config.param = 'rel'
+        Config = namedtuple('Config', 'pre, post, param')
+        pre = int(self.session.fps * 100/1000)  # duration included before stim (frames)
+        post = int(self.session.fps * 200/1000)  # duration included after stim (frames)
+        param = 'rel'
+        self.config = Config(pre, post, param)
         if config is not None:
             for key, value in config.items():
-                setattr(self.config, key, value)
+                self.config._replace(key=value)
 
     def get_matrix(self):
         # pull the individual responses for each cell and stim
         if not hasattr(self, 'raw_resps'):
-            mname = self.wdir + f'_{self.session.tag}_resps.npy'
+            mname = self.get_fn('raw_resps.npy')
             if os.path.exists(mname):
                 self.raw_resps = numpy.load(mname)
             else:
@@ -122,21 +125,29 @@ class IPSP:
         # invert it for fitting
         popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
         self.model = popt
+        modstring = self.get_modstring()
         if save:
-            fname = self.wdir + f'_{self.session.tag}_model'
+            fname = self.get_fn('model')
             fig, ax = plt.subplots()
             ax.plot(fitX, 100*(maxval - self.alpha_func(fitX, *popt)), color='red')
             ax.scatter(X, Y*100)
-            modstring = f'ampl:{popt[0]*100:.2f}%, peak:{popt[1]:.1f} ms, bias:{popt[2]*100:.1f}%, delay:{popt[3]:.1f}ms'
             fig.suptitle(self.session.prefix + ' ' + self.session.tag + '\n' + modstring)
             with open(fname+'.txt', 'w') as f:
                 f.write(modstring+'\n'+str(popt))
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('Response (DF/F %)')
             plt.savefig(fname+'.png')
+            numpy.save(fname+'.npy', self.model)
             self.fig = fig, ax
         self.X = X #times in ms of the post
         return self.model
+
+    def get_modstring(self):
+        popt = self.model
+        return f'ampl:{popt[0] * 100:.2f}%, peak:{popt[1]:.1f} ms, bias:{popt[2] * 100:.1f}%, delay:{popt[3]:.1f}ms'
+
+    def get_fn(self, suffix):
+        return self.wdir + f'_{self.session.tag}_{suffix}'
 
     def alpha_func(self, x, A, B, C, D):
         '''
@@ -192,4 +203,39 @@ class IPSP:
         popt, pcov = curve_fit(self.ampl_func, x[incl], y[incl], p0=guesses, bounds=bounds)
         return popt
 
+    def pull_ipsps(self):
+        '''
+        store baseline and amplitude for each stim in each cell
+        using the parameter of the fit as amplitude. NB that alternatively, we could add the bias,
+         or compute the diff of where the fit curve min is relative to baseline.
+         :return: array of frame, baseline, response for each c, e
+        '''
+        self.responses = numpy.empty((self.n_cells, self.n_stims, 3)) #frame, baseline, response
+        self.responses[:] = numpy.nan
+        for ci in range(self.n_cells):
+            for ei in range(self.n_stims):
+                Y, bl, fit = self.fit_event(ci, ei) #bl is in DF/F actual, response (fit[0]) in DF/F change.
+                if fit is None:
+                    self.responses[ci, ei] = self.stimframes[ei], bl[-1], 0
+                else:
+                    self.responses[ci, ei] = self.stimframes[ei], bl[-1], fit[0]
+
+        lprint(self, 'Pulled responses for', self.session.tag, 'with ', self.config, 'Model:',
+               self.get_modstring(), logger=self.log)
+        fn = self.get_fn('_ipsps.npy')
+        numpy.save(fn, self.responses)
+        return self.responses
+
+    def get_ipsps(self):
+        if not hasattr(self, 'responses'):
+            fn = self.get_fn('_ipsps.npy')
+            if os.path.exists(fn):
+                self.responses = numpy.load(fn)
+                self.model = numpy.load(self.get_fn('model.npy'))
+                lprint(self, 'Loaded IPSP model from file:', self.get_modstring())
+            else:
+                self.fit_model(save=True)
+                plt.close()
+                self.pull_ipsps()
+        return self.responses
 

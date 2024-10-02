@@ -107,7 +107,7 @@ def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False):
             inmem_data = numpy.array(im.imdat.get_channel(ch)[start:stop])
             for c in range(ncells):
                 ind = indices[c]
-                traces[c, start:stop, chi] = inmem_data[:, ind[1], ind[0]].mean(axis=1)
+                traces[c, start:stop, chi] = numpy.nanmean(inmem_data[:, ind[1], ind[0]], axis=1)
 
     numpy.save(opPath + f'{prefix}_trace_{tag}', traces)
     elapsed = datetime.datetime.now() - t0

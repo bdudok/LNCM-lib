@@ -441,8 +441,9 @@ class Gui:
             self.add_current(dil='dil' in mode)
         if mode == 'draw':
             for p in ps:
-                self.saved_rois.append(p)
-                self.saved_paths.append(mplpath.Path(p))
+                if len(p) > 3:
+                    self.saved_rois.append(p)
+                    self.saved_paths.append(mplpath.Path(p))
         if mode == 'remove':
             rois = []
             for p in ps:
