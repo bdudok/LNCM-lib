@@ -31,7 +31,7 @@ class IPSP:
         self.log = logger()
         self.log.set_handle(self.session.procpath, self.session.prefix)
 
-    def set_defaults(self, config):
+    def set_defaults(self, user_config):
         if not os.path.exists(self.wdir):
             os.mkdir(self.wdir)
         self.get_stimtimes()
@@ -40,8 +40,8 @@ class IPSP:
         post = int(self.session.fps * 200/1000)  # duration included after stim (frames)
         param = 'rel'
         self.config = Config(pre, post, param)
-        if config is not None:
-            for key, value in config.items():
+        if user_config is not None:
+            for key, value in user_config.items():
                 self.config._replace(key=value)
 
     def get_matrix(self):
@@ -181,7 +181,11 @@ class IPSP:
         :return: amplitude and fit
         '''
         Y = self.raw_resps[event_index, c][self.config.pre:]
-        bl = gaussian_filter(self.raw_resps[event_index, c][:self.config.pre], int(0.025 * self.session.fps))
+        notna_bl = [i for i in range(self.config.pre) if
+                    ((i not in self.wh_nan[0]) and (not numpy.isnan(self.raw_resps[event_index, c, i])))]
+        if not ((len(notna_bl) > 10) and (numpy.count_nonzero(numpy.logical_not(numpy.isnan(Y))) > 10)):
+            return Y, notna_bl, None
+        bl = gaussian_filter(self.raw_resps[event_index, c][notna_bl], int(0.025 * self.session.fps))
         fit = self.fit_response(Y, bl[-1])
         return Y, bl, fit
 
@@ -216,7 +220,7 @@ class IPSP:
             for ei in range(self.n_stims):
                 Y, bl, fit = self.fit_event(ci, ei) #bl is in DF/F actual, response (fit[0]) in DF/F change.
                 if fit is None:
-                    self.responses[ci, ei] = self.stimframes[ei], bl[-1], 0
+                    self.responses[ci, ei] = self.stimframes[ei], numpy.nan, numpy.nan
                 else:
                     self.responses[ci, ei] = self.stimframes[ei], bl[-1], fit[0]
 
