@@ -1,4 +1,4 @@
-import json
+import json, numpy
 import os
 import requests
 import pandas
@@ -19,7 +19,9 @@ class GetSessions:
         :param more_filters: pass a list of 2-tuples for additional searches (key, value)
         :return: DataFrame of the search result
         '''
-        params = {f"filter__field_{self.get_field('Project')}__contains": project}
+        params = {'page_size': 100}
+        if project is not None:
+            params[f"filter__field_{self.get_field('Project')}__contains"] = project
         if task is not None:
             params[f"filter__field_{self.get_field('Task')}__contains"] = task
         if incltag is not None:
@@ -28,12 +30,27 @@ class GetSessions:
             for key, value in more_filters:
                 params[key] = value
         print(params)
-        resp = requests.get(config['session_url'],
-            headers={"Authorization": self.auth_string},
-            params=params
-        )
 
-        self.results = pandas.DataFrame(resp.json()['results'])
+        session_jsons = []
+        next_page = 1
+        session_index = 0
+        while next_page:
+            print('Reading db, page', next_page)
+            params['page'] = next_page
+            resp = requests.get(config['session_url'],
+                                headers={"Authorization": self.auth_string},
+                                params=params
+                                )
+            assert resp.status_code == 200
+            rjs = resp.json()['results']
+            session_jsons.append(pandas.DataFrame(rjs, index=numpy.arange(session_index, session_index + len(rjs))))
+            if len(rjs) < params['page_size']:
+                next_page = False
+            else:
+                next_page += 1
+            session_index += len(rjs)
+
+        self.results = pandas.concat(session_jsons)
         self.results.sort_values('Image.ID', inplace=True)
         return self.results
 
@@ -50,6 +67,7 @@ class GetSessions:
         )
         self.results = pandas.DataFrame(resp.json()['results'])
         return self.results
+
 
     def get_mouse(self, item, mtag=None):
         '''

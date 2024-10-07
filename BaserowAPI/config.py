@@ -18,7 +18,8 @@ config = {
       'Mouse.ID': 4616,
       'InclTag': 4519,
       'Project': 4637,
-      'Image.ID': 4517
+      'Image.ID': 4517,
+      'Archive': 5011,
   },
   "LogID": {
         'Name': 4995,
