@@ -20,16 +20,23 @@ class IPSP:
     __name__ = 'IPSP'
     '''Detect and fit optically evoked IPSPs in a voltage imaging session'''
 
-    def __init__(self, session: ImagingSession, config=None):
+    def __init__(self, session: ImagingSession, config=None, purge=False):
         '''initialize with an ImagingSession'''
         self.session = session
         self.wdir = self.session.path + 'IPSP/'
         self.n_cells = self.session.ca.cells
         if self.is_bg():
             self.n_cells -= 1
+        if purge:
+            self.purge()
         self.set_defaults(config)
         self.log = logger()
         self.log.set_handle(self.session.procpath, self.session.prefix)
+
+    def purge(self):
+        '''delete previously saved contents of the IPSP folder'''
+        for f in os.listdir(self.wdir):
+            os.remove(self.wdir+f)
 
     def set_defaults(self, user_config):
         if not os.path.exists(self.wdir):
