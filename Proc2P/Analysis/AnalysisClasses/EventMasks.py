@@ -29,9 +29,9 @@ def PhotoStimPulse(a, w, exclude_move=True):
             event_frames = event_frames[~a.pos.movement[event_frames]]
     return masks_from_list(a, w, event_frames)
 
-def LFPSpikes(a, w, ch=1, from_session=True, exclude_move=True):
+def LFPSpikes(a, w, ch=0, from_session=True, exclude_move=True):
     if not from_session:
-        df = read_excel(a.get_file_with_suffix(f'_Ch{ch}_spiketimes.xlsx'))
+        df = read_excel(a.get_file_with_suffix(f'_Ch{ch+1}_spiketimes.xlsx'))
         st = df['SpikeTimes(s)'].values
         event_frames = [a.timetoframe(x) for x in st]
     else:
