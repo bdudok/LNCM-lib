@@ -217,6 +217,7 @@ class CaTrace(object):
 
 
 class Worker(Process):
+    __name__ = 'CaTrace-Worker'
     def __init__(self, queue, res_queue, verbose=False):
         super(Worker, self).__init__()
         self.queue = queue
@@ -291,8 +292,7 @@ class Worker(Process):
                     for i in range(frames):
                         bsl[i] = numpy.polyval(poly, i)
                     if numpy.any(bsl < 0):
-                        lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline',
-                               logger=self.log)
+                        lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline',)
                         bsltype = 'original'
                 if bsltype in ['original', 'both']:  # both not implemented
                     for t in range(frames):
@@ -302,6 +302,7 @@ class Worker(Process):
                         else:
                             minv = numpy.nan_to_num(smw[ti0])
                         bsl[t] = minv
+                    bsl[0] = bsl[1]
                 rel = (data - bsl) / bsl
                 ntr = rel / numpy.nanstd(rel)
                 # additional iteration for more accurate noise levels

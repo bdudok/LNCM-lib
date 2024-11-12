@@ -379,7 +379,7 @@ class Gui(ImagingSession):
                     plot_y_val = param[self.activecell]
                 else:
                     plot_y_val = param[self.activecell, :, self.primary_ch]
-                wh_opto = self.opto
+                wh_opto = (self.opto > 0.1).astype('bool')
                 if numpy.nansum(wh_opto) > 2:
                     if not numpy.all(numpy.isnan(plot_y_val[wh_opto])) and numpy.any(plot_y_val[wh_opto] > 0):
                         axspike.fill_between(xvals, numpy.nanmin(plot_y_val), plot_y_val,
