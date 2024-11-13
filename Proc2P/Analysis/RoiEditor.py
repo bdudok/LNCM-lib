@@ -700,6 +700,19 @@ class Gui:
         self.currim = cv2.LUT(im, self.lut)
         self.zoom()
         im = numpy.array(self.currim)
+        #fill with black the left and bottom of the pic, if it's too small for the GUI.
+        # this is done after polys are drawn, and does not effect the image data, just the drawing of the 'Rois' window
+        # the zoom will work with the new image coordinates though (top left corner)
+        min_h = 200
+        min_w = 500
+        if im.shape[1] < min_w:
+            old_im = numpy.copy(im)
+            im = numpy.zeros((im.shape[0], min_w, im.shape[2]), im.dtype)
+            im[:, min_w-old_im.shape[1]:, :] = old_im
+        if im.shape[0] < min_h:
+            old_im = numpy.copy(im)
+            im = numpy.zeros((min_h, im.shape[1], im.shape[2]), im.dtype)
+            im[:old_im.shape[0],:, :] = old_im
         if len(self.active_keys) > 0:
             cv2.putText(im, str(len(self.psets[self.current_key])) + ' of', (0, 25),
                         fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=0.5, color=(255, 255, 255))
@@ -716,6 +729,7 @@ class Gui:
                 fsc = 0.5
             cv2.putText(im, key, (0, 25 * (i + 4)), fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=fsc, color=color)
         cv2.imshow('Rois', im)
+        cv2.resizeWindow('Rois', max(min_w, im.shape[1]), max(min_h, im.shape[0]))
 
     def calc_sets(self, key):
         ps, es = [], []
@@ -824,11 +838,12 @@ class RoiEditor(object):
                     new_array[j, 1:] = p + translate
                 # check if new array is outside image region:
                 assert not numpy.any(numpy.isnan(new_array))
-                coords = new_array[:, 1:]
-                if not all([coords.min() > 0,
-                            coords[:, 0].max() < image_shape[1],
-                            coords[:, 1].max() < image_shape[0]]):
-                    new_array = junk_roi * [i, 0, 0]
+                coords = new_array[:, 1:] #not sure if this is alias or copy.
+                # if code below has no effect, copy coords to new_array
+                if image_shape is not None:
+                    coords = numpy.maximum(1, coords)
+                    coords[:, 0] = numpy.minimum(coords[:, 0], image_shape[1] - 1)
+                    coords[:, 1] = numpy.minimum(coords[:, 1], image_shape[0] - 1)
             # append the new array to container
             new_length = roi_counter + len(new_array)
             if new_length > len(rois):
