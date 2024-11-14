@@ -528,11 +528,18 @@ class PSTH:
         '''# filter data according to criteria, and calculate average of all lines.
         if group_by is specified, first average by that parameter.
         if avg cells, cell averages instead of all individual trace. has no effect with group_by'''
-        data = self.get_data(group_criteria=group_criteria, group_by=group_by, avg_cells=avg_cells, baseline=baseline)
+        data = self.get_data(group_criteria=group_criteria, group_by=group_by,
+                             avg_cells=avg_cells, baseline=baseline)
         if data is None:
             return None, None, None
-        else:
-            data *= multiply
+        return self.calc_mean(data=data, spread_mode=spread_mode, mid_mode=mid_mode,
+                    multiply=multiply, print_n=print_n, scale=scale, use_n=use_n)
+
+    @staticmethod
+    def calc_mean(data, spread_mode='SEM', mid_mode='mean', multiply=1, scale=False, use_n=None,
+                  print_n=False, group_criteria=None):
+        '''separated out from return_mean so can be used as static method'''
+        data *= multiply
         if scale:
             data /= numpy.nanmax(numpy.nanmean(data, axis=0))
         # determine mid values:
@@ -540,7 +547,6 @@ class PSTH:
             mid = numpy.nanmedian(data, axis=0)
         elif mid_mode == 'mean':
             mid = numpy.nanmean(data, axis=0)
-
         # determine spread values
         if spread_mode == 'IQR':
             lower = numpy.nanpercentile(data, 25, axis=0)
@@ -563,17 +569,24 @@ class PSTH:
         return mid, lower, upper
 
 
-def pull_session_with_mask(session:ImagingSession, mask, param_key='rel'):
+
+def pull_session_with_mask(session:ImagingSession, mask, param_key='rel', ext_line=None):
     '''
     Get the mean response of all cells in a session
     :param session:
     :param event: output of EventMasks
     :param mask:
+    :param ext_line: if supplied, use this trace instead of getparam
     :return: response array, ncells x 2*w
     '''
     w = mask.shape[1] // 2
     data = numpy.empty((len(mask), session.ca.cells, 2 * w))
-    param = session.getparam(param_key)
+    if ext_line is None:
+        param = session.getparam(param_key)
+    else:
+        param = numpy.zeros(session.ca.rel.shape)
+        l_dat = min(len(ext_line), session.ca.frames)
+        param[:, :l_dat] = ext_line[:l_dat]
     # pull values
     for ei, indices in enumerate(mask):
         lines = numpy.empty((session.ca.cells, 2 * w))
