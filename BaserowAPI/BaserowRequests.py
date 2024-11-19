@@ -66,6 +66,8 @@ class GetSessions:
             params=params
         )
         self.results = pandas.DataFrame(resp.json()['results'])
+        if not len(self.results):
+            raise ValueError(f'{prefix} not found in DB')
         return self.results
 
 

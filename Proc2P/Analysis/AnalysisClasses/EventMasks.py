@@ -15,7 +15,7 @@ def PhotoStimTrain(a, w):
     event_frames = numpy.load(a.get_file_with_suffix('_photostim_trains.npy'))
     return masks_from_list(a, w, event_frames)
 
-def PhotoStimPulse(a, w, exclude_move=True, exclude_start_seconds=20):
+def PhotoStimPulse(a, w, exclude_move=True, exclude_start_seconds=20, mask_stim=None):
     if a.opto is None:
         event_frames = []
     else:
@@ -30,7 +30,10 @@ def PhotoStimPulse(a, w, exclude_move=True, exclude_start_seconds=20):
         if exclude_start_seconds is not None:
             tmin = exclude_start_seconds * a.fps
             event_frames = event_frames[event_frames > tmin]
-    return masks_from_list(a, w, event_frames)
+    event, mask = masks_from_list(a, w, event_frames)
+    if mask_stim is not None:
+        mask[:, w:w+int(mask_stim)+1] = numpy.nan
+    return event, mask
 
 def LFPSpikes(a, w, ch=0, from_session=True, exclude_move=True):
     if not from_session:
