@@ -43,11 +43,12 @@ class IPSP:
         if not os.path.exists(self.wdir):
             os.mkdir(self.wdir)
         self.get_stimtimes()
-        Config = namedtuple('Config', 'pre, post, param')
+        Config = namedtuple('Config', 'pre, post, param, nan')
         pre = int(self.session.fps * 100/1000)  # duration included before stim (frames)
         post = int(self.session.fps * 200/1000)  # duration included after stim (frames)
         param = 'rel'
-        self.config = Config(pre, post, param)
+        nan = 4
+        self.config = Config(pre, post, param, nan)
         if user_config is not None:
             for key, value in user_config.items():
                 self.config._replace(key=value)
@@ -62,6 +63,7 @@ class IPSP:
                 mlen = self.config.pre+self.config.post
                 Y = numpy.empty((self.n_stims, self.n_cells, mlen))
                 Y[:] = numpy.nan
+
                 #generate the pull mask
                 mask = numpy.empty((self.n_stims, mlen))
                 mask[:] = numpy.nan
@@ -78,6 +80,10 @@ class IPSP:
                     loc = numpy.where(numpy.logical_not(numpy.isnan(indices)))[0]
                     if len(loc):
                         Y[ei] = param[:, indices[loc].astype(numpy.int64)]
+
+                #mask the after-stim frames with nan
+                Y[:, :, self.config.pre:self.config.pre+self.config.nan] = numpy.nan
+
                 numpy.save(mname, Y)
                 self.raw_resps = Y
 
