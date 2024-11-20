@@ -32,6 +32,7 @@ class IPSP:
         self.set_defaults(config)
         self.log = logger()
         self.log.set_handle(self.session.procpath, self.session.prefix)
+        self.is_saved = os.path.exists(self.get_fn('model.npy'))
 
     def purge(self):
         '''delete previously saved contents of the IPSP folder'''
@@ -111,7 +112,7 @@ class IPSP:
             Y = self.get_matrix()
             self.len = Y.shape[-1]
             #identify nan samples (stim artefact)
-            self.wh_nan = numpy.where(numpy.average(numpy.isnan(Y), axis=(0, 1))>0.6)
+            self.wh_nan = numpy.where(numpy.average(numpy.isnan(Y), axis=(0, 1))>0.2)
             self.mean = numpy.nanmean(Y, axis=(0, 1))
             self.mean[self.wh_nan] = numpy.nan
         return self.mean
