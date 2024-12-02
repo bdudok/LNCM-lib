@@ -1,5 +1,7 @@
 import numpy
 from sklearn import cluster
+
+
 from Proc2P.utils import read_excel
 from sklearn.cluster import dbscan
 # from EyeTracking import clean_movement_map, clean_whisker_map, parse_triggers
@@ -79,18 +81,6 @@ def masks_from_list(a, w, event_list, exclude_movement=False):
         mov_mask[speed_mask == 0] = 0
         mask[mov_mask] = numpy.nan
     return events, mask
-
-def CaPeaks(a, w, sigma=3):
-    for c in range(a):
-        #peaks on standardized gaussian filtered trace
-        g = gaussian_filter(calcium.ca.rel[ca_cells[c]], 3)
-        y = StandardScaler().fit_transform(g.reshape(-1, 1))
-        peaks, _ = signal.find_peaks(y[:, 0], height=1, distance=int(dist * fps + 1))
-        heights = y[peaks, 0]
-
-        #create event masks:
-        filt_mask = [y[p] > sigma for p in peaks] #run
-
 
 def nonoverlap_from_list(a, w, event_list, decay=6, eps=16, exclude_move=False, min_n=None,
                          clustloc='first', trace=None):
