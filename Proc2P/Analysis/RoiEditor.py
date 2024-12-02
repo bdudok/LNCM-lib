@@ -42,11 +42,15 @@ class Worker(Process):
 
     def run(self):
         for din in iter(self.queue.get, None):
-            path, prefix, apps, config = din
-            log = logger()
-            log.set_handle(path, prefix)
-            lprint(self, 'Calling autodetect with:', din, logger=log)
-            RoiEditor(path, prefix, ).autodetect(approach=apps, config=config, log=log)
+            # the whole thing goes in a try so worker is not dead on error. remove this for debugging.
+            try:
+                path, prefix, apps, config = din
+                log = logger()
+                log.set_handle(path, prefix)
+                lprint(self, 'Calling autodetect with:', din, logger=log)
+                RoiEditor(path, prefix, ).autodetect(approach=apps, config=config, log=log)
+            except Exception as e:
+                lprint(self, 'Autodetect failed with error:', e,)
 
 
 class Lasso:

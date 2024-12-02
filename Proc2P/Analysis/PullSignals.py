@@ -86,22 +86,22 @@ def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False):
     message = f'Pulling {int(nframes*ncells*nchannels)} signals ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}...'
     print(message)
     # create chunks so that the same array is combed for each cell before moving on - data is memory mapped
-    t0 = datetime.datetime.now()
     chunk_len = 500
     indices = []
     for c in range(ncells):
         x = binmask[c].nonzero()
         assert len(x), f'Mask for c {c} is empty, export new ROI file.'
         indices.append(x)
-    rep_size = 0.20
-    next_report = rep_size
+    rep_size = 0.20 * len(channels)
     for chi, ch in enumerate(channels):
+        t0 = datetime.datetime.now()
+        next_report = rep_size
         for t in range(int(nframes/chunk_len) + 1):
             start = int(t * chunk_len)
             if start / nframes > next_report:
                 elapsed = datetime.datetime.now() - t0
-                speed = (elapsed / len(channels) / start).microseconds
-                print(f'Pulling {prefix}:{int(next_report*100):2d}% ({speed/1000:.1f} ms / frame)')
+                speed = (elapsed / start).microseconds
+                print(f'Pulling {prefix}:{int(next_report*100/len(channels)+50*chi):2d}% ({speed/1000:.1f} ms/frame)')
                 next_report += rep_size
             stop = int(min(nframes, start + chunk_len))
             inmem_data = numpy.array(im.imdat.get_channel(ch)[start:stop])
