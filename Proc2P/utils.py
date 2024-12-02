@@ -75,7 +75,7 @@ def outlier_indices(values, thresh=3.5):
     modified_z_score = 0.6745 * diff / med_abs_deviation
     return numpy.where(modified_z_score > thresh)[0]
 
-def startstop(speed, duration=50, gap=150, ret_loc='actual', span=None, speed_threshold=0.05):
+def startstop(speed, duration=50, gap=150, ret_loc='actual', span=None, speed_threshold=0.05, smoothing=None):
     '''
     :param speed
     :param duration: of run, in samples
@@ -85,7 +85,9 @@ def startstop(speed, duration=50, gap=150, ret_loc='actual', span=None, speed_th
     :return:
     '''
     # binary gapless trace whether animal is running
-    mov = gapless(numpy.nan_to_num(speed), threshold=speed_threshold)
+    if smoothing is None:
+        smoothing = 20
+    mov = gapless(numpy.nan_to_num(speed), threshold=speed_threshold, gap=smoothing)
     if gap is None:
         gap = 150
     if span is None:

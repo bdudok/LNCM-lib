@@ -147,7 +147,8 @@ class ImagingSession(object):
                 self.has_behavior = True
 
     def startstop(self, *args, **kwargs):
-        cf = {'gap': int(10*self.fps), 'duration': int(5*self.fps), 'speed_threshold': 2}
+        cf = {'gap': int(10*self.fps), 'duration': int(5*self.fps), 'speed_threshold': 2, 'smoothing': int(self.fps)}
+        #pycontrol treadmill needs longer smoothing parameter for gapless to bridge "stepping" of the mouse (1 s).
         for key, value in cf.items():
             if key not in kwargs:
                 kwargs[key] = value
