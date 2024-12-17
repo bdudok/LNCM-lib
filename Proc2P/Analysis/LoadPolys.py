@@ -79,8 +79,7 @@ class LoadImage(object):
     def show_field(self):
         preview_fn = self.opPath + self.prefix + '_preview.tif'
         pic = tifffile.imread(preview_fn)
-        #return as multi channel
-        if self.imdat.n_channels < 2:
+        if len(pic.shape) < 3:
             rgb_array = numpy.zeros((*pic.shape, 3), dtype='uint8')
             rgb_array[..., 1] = 255 * pic / pic.max()
         else:

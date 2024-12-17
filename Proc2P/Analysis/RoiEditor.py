@@ -1074,14 +1074,23 @@ class RoiEditor(object):
 
 if __name__ == '__main__':
     # test single
-    wdir = 'D:/Shares/Data/_Processed/2P/testing/'
-    prefix = 'SncgTot4_2023-11-09_LFP_002'
-    r = RoiEditor(wdir, prefix, )
-    approach = ('STICA-G', )
-    # r.autodetect(approach=approach)
-
-    self = r
-    chunk_n = 100
-    chunk_size = 50
+    # wdir = 'D:/Shares/Data/_Processed/2P/testing/'
+    # prefix = 'SncgTot4_2023-11-09_LFP_002'
+    # r = RoiEditor(wdir, prefix, )
+    # approach = ('STICA-G', )
+    # # r.autodetect(approach=approach)
+    #
+    # self = r
+    # chunk_n = 100
+    # chunk_size = 50
     # ('D:/Shares/Data/_Processed/2P/testing//', 'SncgTot4_2023-11-09_LFP_002', ['PC-G', 'STICA-G'],
     #  {'Start': '0', 'Stop': 'end', 'Diameter': '20', 'MinSize': '100', 'MaxSize': '800'})
+
+
+    wdir = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
+    prefix = 'JEDI-Sncg65_2024-12-10_lfp_opto_124'
+    r = RoiEditor(wdir, prefix, )
+
+    preview_rgb = r.get_pic()
+
+    # pic = cv2.cvtColor(preview_rgb, cv2.COLOR_RGB2BGR)
