@@ -1121,6 +1121,10 @@ class Rois:
         Label(self.frame, text='Roi ID').grid(row=row, column=0, sticky=NW)
         Entry(self.frame, textvariable=self.config['roi_name'], width=6).grid(row=row, column=0, sticky=NE)
 
+        self.config['snrw'] = IntVar()
+        Checkbutton(self.frame, text='SNR weighted', variable=self.config['snrw']).grid(row=self.row(), sticky='W')
+        self.config['snrw'].set(0)
+
         Button(self.frame, text='Add selection to queue', command=self.pull_callback).grid(row=self.row(), sticky=N)
 
         # self.config['conc_str'] = StringVar()
@@ -1146,12 +1150,13 @@ class Rois:
     def pull_callback(self):
         pflist = self.parent.filelist.get_active()[1]
         ch = self.config['ch'].get()
+        snrweight = self.config['snrw'].get()
         # if self.config['roi'].get() == 'Use latest':
         #     roi = 'Auto'
         # else:
         roi = self.config['roi_name'].get()
         for prefix in pflist:
-            self.parent.request_queue.put(('pull', (self.parent.filelist.wdir, prefix, roi, ch)))
+            self.parent.request_queue.put(('pull', (self.parent.filelist.wdir, prefix, roi, ch, False, snrweight)))
             print(f'Pulling {prefix} ROI {roi} queued')
 
     def autosel_callback(self):
