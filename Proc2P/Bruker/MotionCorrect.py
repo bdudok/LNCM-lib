@@ -75,7 +75,10 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
         # clean up output
         mean1 = output_ops['meanImg'] / output_ops['meanImg'].max() * 255
         previewname = s.procpath + prefix + f'_preview.tif'
-        preview = numpy.zeros((*output_ops['meanImg'].shape, 3), dtype='uint8')
+        imgshape = [*output_ops['meanImg'].shape]
+        if len(imgshape) < 3:
+            imgshape.append(3)
+        preview = numpy.zeros(imgshape, dtype='uint8')
         preview[..., 1] = mean1
         if dual_channel:
             mean2 = output_ops['meanImg_chan2'] / output_ops['meanImg_chan2'].max() * 255

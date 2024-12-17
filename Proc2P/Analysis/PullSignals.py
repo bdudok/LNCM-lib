@@ -120,8 +120,12 @@ def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=F
                 if weights is None:
                     #get the weights of each pixel within ROI for each cell based on snr in first chunk
                     weights = []
-                    fovmean = numpy.nan_to_num(numpy.nanmean(inmem_data, axis=0))
-                    fovsd = numpy.nan_to_num(numpy.nanstd(inmem_data, axis=0))
+                    # pick frames that are close to median (to exclude synchronous activations and PMT gating)
+                    frame_mean = numpy.nanmean(inmem_data, axis=(1,2))
+                    frame_IQR = numpy.nanpercentile(frame_mean, [25,75])
+                    snr_frames = numpy.where(numpy.logical_and(frame_mean>frame_IQR[0], frame_mean<frame_IQR[1]))
+                    fovmean = numpy.nan_to_num(numpy.nanmean(inmem_data[snr_frames], axis=0))
+                    fovsd = numpy.nan_to_num(numpy.nanstd(inmem_data[snr_frames], axis=0))
                     fovsnr = numpy.where(fovsd == 0, 0, fovmean / fovsd)
                     for c in range(ncells):
                         ind = indices[c]

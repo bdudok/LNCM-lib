@@ -237,6 +237,13 @@ class PreProc:
             pos = numpy.where(numpy.convolve(bintrace, [1, -1]) == 1)[0] #rising edges
             stimframes = None
             if len(pos):
+                # get bad frames: any which has high LED signal
+                badframes = []
+                fd = int(self.fs/self.framerate)+1
+                for fi, ft in enumerate(self.frametimes):
+                    t0 = int(ft * self.fs)
+                    if numpy.any(bintrace[t0:t0+fd]):
+                        badframes.append(fi)
                 if self.has_opto:
                     #case: using analog modulation with MarkPoints, find rising edges as stim starts
                     stimframes = numpy.searchsorted(self.frametimes * self.fs, pos) - 1  # convert to 0 indexing
@@ -275,10 +282,13 @@ class PreProc:
                                                    'ImgFrame': stimframes[incl_stims],
                                                    'Duration': durations[incl_stims]}, index=posindex[incl_stims])
                         stimframes = stimframes[incl_stims]
+                    #identify bad franes as any with TTL
+
                 if stimframes is not None and len(stimframes):
+                    badframes = numpy.array(badframes, dtype='int')
                     led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
-                    numpy.save(self.dpath + 'bad_frames.npy', stimframes)
-                    numpy.save(self.procpath + self.prefix + '_bad_frames.npy', stimframes)
+                    numpy.save(self.dpath + 'bad_frames.npy', badframes)
+                    numpy.save(self.procpath + self.prefix + '_bad_frames.npy', badframes)
                 self.found_output.append('StimPulses')
 
         # rsync times
@@ -470,17 +480,26 @@ class SessionInfo:
             return key in self.info
 
 if __name__ == '__main__':
-    dpath = 'D:\Shares\Data\_RawData\Bruker\JEDI/'
-    procpath = 'D:\Shares\Data\_Processed/testing/'
-    prefix = 'JEDI-PV21_2024-04-18_Fast_050'
+    dpath = 'D:\Shares\Data\_RawData\Bruker\JEDI-IPSP/'
+    # procpath = 'D:\Shares\Data\_Processed/testing/'
+    procpath = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
+    prefix = 'JEDI-Sncg65_2024-12-10_lfp_opto_127'
+    # prefix = 'JEDI-PV21_2024-04-18_Fast_050'
     btag = '000'
 
-    # if not os.path.exists(procpath):
-    #     os.mkdir(procpath)
+    if not os.path.exists(procpath):
+        os.mkdir(procpath)
     #
-    # s = PreProc(dpath, procpath, prefix, btag, debug=False, overwrite=True)
-    # self = s
+    s = PreProc(dpath, procpath, prefix, btag, debug=True)
+    self = s
 
-    tm = TreadmillRead.Treadmill(os.path.join(dpath, prefix + f'-{btag}/'), prefix)  # raw data, prefix)
+    # tm = TreadmillRead.Treadmill(os.path.join(dpath, prefix + f'-{btag}/'), prefix)  # raw data, prefix)
+
+
+    self.si = SessionInfo(self.procpath, prefix)
+    self.is_processed = self.si.load()
+    self.skip_analysis = False
+    self.found_output = []
+    # self.parse_frametimes()
 
 
