@@ -282,8 +282,6 @@ class PreProc:
                                                    'ImgFrame': stimframes[incl_stims],
                                                    'Duration': durations[incl_stims]}, index=posindex[incl_stims])
                         stimframes = stimframes[incl_stims]
-                    #identify bad franes as any with TTL
-
                 if stimframes is not None and len(stimframes):
                     badframes = numpy.array(badframes, dtype='int')
                     led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')

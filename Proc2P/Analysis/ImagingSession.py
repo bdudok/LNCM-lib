@@ -201,6 +201,13 @@ class ImagingSession(object):
                 param = numpy.empty(self.ca.rel.shape)
                 param[:, 0] = numpy.nan
                 param[:, 1:] = numpy.diff(self.ewma_smooth(3, norm=False), axis=1)
+            elif 'optomask' in param:
+                #pass with a number at the end of the string to mask n frames after stim
+                maskn=int(param[-1])+1
+                stims = numpy.where(self.opto)[0]
+                param=numpy.copy(self.ca.rel)
+                for t in stims:
+                    param[:, t:t+maskn] = numpy.nan
         elif type(param) == int:
             param = self.ewma_smooth(param)
         try:

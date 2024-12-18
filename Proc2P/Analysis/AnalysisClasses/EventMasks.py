@@ -17,7 +17,7 @@ def PhotoStimTrain(a, w):
     event_frames = numpy.load(a.get_file_with_suffix('_photostim_trains.npy'))
     return masks_from_list(a, w, event_frames)
 
-def PhotoStimPulse(a, w, exclude_move=True, exclude_start_seconds=0, mask_stim=None):
+def PhotoStimPulse(a, w, exclude_move=True, exclude_start_seconds=0, mask_stim=None, filter_by_sz=None):
     if a.opto is None:
         event_frames = []
     else:
@@ -32,6 +32,17 @@ def PhotoStimPulse(a, w, exclude_move=True, exclude_start_seconds=0, mask_stim=N
         if exclude_start_seconds is not None:
             tmin = exclude_start_seconds * a.fps
             event_frames = event_frames[event_frames > tmin]
+    if filter_by_sz is not None:
+        a.map_seizuretimes()
+        #create a binary sz signal, extending sz times on both ends by a margin
+        is_sz = numpy.zeros(a.ca.frames, dtype='bool')
+        sz_margin = int(0.5*a.fps)
+        for sz_start, sz_stop in zip(*a.sztimes[0]):
+            i0 = max(0, sz_start-sz_margin)
+            i1 = min(sz_stop+sz_margin, a.ca.frames)
+            is_sz[i0:i1] = True
+        #use only events that are in/out sz: filter True will return "in", false "out"
+        event_frames = [t for t in event_frames if is_sz[t] == bool(filter_by_sz)]
     event, mask = masks_from_list(a, w, event_frames)
     if mask_stim is not None:
         mask[:, w:w+int(mask_stim)+1] = numpy.nan
