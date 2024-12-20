@@ -33,22 +33,27 @@ def PhotoStimPulse(a, w, exclude_move=True, exclude_start_seconds=0, mask_stim=N
             tmin = exclude_start_seconds * a.fps
             event_frames = event_frames[event_frames > tmin]
     if filter_by_sz is not None:
-        a.map_seizuretimes()
-        #create a binary sz signal, extending sz times on both ends by a margin
-        is_sz = numpy.zeros(a.ca.frames, dtype='bool')
-        sz_margin = int(0.5*a.fps)
-        for sz_start, sz_stop in zip(*a.sztimes[0]):
-            i0 = max(0, sz_start-sz_margin)
-            i1 = min(sz_stop+sz_margin, a.ca.frames)
-            is_sz[i0:i1] = True
-        #use only events that are in/out sz: filter True will return "in", false "out"
-        event_frames = [t for t in event_frames if is_sz[t] == bool(filter_by_sz)]
+        event_frames = Filter_events_by_sz(a, event_frames, filter_by_sz)
     event, mask = masks_from_list(a, w, event_frames)
     if mask_stim is not None:
         mask[:, w:w+int(mask_stim)+1] = numpy.nan
     return event, mask
 
-def LFPSpikes(a, w, ch=0, from_session=True, exclude_move=True):
+
+def Filter_events_by_sz(a, event_frames, filter_by_sz, margin=0.5):
+    if filter_by_sz is not None:
+        a.map_seizuretimes()
+        #create a binary sz signal, extending sz times on both ends by a margin
+        is_sz = numpy.zeros(a.ca.frames, dtype='bool')
+        sz_margin = int(margin*a.fps)
+        for sz_start, sz_stop in zip(*a.sztimes[0]):
+            i0 = max(0, sz_start-sz_margin)
+            i1 = min(sz_stop+sz_margin, a.ca.frames)
+            is_sz[i0:i1] = True
+        #use only events that are in/out sz: filter True will return "in", false "out"
+        return [t for t in event_frames if is_sz[t] == bool(filter_by_sz)]
+
+def LFPSpikes(a, w, ch=0, from_session=True, exclude_move=True, filter_by_sz=None):
     if not from_session:
         df = read_excel(a.get_file_with_suffix(f'_Ch{ch+1}_spiketimes.xlsx'))
         st = df['SpikeTimes(s)'].values
@@ -56,6 +61,8 @@ def LFPSpikes(a, w, ch=0, from_session=True, exclude_move=True):
     else:
         a.map_spiketimes()
         event_frames = a.spiketimes[ch]
+    if filter_by_sz is not None:
+        event_frames = Filter_events_by_sz(a, event_frames, filter_by_sz)
     return nonoverlap_from_list(a, w, event_frames, decay=int(a.fps*0.2), eps=int(a.fps),
                                 exclude_move=exclude_move)
 

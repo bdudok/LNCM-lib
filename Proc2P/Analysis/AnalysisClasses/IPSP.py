@@ -1,3 +1,4 @@
+import json
 import os.path
 
 import matplotlib.pyplot as plt
@@ -51,7 +52,12 @@ class IPSP:
         self.config = Config(pre, post, param, nan)
         if user_config is not None:
             for key, value in user_config.items():
-                self.config._replace(key=value)
+                self.config=self.config._replace(**{key: value}) #this is a silly way to do it, should build dict first
+        #TODO make setting, saving and loading dict based, and create namedtuple when final.
+        # save on creation and load on any later init
+        # cname = self.get_fn('config.json')
+        # with open(cname, 'w') as f:
+        #     f.write(json.dumps(self.config))
 
     def get_matrix(self):
         # pull the individual responses for each cell and stim
