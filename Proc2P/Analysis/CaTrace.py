@@ -199,7 +199,7 @@ class CaTrace(object):
                 key, value = [x.strip()[1:-1] for x in pair.strip().split(':')]
                 self.version_info[key] = value
             if 'bg_corr' in self.version_info:
-                self.last_bg = bool(self.version_info['bg_corr'])
+                self.last_bg = bool(self.version_info['bg_corr'] == 'True')
         else:
             self.version_info = {'v': '<4', 'bsltype': 'original'}
         return True

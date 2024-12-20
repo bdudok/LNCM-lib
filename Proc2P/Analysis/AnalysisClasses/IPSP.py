@@ -25,7 +25,7 @@ class IPSP:
         self.session = session
         self.wdir = self.session.path + 'IPSP/'
         self.n_cells = self.session.ca.cells
-        if self.is_bg():
+        if self.session.ca.last_bg:
             self.n_cells -= 1
         if purge:
             self.purge()
@@ -108,10 +108,6 @@ class IPSP:
         self.n_stims = len(self.stimframes)
         return self.stimframes
 
-    def is_bg(self):
-        '''check this when assuming traces are background subtracted'''
-        return self.session.ca.version_info['bg_corr']
-
     def get_waveform(self):
         '''the average IPSP from all stims and all cells'''
         if not hasattr(self, 'mean'):
@@ -181,11 +177,11 @@ class IPSP:
 
     def ampl_func(self, x, A, C):
         '''
-        generate the alpha using the shape of the IPSP model (see gen_alpha)
+        fit the alpha using the shape of the IPSP model (see gen_alpha)
         '''
         B = self.model[1]
         D = self.model[3]
-        return A * (x - D) / B * numpy.exp(1 - (x - D) / B) + C
+        return self.alpha_func(x, A, B, C, D)
 
     def fit_event(self, c, event_index):
         '''

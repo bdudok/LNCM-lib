@@ -253,21 +253,19 @@ class PSTH:
             elif self.param_key == 'LFP':
                 line = a.ephys.edat[1]
                 fill_line = True
-            elif self.param_key == 'inst_ev_freq':
-                np_fn = a.prefix+'_inst_sz_freq_1116.npy'# adjust between sz and epi events as needed
-                if os.path.exists(np_fn):
-                    line = numpy.load(a.prefix+'_inst_sz_freq_1116.npy')
-                else:
-                    line = numpy.empty(a.ca.frames)
-                    line[:] = numpy.nan
-                fill_line = True
-            elif 'corr' in self.param_key:
-                line = load_corr(a, path, prefix, **self.pull_function_kwargs)
-                fill_line = True
+            # elif self.param_key == 'inst_ev_freq':
+            #     np_fn = a.prefix+'_inst_sz_freq_1116.npy'# adjust between sz and epi events as needed
+            #     if os.path.exists(np_fn):
+            #         line = numpy.load(a.prefix+'_inst_sz_freq_1116.npy')
+            #     else:
+            #         line = numpy.empty(a.ca.frames)
+            #         line[:] = numpy.nan
+            #     fill_line = True
+            # elif 'corr' in self.param_key:
+            #     line = load_corr(a, path, prefix, **self.pull_function_kwargs)
+            #     fill_line = True
             elif 'gpw' in self.param_key:
-                try:
-                    assert hasattr(self, 'gamma_band')
-                except:
+                if not hasattr(self, 'gamma_band'):
                     raise ValueError('Specify gamma band s, f, or b with set_pull_params')
                 filt_func = {'s': a.ripples.calc_sgamma,
                              'f': a.ripples.calc_fgamma,
