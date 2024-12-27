@@ -22,7 +22,10 @@ class IPSP:
     '''Detect and fit optically evoked IPSPs in a voltage imaging session'''
 
     def __init__(self, session: ImagingSession, config=None, purge=False):
-        '''initialize with an ImagingSession'''
+        '''initialize with an ImagingSession
+        :param config: a dict with optional keys 'pre, post, param, nan'
+        :param purge: if True, will delete cached results
+        '''
         self.session = session
         self.wdir = self.session.path + 'IPSP/'
         self.n_cells = self.session.ca.cells
@@ -41,23 +44,37 @@ class IPSP:
             os.remove(self.wdir+f)
 
     def set_defaults(self, user_config):
+        default_config = {
+            'pre': int(self.session.fps * 100/1000),  # duration included before stim (frames)
+            'post': int(self.session.fps * 200/1000),  # duration included after stim (frames)
+            'param': 'rel', #key of param for ImagingSession to use for traces ('rel')
+            'nan': 4, #frames
+        }
         if not os.path.exists(self.wdir):
             os.mkdir(self.wdir)
         self.get_stimtimes()
+        configname = self.get_fn('config.json')
+        if os.path.exists(configname):
+            with open(configname, 'r') as f:
+                config = json.loads(f.read())
+            self.set_config(config)
+        else:
+            if user_config is None:
+                config = {}
+            else:
+                config = user_config
+            assert type(config) is dict
+            for key, value in default_config.items():
+                if key not in config:
+                    config[key] = value
+            self.set_config(config)
+            with open(configname, 'w') as f:
+                f.write(json.dumps(config))
+
+    def set_config(self, config):
         Config = namedtuple('Config', 'pre, post, param, nan')
-        pre = int(self.session.fps * 100/1000)  # duration included before stim (frames)
-        post = int(self.session.fps * 200/1000)  # duration included after stim (frames)
-        param = 'rel'
-        nan = 4
-        self.config = Config(pre, post, param, nan)
-        if user_config is not None:
-            for key, value in user_config.items():
-                self.config=self.config._replace(**{key: value}) #this is a silly way to do it, should build dict first
-        #TODO make setting, saving and loading dict based, and create namedtuple when final.
-        # save on creation and load on any later init
-        # cname = self.get_fn('config.json')
-        # with open(cname, 'w') as f:
-        #     f.write(json.dumps(self.config))
+        self.config = Config(config['pre'], config['post'], config['param'], config['nan'])
+
 
     def get_matrix(self):
         # pull the individual responses for each cell and stim
