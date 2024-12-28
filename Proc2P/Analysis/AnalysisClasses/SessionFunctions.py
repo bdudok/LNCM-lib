@@ -3,6 +3,7 @@ import matplotlib.patches as patches
 import matplotlib.path as mplpath
 from Proc2P.Analysis.AnalysisClasses import PhotoStim, EventMasks, PSTH
 from Proc2P.Analysis.ImagingSession import ImagingSession
+from Proc2P.Analysis.RoiEditor import RoiEditor
 import numpy
 
 '''
@@ -77,11 +78,14 @@ def pull_image_with_ROI(session:ImagingSession, image, c, show=False):
     if show:
         plt.figure()
         plt.imshow(image, aspect='auto')
-        plt.gca().add_patch(patches.PathPatch(mplpath.Path(session.rois.polys[0]), ec='white', lw=1, fill=False))
+        plt.gca().add_patch(patches.PathPatch(mplpath.Path(session.rois.polys[c]), ec='white', lw=1, fill=False))
     #check if poly is at least 1 px wide
-    minsize = (session.rois.polys[0].max(axis=0) - session.rois.polys[0].min(axis=0)).min()
+    minsize = (session.rois.polys[c].max(axis=0) - session.rois.polys[c].min(axis=0)).min()
     if numpy.isnan(minsize) or minsize < 2:
         return None, None
+    #trim to image size
+    session.rois.load_image()
+    poly = RoiEditor.trim_coords(numpy.array(poly), session.rois.image.info['sz'])
     mask = get_mask(poly, image)
     return numpy.nanmean(image[mask]), mask
 

@@ -1672,7 +1672,7 @@ if __name__ == '__main__':
                 if sz_mode:
                     a.ol_index = []
                 for c in range(a.cells):
-                    if tr_nworker < ncpu:
+                    if tr_nworker < ncpu and c >= tr_nworker:
                         tr_Worker(tr_job_queue, result_queue).start()
                         tr_nworker += 1
                     tr_job_queue.put(a.pack_data(c))

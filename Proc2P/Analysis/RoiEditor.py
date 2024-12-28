@@ -757,7 +757,8 @@ class Gui:
             self.sizes[key] = []
             self.brightness[key] = numpy.zeros((len(self.data[key]), 3))
             self.paths[key] = []
-            for ip, poly in enumerate(self.data[key]):
+            for ip, coords in enumerate(self.data[key]):
+                poly = RoiEditor.trim_coords(numpy.array(coords), self.rois.img.image.info['sz'])
                 p = Polygon(poly)
                 mp = mplpath.Path(poly)
                 self.paths[key].append(mp)
@@ -783,6 +784,7 @@ class Gui:
         self.lims = [int(min(sizes)), int(max(sizes) + 1)]
         # self.blims = [int(min(bright)), int(max(bright) + 1)]
         # self.klims = [int(min(kurtos)), int(max(kurtos) + 1)]
+
 
     def load_rois(self):
 
@@ -842,12 +844,9 @@ class RoiEditor(object):
                     new_array[j, 1:] = p + translate
                 # check if new array is outside image region:
                 assert not numpy.any(numpy.isnan(new_array))
-                coords = new_array[:, 1:] #not sure if this is alias or copy.
-                # if code below has no effect, copy coords to new_array
+                coords = numpy.copy(new_array[:, 1:])
                 if image_shape is not None:
-                    coords = numpy.maximum(1, coords)
-                    coords[:, 0] = numpy.minimum(coords[:, 0], image_shape[1] - 1)
-                    coords[:, 1] = numpy.minimum(coords[:, 1], image_shape[0] - 1)
+                    coords = RoiEditor.trim_coords(coords, image_shape)
             # append the new array to container
             new_length = roi_counter + len(new_array)
             if new_length > len(rois):
@@ -876,6 +875,13 @@ class RoiEditor(object):
 
     def get_pic(self):
         return self.img.image.show_field()
+
+    @staticmethod
+    def trim_coords(old_coords, image_shape):
+        coords = numpy.maximum(1, old_coords)
+        coords[:, 0] = numpy.minimum(coords[:, 0], image_shape[1] - 1)
+        coords[:, 1] = numpy.minimum(coords[:, 1], image_shape[0] - 1)
+        return coords
 
     def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config={}, exclude_opto=True, log=None):
         approach = list(approach)
