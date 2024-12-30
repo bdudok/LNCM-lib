@@ -1,6 +1,6 @@
 import os.path
 from Proc2P.Analysis.ImagingSession import ImagingSession
-from Proc2P.utils import lprint
+from Proc2P.utils import lprint, outlier_indices
 from datetime import datetime
 import pandas
 import numpy
@@ -388,7 +388,7 @@ class PSTH:
             self.weights = weights[:data_counter]
 
     def get_data(self, group_criteria=None, group_by=None, avg_cells=False, return_indices=False, keep_all=False,
-                 weighted=False, baseline=None):
+                 weighted=False, baseline=None, mask_outliers=False):
         '''group criteria provided as a list of key-value pairs applied sequentially
         group_by: average items that have the same value in the specified parameter
         return_indices: also return the original cell indices for each line
@@ -431,7 +431,7 @@ class PSTH:
                         # compute mean of lines belonging to the same unique cell. maintain cells that have no events as nan
                         unique_cell_ids = self.data[element_included, -1]
                         data, cell_indices = self.collapse_cells(data, unique_cell_ids, cell_indices, indices,
-                                                                 keep_all=keep_all)
+                                                                 keep_all=keep_all, mask_outliers=mask_outliers)
                 else:
                     data = None
                     cell_indices = None
@@ -464,7 +464,7 @@ class PSTH:
         else:
             return numpy.copy(data)
 
-    def collapse_cells(self, data, unique_cell_ids, cell_indices, indices, keep_all):
+    def collapse_cells(self, data, unique_cell_ids, cell_indices, indices, keep_all, mask_outliers=False):
         '''input pre-selected lines, and array of unique ids and original indices
         returns avg trace by cell, and the orig index for each
         if keep_all: cells that are included but have no events are included as nans
@@ -481,7 +481,13 @@ class PSTH:
         for gi, grp in enumerate(groups):
             wh = numpy.where(unique_cell_ids == grp)[0]
             if len(wh) > 0:
-                mean_data[gi] = numpy.nanmean(data[wh, :2 * self.window_w], axis=0)
+                Y = data[wh, :2 * self.window_w]
+                #set outliers to nan
+                if mask_outliers:
+                    for t in range(Y.shape[1]):
+                        ol_index = outlier_indices(Y[:, t])
+                        Y[ol_index, t] = numpy.nan
+                mean_data[gi] = numpy.nanmean(Y, axis=0)
                 mean_indices[gi] = cell_indices[wh[0]]
         return mean_data, mean_indices
 
@@ -522,12 +528,12 @@ class PSTH:
         return mid, mid - err, mid + err
 
     def return_mean(self, group_criteria=None, spread_mode='SEM', mid_mode='mean', group_by=None, avg_cells=True,
-                    multiply=1, print_n=False, scale=False, use_n=None, baseline=None):
+                    multiply=1, print_n=False, scale=False, use_n=None, baseline=None, mask_outliers=False):
         '''# filter data according to criteria, and calculate average of all lines.
         if group_by is specified, first average by that parameter.
         if avg cells, cell averages instead of all individual trace. has no effect with group_by'''
         data = self.get_data(group_criteria=group_criteria, group_by=group_by,
-                             avg_cells=avg_cells, baseline=baseline)
+                             avg_cells=avg_cells, baseline=baseline, mask_outliers=mask_outliers)
         if data is None:
             return None, None, None
         return self.calc_mean(data=data, spread_mode=spread_mode, mid_mode=mid_mode,

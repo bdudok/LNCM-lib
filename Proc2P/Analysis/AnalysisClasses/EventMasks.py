@@ -36,7 +36,9 @@ def PhotoStimPulse(a, w, exclude_move=True, exclude_start_seconds=0, mask_stim=N
         event_frames = Filter_events_by_sz(a, event_frames, filter_by_sz)
     event, mask = masks_from_list(a, w, event_frames)
     if mask_stim is not None:
-        mask[:, w:w+int(mask_stim)+1] = numpy.nan
+        if not type(mask_stim) == tuple:
+            mask_stim = (0, mask_stim)
+        mask[:, w+int(mask_stim[0]):w+int(mask_stim[1])+1] = numpy.nan
     return event, mask
 
 

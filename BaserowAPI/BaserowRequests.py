@@ -71,11 +71,12 @@ class GetSessions:
         return self.results
 
 
-    def get_mouse(self, item, mtag=None):
+    def get_mouse(self, item, mtag=None, ret_sex=False):
         '''
         get a mouse entry from the DB
         :param item: pass a session to get the animal it's linked to (or pass None and set mtag)
         :param mtag: if set, look up mouse based on name
+        :param ret_sex: if True, only returns sex ('F' or 'M')
         :return: DataFrame of the search result
         '''
         if mtag is not None:
@@ -85,6 +86,8 @@ class GetSessions:
                                 params=params
                                 )
             self.results = pandas.DataFrame(resp.json()['results'])
+            if ret_sex:
+                return self.results.iloc[0]['Sex*']
             return self.results
         else:
             mid = item['Mouse.ID'][0]['id']
