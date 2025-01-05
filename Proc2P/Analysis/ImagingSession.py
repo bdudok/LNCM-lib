@@ -16,6 +16,8 @@ from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel
 from Proc2P.Analysis.Ripples import Ripples
 import time
 from scipy import stats
+from Proc2P.Bruker.Video import CropVideo
+from Video.PullMotion import pull_motion_energy
 
 
 
@@ -103,6 +105,7 @@ class ImagingSession(object):
         # map video
         self.eye = None  # implement later
         self.has_eye = False
+        #to map motion energy trace, call self.map_face()
 
         if tag == 'skip':
             self.ca.frames = self.si['n_frames']
@@ -145,6 +148,24 @@ class ImagingSession(object):
                 with open(bdat, 'r') as f:
                     self.bdat = json.load(f)
                 self.has_behavior = True
+
+    def map_face(self):
+        self.face_path = self.path + '_face/'
+        trace_file = self.face_path = '_motion_energy.npy'
+        if os.path.exists(trace_file):
+            self.mm_trace = numpy.load(trace_file)
+        else:
+            #open the video and make sure face is cropped.
+            cam_file = self.si.info['cam_file']
+            movie = CropVideo(cam_file, self.face_path)
+            if movie.load_motion_crop() == False:
+                movie.crop()
+            #then call motion energy trace proceesing
+            lprint(self, 'Pulling motion energy from cropped face field',)
+            mm_trace = pull_motion_energy(cam_file, trace_file)
+            self.mm_trace = mm_trace
+        self.camtimes = self.ca.sync.load('cam')
+        return self.camtimes, self.mm_trace
 
     def startstop(self, *args, **kwargs):
         cf = {'gap': int(10*self.fps), 'duration': int(5*self.fps), 'speed_threshold': 2, 'smoothing': int(self.fps)}

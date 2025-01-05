@@ -7,7 +7,8 @@ import json
 # from multiprocessing import Process, Queue
 # from datetime import datetime
 import cv2
-# from scipy.signal import resample
+from scipy.signal import resample
+
 
 class CropVideo:
     def __init__(self, cam_file, savepath):
@@ -35,22 +36,24 @@ class CropVideo:
             # read first 100 frames
             self.i = 0
             while self.frame is not None and self.i < min(100, self.n_frames):
-                    self.next_frame()
+                self.next_frame()
         self.eye_rect = None
 
     def next_frame(self):
         # #to avoid overallocation, this is now limited.
         # Works for previews, but will need to implement rolling the buffer
         assert self.i < self.buffer_size
-        self.data[self.i-self.buffer_offset] = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
+        self.data[self.i - self.buffer_offset] = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
         self.i += 1
         ret, self.frame = self.im.read()
+
     def buffer_frames(self):
         while self.frame is not None and self.i < self.buffer_size:
             self.next_frame()
+
     def crop(self):
         f0 = min(100, self.n_frames)
-        fr = self.data[f0-10:f0, :, :].mean(axis=0)
+        fr = self.data[f0 - 10:f0, :, :].mean(axis=0)
         self.preview = fr
         fig_w = 9
         fig_h = fig_w * fr.shape[1] / fr.shape[0]
@@ -87,9 +90,7 @@ class CropVideo:
                 json.dump(self.rect, f)
                 self.b_save.label.set_text('Eye Saved')
                 print(self.rect, 'saved.')
-            tifffile.imsave(self.savepath+'_video_preview.tif', self.preview)
-
-
+            tifffile.imsave(self.savepath + '_video_preview.tif', self.preview)
 
     def save_motion_crop(self, *args):
         if self.rect is not None:
@@ -114,36 +115,6 @@ class CropVideo:
     def load_motion_crop(self):
         fn = self.savepath + '_motion-crop.json'
         return self.load(fn)
-
-    def compute_motion_map(self):
-        movie = self.eye
-        crop = self.load_motion_crop()
-        if crop is False:
-            print('Motion crop not saved, not computing...')
-            return -1
-        crop = numpy.array(crop).astype('int')
-        crop[[1, 3]] += 1
-        IM = movie[:, 0, crop[0]:crop[1], crop[2]:crop[3]]
-        # downsample IM
-        IM = IM[2 - len(IM) % 2:]
-        IM = IM.reshape(len(IM) // 2, 2, *IM.shape[1:]).mean(axis=1)
-        alpha = 0.3
-        BG = numpy.empty(IM.shape)
-        BG[0] = IM[:2].mean(axis=0)
-        for fr in range(len(IM) - 1):
-            i = fr + 1
-            BG[i] = alpha * IM[i] + (1 - alpha) * BG[i - 1]
-        D = numpy.abs(IM - BG)
-        motion_map = numpy.empty(D.shape)
-        motion_map[0] = D[:2].mean(axis=0)
-        beta = 0.9
-        for fr in range(len(D) - 1):
-            i = fr + 1
-            motion_map[i] = beta * D[i] + (1 - beta) * motion_map[i - 1]
-        # normalize 0-1 and save as 8 bits
-        motion_map = (motion_map * 255 / motion_map.max()).astype('uint8')
-        numpy.save(self.prefix + '_motion_map', motion_map)
-        print(self.prefix, 'Motion map saved')
 
     def compute_eye_trace(self):
         crop = self.load_eye_crop()
@@ -174,3 +145,5 @@ class CropVideo:
         drop_loc = numpy.argmax(drop, axis=1)
         numpy.save(self.savepath + 'eye_trace.npy', drop_loc)
         print(self.savepath, 'eye trace saved')
+
+
