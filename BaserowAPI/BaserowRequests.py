@@ -71,7 +71,7 @@ class GetSessions:
         return self.results
 
 
-    def get_mouse(self, item, mtag=None, ret_sex=False):
+    def get_mouse(self, item=None, mtag=None, ret_sex=False):
         '''
         get a mouse entry from the DB
         :param item: pass a session to get the animal it's linked to (or pass None and set mtag)

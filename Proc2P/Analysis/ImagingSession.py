@@ -151,7 +151,7 @@ class ImagingSession(object):
 
     def map_face(self):
         self.face_path = self.path + '_face/'
-        trace_file = self.face_path = '_motion_energy.npy'
+        trace_file = self.face_path + '_motion_energy.npy'
         if os.path.exists(trace_file):
             self.mm_trace = numpy.load(trace_file)
         else:

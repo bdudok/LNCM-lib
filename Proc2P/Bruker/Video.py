@@ -13,6 +13,7 @@ from scipy.signal import resample
 class CropVideo:
     def __init__(self, cam_file, savepath):
         self.fn = cam_file
+        self.im = None
         print(cam_file)
         self.savepath = savepath
         if not os.path.exists(savepath):
@@ -52,6 +53,8 @@ class CropVideo:
             self.next_frame()
 
     def crop(self):
+        if self.im is None:
+            self.open_video()
         f0 = min(100, self.n_frames)
         fr = self.data[f0 - 10:f0, :, :].mean(axis=0)
         self.preview = fr
