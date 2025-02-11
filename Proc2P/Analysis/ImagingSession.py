@@ -379,7 +379,7 @@ class ImagingSession(object):
                             f += 1
                 setattr(self.ephys, key, frame_power)
                 numpy.save(cfn, frame_power)
-        lprint(self, f'power available in bands: ' + str(bands))
+        # lprint(self, f'power available in bands: ' + str(bands))
 
     def rippletrigger(self, param=None, ch=0):
         # plot averaged time course ripp triggered. using channel
