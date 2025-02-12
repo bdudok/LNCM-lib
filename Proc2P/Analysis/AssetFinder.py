@@ -42,7 +42,7 @@ def get_processed_tags(procpath, prefix):
     for d in dirlist:
         match = re.match(pattern, d)
         if match is not None:
-            hits.append((match.group(1), match.group(2)))
+            hits.append((match.group(1), int(match.group(2))))
     return hits
 
 

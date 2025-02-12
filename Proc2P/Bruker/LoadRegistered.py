@@ -29,10 +29,13 @@ class LoadRegistered():
         self.n_channels = len(input_files)
         self.shape = (self.n_frames, self.Ly, self.Lx)
         # instead of loading the dimensttions, this could be passed from session info
-        self.data = numpy.memmap(input_files[0], mode='r', dtype='int16', shape=self.shape)
-        self.bitdepth = pow(2, 12)
-        if len(input_files) > 1:
-            self.data2 = numpy.memmap(input_files[1], mode='r', dtype='int16', shape=self.shape)
+        if len(input_files):
+            self.data = numpy.memmap(input_files[0], mode='r', dtype='int16', shape=self.shape)
+            self.bitdepth = pow(2, 12)
+            if len(input_files) > 1:
+                self.data2 = numpy.memmap(input_files[1], mode='r', dtype='int16', shape=self.shape)
+        else:
+            self.data = None
 
 
     def load(self):
