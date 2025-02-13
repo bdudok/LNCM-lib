@@ -20,10 +20,11 @@ class SzReviewData:
     Used by Sz Review GUI to access data
     '''
 
-    def __init__(self, path, prefix, ch, setup='Pinnacle'):
+    def __init__(self, path, prefix, ch, tag=None, setup='Pinnacle'):
         self.path = path
         self.prefix = prefix
         self.ch = ch
+        self.tag = tag
         self.setup = setup
         self.load_data()
         self.init_output()
@@ -44,14 +45,18 @@ class SzReviewData:
 
     def get_fn(self, suffix):
         if self.setup == 'Pinnacle':
+            if self.tag is None:
+                tagstr = ''
+            else:
+                tagstr = f'_{self.tag}'
             if suffix == 'sztime':
-                fn = f'.edf_Ch{self.ch}_seizure_times.xlsx'
+                fn = f'.edf{tagstr}_Ch{self.ch}_seizure_times.xlsx'
             elif suffix == 'save':
-                fn = f'.edf_Ch{self.ch}_seizure_times_curated.xlsx'
+                fn = f'.edf{tagstr}_Ch{self.ch}_seizure_times_curated.xlsx'
             elif suffix == 'spiketime':
-                fn = f'.edf_Ch{self.ch}_spiketimes.xlsx'
+                fn = f'.edf{tagstr}_Ch{self.ch}_spiketimes.xlsx'
             elif suffix == 'settings':
-                fn = f'_Ch{self.ch}_SpikeSzDet.json'
+                fn = f'_Ch{self.ch}_SpikeSzDet{tagstr}.json'
             else:
                 return -1
             return os.path.join(self.path, self.prefix + fn)

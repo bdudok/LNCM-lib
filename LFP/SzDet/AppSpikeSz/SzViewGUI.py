@@ -1,4 +1,5 @@
 import sys, os
+import re
 from PyQt5 import QtGui, QtWidgets, QtCore
 import os.path
 import datetime
@@ -70,10 +71,24 @@ class GUI_main(QtWidgets.QMainWindow):
     def get_prefix(self, ps):
         if self.setup == 'Pinnacle':
             s1 = '.edf_Ch'
+            if s1 in ps:
+                #if saved with no tag
+                f1 = ps.find(s1)
+                return ps[:f1], ps[f1 + len(s1):][0], None
+            else:
+                #saved with tag, use regex to find tag and channel
+                s1 = '.edf_'
+                f1 = ps.find(s1)
+                prefix = ps[:f1]
+                pattern = r'.edf_(\w+)_Ch(.)_seizure_times.xlsx'
+                match = re.match(pattern, ps[f1:])
+                tag = match.group(1)
+                ch = match.group(2)
+                return prefix, ch, tag
         elif self.setup == 'LNCM':
             s1 = '_Ch'
-        f1 = ps.find(s1)
-        return ps[:f1], ps[f1+len(s1):][0]
+            f1 = ps.find(s1)
+            return ps[:f1], ps[f1+len(s1):][0], None
 
     def make_szlist_groupbox(self):
         groupbox = QGroupBox('File list')
@@ -186,13 +201,14 @@ class GUI_main(QtWidgets.QMainWindow):
         self.wdir = os.path.dirname(fn[0])
         if self.setup == 'LNCM':
             self.wdir = os.path.dirname(self.wdir)+'/'
-        self.prefix, self.ch = self.get_prefix(os.path.basename(fn[0]))
+        self.prefix, self.ch, self.tag = self.get_prefix(os.path.basename(fn[0]))
+
         self.path_label.setText(f'Loading data for {self.prefix} ... Please wait.')
         QApplication.processEvents()
         self.current_selected_i = None
 
         #load data
-        self.szdat = SzReviewData(self.wdir, self.prefix, self.ch, setup=self.setup)
+        self.szdat = SzReviewData(self.wdir, self.prefix, self.ch, tag=self.tag, setup=self.setup)
 
         #set list widget
         self.sz_list.clear()
