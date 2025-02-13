@@ -38,7 +38,7 @@ class Worker(Process):
                 lprint(self, retval, logger=self.log)
 
 
-def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=False, enable_alt_path=False):
+def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=False, enable_alt_path=True):
     #get binary mask
     opPath = os.path.join(path, prefix + '/')
     roi_name = opPath + f'{prefix}_saved_roi_{tag}.npy'
