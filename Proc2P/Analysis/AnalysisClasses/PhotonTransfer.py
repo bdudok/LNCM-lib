@@ -4,8 +4,9 @@ import pandas
 
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.Bruker.LoadMovie import LoadMovie
+from Proc2P.Bruker.ConfigVars import CF
 
-from Proc2P.utils import lprint, logger
+from Proc2P.utils import lprint, logger, path_to_list
 from matplotlib import pyplot as plt
 
 '''
@@ -114,6 +115,20 @@ class ExportPhotonTransfer:
         session = ImagingSession(path, prefix, tag='skip', norip=True)
         dpath = session.si.info['dpath']
         filelist = [fn for fn in os.listdir(dpath) if ((prefix in fn) and ('.ome.tif' in fn))]
+        if not len(filelist):
+            # look in alternative paths
+            path1 = str(dpath)
+            key = '_RawData'
+            rpath = path1[path1.find(key) + len(key):]
+            parent_folders = path_to_list(rpath)
+            # check in each alt path and stop if found em
+            for alt_path in CF.alt_raw_paths:
+                path2 = os.path.join(os.path.realpath(alt_path), *parent_folders)
+                filelist = [fn for fn in os.listdir(path2) if ((prefix in fn) and ('.ome.tif' in fn))]
+                if len(filelist):
+                    print(f'Image data loaded from {path2}')
+                    dpath = path2
+                    break
         op_df = []
         for channel_name in session.si.info['channelnames']:
             if return_channel is not None:

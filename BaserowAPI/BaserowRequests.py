@@ -7,9 +7,16 @@ from BaserowAPI.config import config
 class GetSessions:
     def __init__(self):
         self.auth_string = f"Token {config['api_token']}"
+        self.sex_cache = {} #for memoizing fetching animal metadata
 
     def get_field(self, key):
         return config['FieldID'].get(key, None)
+
+    def get_sex(self, prefix):
+        a_tag = prefix.split('_')[0]
+        if a_tag not in self.sex_cache:
+            self.sex_cache[a_tag] = self.get_mouse(mtag=a_tag, ret_sex=True)
+        return a_tag, self.sex_cache[a_tag]
 
     def search(self, project, task=None, incltag=None, more_filters=None):
         '''

@@ -1,6 +1,7 @@
 import numpy
 import os
 from Proc2P.Bruker.ConfigVars import CF
+from Proc2P.utils import path_to_list
 
 class LoadRegistered():
     __name__ = 'LoadRegistered'
@@ -43,16 +44,7 @@ class LoadRegistered():
         path1 = str(self.path)
         key = '_Processed'
         path = path1[path1.find(key)+len(key):]
-        parent_folders = []
-        while True:
-            path, folder = os.path.split(path)
-            if folder:
-                parent_folders.append(folder)
-            else:
-                if path and path not in ('//', '/', '\\'):
-                    parent_folders.append(path)
-                break
-        parent_folders.reverse()
+        parent_folders = path_to_list(path)
         #check in each alt path and stop if found em
         for alt_path in CF.alt_processed_paths:
             path2 = os.path.join(os.path.realpath(alt_path), *parent_folders)

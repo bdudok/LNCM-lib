@@ -147,3 +147,18 @@ def p_lookup(p):
         return '*'
     else:
         return 'n.s.'
+
+def path_to_list(path):
+    parent_folders = []
+    while path[-1] in ('//', '/', '\\'):
+        path = path[:-1]
+    while True:
+        path, folder = os.path.split(path)
+        if folder:
+            parent_folders.append(folder)
+        else:
+            if path and path not in ('//', '/', '\\'):
+                parent_folders.append(path)
+            break
+    parent_folders.reverse()
+    return parent_folders
