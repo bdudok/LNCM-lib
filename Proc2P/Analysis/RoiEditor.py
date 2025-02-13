@@ -844,9 +844,9 @@ class RoiEditor(object):
                     new_array[j, 1:] = p + translate
                 # check if new array is outside image region:
                 assert not numpy.any(numpy.isnan(new_array))
-                coords = numpy.copy(new_array[:, 1:])
                 if image_shape is not None:
-                    coords = RoiEditor.trim_coords(coords, image_shape)
+                    coords = RoiEditor.trim_coords(numpy.copy(new_array[:, 1:]), image_shape)
+                    new_array[:, 1:] = coords
             # append the new array to container
             new_length = roi_counter + len(new_array)
             if new_length > len(rois):

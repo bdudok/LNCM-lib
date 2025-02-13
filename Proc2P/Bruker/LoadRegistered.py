@@ -1,6 +1,6 @@
 import numpy
 import os
-
+from Proc2P.Bruker.ConfigVars import CF
 
 class LoadRegistered():
     __name__ = 'LoadRegistered'
@@ -11,36 +11,65 @@ class LoadRegistered():
 
     def __init__(self, procpath, prefix):
         self.path = os.path.join(procpath, prefix)
+        self.prefix = prefix
         lp = os.path.join(self.path, 'suite2p/plane0/ops.npy')
         ops = numpy.load(lp, allow_pickle=True).item()
         self.n_frames = ops['frames_per_folder'][0]
         self.Ly = ops['Ly']
         self.Lx = ops['Lx']
+        self.find_files_in_folder(self.path)
+        self.shape = (self.n_frames, self.Ly, self.Lx)
+        self.load()
+
+    def find_files_in_folder(self, path):
         # find available files
         tags = '', '_Ch1', '_Ch2'
         keys = (None, 'Ch1', 'Ch2')
-        input_files = []
+        self.input_files = []
         self.channel_keys = []
         for ti, (tag, key) in enumerate(zip(tags, keys)):
-            bp = os.path.join(self.path, prefix + f'_registered{tag}.bin')
+            bp = os.path.join(path, self.prefix + f'_registered{tag}.bin')
             if os.path.exists(bp):
-                input_files.append(bp)
+                self.input_files.append(bp)
                 self.channel_keys.append(key)
-        self.n_channels = len(input_files)
-        self.shape = (self.n_frames, self.Ly, self.Lx)
-        # instead of loading the dimensttions, this could be passed from session info
-        if len(input_files):
-            self.data = numpy.memmap(input_files[0], mode='r', dtype='int16', shape=self.shape)
-            self.bitdepth = pow(2, 12)
-            if len(input_files) > 1:
-                self.data2 = numpy.memmap(input_files[1], mode='r', dtype='int16', shape=self.shape)
-        else:
-            self.data = None
+        self.n_channels = len(self.input_files)
 
+    def find_alt_path(self):
+        '''
+        use the alternative data path specified in the config file (absoulute path to _Processed folder)
+        to load the binary data of the motion corrected movie. does not change the saving location
+        '''
+        #get last subfolders
+        path1 = str(self.path)
+        key = '_Processed'
+        path = path1[path1.find(key)+len(key):]
+        parent_folders = []
+        while True:
+            path, folder = os.path.split(path)
+            if folder:
+                parent_folders.append(folder)
+            else:
+                if path and path not in ('//', '/', '\\'):
+                    parent_folders.append(path)
+                break
+        parent_folders.reverse()
+        #check in each alt path and stop if found em
+        for alt_path in CF.alt_processed_paths:
+            path2 = os.path.join(os.path.realpath(alt_path), *parent_folders)
+            self.find_files_in_folder(path2)
+            if len(self.input_files):
+                print(f'Image data loaded from {path2}')
+                self.load()
+                break
 
     def load(self):
-        pass #no need to override memory map with the s2p binary
-        # self.data = numpy.array(self.data[...])
+        if len(self.input_files):
+            self.data = numpy.memmap(self.input_files[0], mode='r', dtype='int16', shape=self.shape)
+            self.bitdepth = pow(2, 12)
+            if len(self.input_files) > 1:
+                self.data2 = numpy.memmap(self.input_files[1], mode='r', dtype='int16', shape=self.shape)
+        else:
+            self.data = None
 
     def get_channel(self, ch=None):
         '''

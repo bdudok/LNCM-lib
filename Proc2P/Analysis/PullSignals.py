@@ -38,7 +38,7 @@ class Worker(Process):
                 lprint(self, retval, logger=self.log)
 
 
-def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=False):
+def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=False, enable_alt_path=False):
     #get binary mask
     opPath = os.path.join(path, prefix + '/')
     roi_name = opPath + f'{prefix}_saved_roi_{tag}.npy'
@@ -49,7 +49,11 @@ def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=F
     if os.path.exists(opPath + f'{prefix}_trace_{tag}.npy'):
         print(prefix, f': Trace file for {tag} exists, skipping...')
         return -1
+
     im = LoadImage(path, prefix)
+    if enable_alt_path: #check if the raw data exists. this can be moved if the session is archived
+        if not len(im.imdat.input_files):
+            im.imdat.find_alt_path()
 
     data = load_roi_file(roi_name)
     #calculate binary mask
