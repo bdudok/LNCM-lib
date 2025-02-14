@@ -68,6 +68,8 @@ class LoadImage(object):
         self.info = {'sz': (self.imdat.Ly, self.imdat.Lx)}
         self.nframes = self.imdat.n_frames
         self.nplanes = 1
+        if not len(self.imdat.channel_keys):
+            self.imdat.find_alt_path()
         self.channels = self.imdat.channel_keys
 
     def get_frame(self, frame, ch=None, zplane=0):
