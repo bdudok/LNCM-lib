@@ -105,17 +105,21 @@ class PSTH:
                 for gi, g_n in enumerate(group_names):
                     self.group_dict[cell_id][g_n] = group[gi]
 
+
+    def sanitize_filename(self, fn):
+        d, f = os.path.split(os.path.realpath(fn))
+        return os.path.join(d, f.replace('.', '_'))
     def save_items(self):
         '''stores items and groups dicts in pickled binary pandas dataframes
         also saved as excel for future proof'''
         # store items
         df = pandas.DataFrame.from_dict(self.item_dict, orient='index', dtype=None, columns=self.field_names)
         df.to_pickle(self.items_filename)
-        df.to_excel(self.items_filename.replace('.', '_') + '.xlsx')
+        df.to_excel(self.sanitize_filename(self.items_filename) + '.xlsx')
         # store groups
         df = pandas.DataFrame.from_dict(self.group_dict, orient='index', dtype=None, columns=self.group_names)
         df.to_pickle(self.groups_filename)
-        df.to_excel(self.groups_filename.replace('.', '_') + '.xlsx')
+        df.to_excel(self.sanitize_filename(self.groups_filename) + '.xlsx')
         # create lock
         self.locked = True
         with open(self.lock_name, 'w') as f:
