@@ -8,6 +8,7 @@ from sklearn.metrics import mutual_info_score
 # from BehaviorSession import BehaviorSession
 from Proc2P.Analysis.LoadPolys import FrameDisplay, LoadPolys
 from Proc2P.Analysis.CaTrace import CaTrace
+from Proc2P.Analysis.FitEye import FitEye
 from Proc2P.Bruker.ConfigVars import CF
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Bruker.LoadEphys import Ephys
@@ -103,9 +104,10 @@ class ImagingSession(object):
         # self.map_spiketimes()
 
         # map video
-        self.eye = None  # implement later
+        self.eye = None
         self.has_eye = False
         #to map motion energy trace, call self.map_face()
+        #to map pupil diameter trace, call self.map_eye(_
 
         if tag == 'skip':
             self.ca.frames = self.si['n_frames']
@@ -149,8 +151,14 @@ class ImagingSession(object):
                     self.bdat = json.load(f)
                 self.has_behavior = True
 
+    def get_face_path(self):
+        self.face_path = os.path.join(self.path, '_face/')
+        if not os.path.exists(self.face_path):
+            os.mkdir(self.face_path)
+        return self.face_path
+
     def map_face(self):
-        self.face_path = self.path + '_face/'
+        self.get_face_path()
         trace_file = self.face_path + '_motion_energy.npy'
         if os.path.exists(trace_file):
             self.mm_trace = numpy.load(trace_file)
@@ -166,6 +174,10 @@ class ImagingSession(object):
             self.mm_trace = mm_trace
         self.camtimes = self.ca.sync.load('cam')
         return self.camtimes, self.mm_trace
+
+    def map_eye(self, thr=0.2):
+        self.eye_trace = FitEye(self.get_face_path(), thr).get_trace()
+        self.has_eye = True
 
     def startstop(self, *args, **kwargs):
         cf = {'gap': int(10*self.fps), 'duration': int(5*self.fps), 'speed_threshold': 2, 'smoothing': int(self.fps)}

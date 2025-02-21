@@ -105,7 +105,8 @@ class CropVideo:
 
     def load_eye_crop(self):
         fn = self.savepath + '_eye-crop.json'
-        return self.load(fn)
+        self.eye_rect = self.load(fn)
+        return self.eye_rect
 
     @staticmethod
     def load(fn):

@@ -466,7 +466,7 @@ class SessionInfo:
             json.dump(self.info, f)
 
     def __getitem__(self, item):
-        return self.info.get(item)
+        return self.info.get(item, None)
 
     def __setitem__(self, key, value):
         self.info[key] = value

@@ -18,5 +18,5 @@ class CF:
         'theta': (6, 9),
         'HF': (80, 500)
     }
-    alt_processed_paths = ('I:/_Processed/', 'Y:/_Processed/') #can look here for archived processed files
-    alt_raw_paths = ('K:/_RawData/', ) # can look here for archived raw files
+    alt_processed_paths = ('E:/ExtDrives/LNCM1/_Processed/', 'Y:/_Processed/') #can look here for archived processed files
+    alt_raw_paths = ('E:/ExtDrives/LNCM2/_RawData/', ) # can look here for archived raw files
