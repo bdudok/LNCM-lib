@@ -200,9 +200,8 @@ class PSTH:
             else:
                 events, mask = events
             fill_line = False
-            if self.param_key == 'eye':
-                # line = load_eye(self.path + self.eyepath, prefix)
-                line = load_eye(self.eyepath, prefix)
+            if self.param_key == 'pupil':
+                line = a.map_eye()
                 fill_line = True
             elif self.param_key == 'face':
                 # line = load_face(a, self.path + self.eyepath, prefix)

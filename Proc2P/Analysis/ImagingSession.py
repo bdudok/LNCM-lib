@@ -107,7 +107,7 @@ class ImagingSession(object):
         self.eye = None
         self.has_eye = False
         #to map motion energy trace, call self.map_face()
-        #to map pupil diameter trace, call self.map_eye(_
+        #to map pupil diameter trace, call self.map_eye()
 
         if tag == 'skip':
             self.ca.frames = self.si['n_frames']
@@ -173,11 +173,32 @@ class ImagingSession(object):
             mm_trace = pull_motion_energy(cam_file, trace_file)
             self.mm_trace = mm_trace
         self.camtimes = self.ca.sync.load('cam')
+        assert len(self.mm_trace) == len(self.camtimes)
         return self.camtimes, self.mm_trace
 
     def map_eye(self, thr=0.2):
         self.eye_trace = FitEye(self.get_face_path(), thr).get_trace()
+        self.eye_trace /= numpy.nanmax(self.eye_trace) #norm to max
+        self.camtimes = self.ca.sync.load('cam')
+        assert len(self.eye_trace) == len(self.camtimes)
         self.has_eye = True
+        #self.camtimes, self.eye_trace are every frame captured by the camera.
+        # this is not necessarily 1:1 with microscope frames
+        if len(self.eye_trace) == self.ca.frames:
+            return self.eye_trace
+        # if not all scope frames are available on the cam, interpolate.
+        return self.interpolate_trace(self.camtimes, self.eye_trace)
+
+    def interpolate_trace(self, trace_x, trace_y):
+        '''For use with camera if not triggered in every frame, to get a trace with equal lenght of imaging'''
+        incl_times = numpy.logical_and(numpy.logical_not(numpy.isnan(trace_x)), numpy.logical_not(numpy.isnan(trace_x)))
+        incl_times = numpy.logical_and(incl_times, trace_x>0)
+        all_frames = numpy.empty(self.ca.frames)
+        all_frames[:] = numpy.nan
+        pred_x = numpy.arange(trace_x[incl_times][0], trace_x[incl_times][-1] + 1)
+        all_frames[pred_x] = numpy.interp(pred_x, trace_x[incl_times], trace_y[incl_times])
+        return all_frames
+
 
     def startstop(self, *args, **kwargs):
         cf = {'gap': int(10*self.fps), 'duration': int(5*self.fps), 'speed_threshold': 2, 'smoothing': int(self.fps)}
