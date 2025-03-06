@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
 from PlotTools.Formatting import strip_ax
 from statsmodels.tsa.arima.model import ARIMA
-from Proc2P.utils import outlier_indices
+from Proc2P.utils import outlier_indices, path_to_list
 
 class FitEye:
     __name__ = 'FitEye'
@@ -19,44 +19,71 @@ class FitEye:
      outliers.
      '''
 
-    def __init__(self, path, thr=0.2, filter=True, overwrite=False,):
+    def __init__(self, path, thr=0.2, filter=True, overwrite=False, model_name=None, debug=False, input_pattern='.csv'):
         '''
         :param path: where the coords are. get from ImagingSession.get_face_path()
         :param thr: likelihood threshold for dropping body part markers.
         :param filter: if True, markers are filtered with ARIMA.
         :param overwrite: if False, loads files from previous run
+        :param model_name: look for this subfolder if specified
         '''
-        self.path = path
+        if model_name is None:
+            self.path = path
+        else:
+            self.path = os.path.join(path, model_name)
         self.thr = thr
         self.filter = filter
         filt_str = ('', '_filt')[filter]
         self.ellipse_fn = os.path.join(self.path, f'_ellipse_fit_{int(thr*100)}{filt_str}.npy')
         self.eye_trace_fn = os.path.join(self.path, f'_pupil_trace_{int(thr*100)}{filt_str}.npy')
         self.coords_fn = os.path.join(self.path, f'_pupil_coords_{int(thr*100)}{filt_str}.npy')
-        if not os.path.exists(self.eye_trace_fn) or overwrite:
-            self.load_coords(filter=filter, overwrite=overwrite)
-            if filter:
-                self.fit_ellipse()
-            else:
-                self.fit_ellipse_raw()
+        if not debug:
+            if not os.path.exists(self.eye_trace_fn) or overwrite:
+                self.load_coords(filter=filter, overwrite=overwrite, pattern=input_pattern)
+                if filter:
+                    self.fit_ellipse()
+                else:
+                    self.fit_ellipse_raw()
 
     def get_trace(self):
         return numpy.load(self.eye_trace_fn)
 
-    def load_coords(self, filter=True, overwrite=False):
+    def commit_eye_trace(self):
+        '''save the current eye trace in the root _face folder.
+        ImagingSession will default to read this without specifying model and filtering settings'''
+        pardirs = path_to_list(self.path)
+        if pardirs[-1] == '_face':
+            path = self.path
+        elif pardirs[-2] == '_face':
+            path = os.path.join(*pardirs[:-1])
+        pfn = os.path.join(path, '_pupil_trace_final.npy')
+        numpy.save(pfn, self.get_trace())
+
+
+
+
+    def load_coords(self, filter=True, overwrite=False, pattern='.csv'):
+        '''
+        Load a DLC marker coordinates file from the _face subfolder of the processed session.
+        :param filter: if True, performs arima filtfilt on the coords
+        :param overwrite: if False and coords already exist, load it from file.
+        :param pattern: which DLC file to load if there are multiple. May include model, shuffle and snapshot info.
+        :return: ndarray shape(frames, bodyparts, (x,y,z)).
+        '''
         if not overwrite and os.path.exists(self.coords_fn):
             self.coords = numpy.load(self.coords_fn)
             return self.coords
-        fn = None
-        for x in os.listdir(self.path):
-            if x.endswith('.csv'):
-                fn = x
-                break
-        assert fn is not None
+        fn = [x for x in os.listdir(self.path) if x.endswith(pattern)]
+        if pattern.endswith('_filtered.csv'):
+            fn = [x for x in fn if x.endswith(pattern)]
+        else:
+            fn = [x for x in fn if not x.endswith('_filtered.csv')]
+        assert (len(fn) == 1)
+        fn = fn[0]
         df = pandas.read_csv(os.path.join(self.path, fn), header=[0,1,2]) #3 levels of labels
         #1st is scorer, 2 is bodypart, 3 is x/y/likelihood
         #reshape to x,y,likelihood of each coord.
-        pupil_cols = [col for col in df.columns if 'pupil' in col[1]]
+        pupil_cols = [col for col in df.columns if 'upil' in col[1]]
         df = df[pupil_cols]
         #filter the points
         raw_coords = df.values.reshape((df.shape[0], df.shape[1]//3, 3))
@@ -78,18 +105,29 @@ class FitEye:
         ED = numpy.empty((len(self.coords), 5)) #center(x,y), width, height, phi
         ED[:] = numpy.nan
         #fit the ellipse in each frame, using the filtered body part coordinates.
+        nan_frames = []
         for f in range(len(self.coords)):
             XY = self.coords[f, :, :2]
-            reg = LsqEllipse().fit(XY)
-            center, width, height, phi = reg.as_parameters()
-            ED[f, :] = [*center, width, height, phi]
+            Z = self.coords[f, :, 2]
+            good_markers = Z>self.thr
+            if numpy.count_nonzero(good_markers) > 3: #if all markers bad, skip fitting for this frame
+                if numpy.count_nonzero(good_markers) < 5: #ellipse fitting needs at least 5 markers, use 5 best
+                    good_markers = numpy.argsort(Z)[-5:]
+                XY = self.coords[f, good_markers, :2]
+                reg = LsqEllipse().fit(XY)
+                center, width, height, phi = reg.as_parameters()
+                ED[f, :] = [*center, width, height, phi]
+            else:
+                nan_frames.append(f)
         #filter each ellipse paramater
         ED_filt = numpy.empty(ED.shape)
         ED_filt[:] = numpy.nan
         for i in range(ED.shape[1]):
             ED_filt[:, i] = arima_filtfilt(ED[:, i])
         numpy.save(self.ellipse_fn, ED_filt)
-        numpy.save(self.eye_trace_fn, (ED_filt[:, 2]+ED_filt[:, 3])/2) #pupil diameter in each frame
+        ellipse_diameter = (ED_filt[:, 2]+ED_filt[:, 3])/2
+        ellipse_diameter[nan_frames] = numpy.nan
+        numpy.save(self.eye_trace_fn, ellipse_diameter) #pupil diameter in each frame
 
     def fit_ellipse_raw(self):
         '''This doesn't filter the points time series, but drops them based on goodness of fit'''
@@ -131,7 +169,11 @@ class FitEye:
             ca.axis('equal')
             ca.set_facecolor('black')
             frame = vid[fr]
-            ca.imshow(frame[cropping[2]:cropping[3], cropping[0]:cropping[1]], vmin=vmin, vmax=vmax)
+            if cropping is None:
+                fdat = frame
+            else:
+                fdat = frame[cropping[2]:cropping[3], cropping[0]:cropping[1]]
+            ca.imshow(fdat, vmin=vmin, vmax=vmax)
 
             # plot the coords
             XY = self.coords[fr]

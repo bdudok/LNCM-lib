@@ -4,6 +4,7 @@ import requests
 import pandas
 from BaserowAPI.config import config
 
+
 class GetSessions:
     def __init__(self):
         self.auth_string = f"Token {config['api_token']}"

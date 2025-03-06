@@ -1,11 +1,12 @@
 try:
     from BaserowAPI.LG_API_token import baserow_token, baserow_logger_token
 except:
-    baserow_token = ''
+    baserow_token = 'cdjpgHN7Ipi08Ju829xbxCR7e3ARgGgk'
     baserow_logger_token = ''
-    print('Importing API tokens failed. For using Baserow, create a LG_API_token.py file in BaserowAPI. ')
-    print('This file should define the baserow_token and baserow_logger_token variables')
-    print('Do not push tokens to GitHub.')
+    print('No tokens found, BaseRow can be used with basic read-only access.')
+    print('For full Baserow and LabGuru access, create a LG_API_token.py file in BaserowAPI.')
+    print('Do not push your tokens file to GitHub (do not commit to repo)')
+
 config = {
   "http": "http://10.18.4.112:5001",
   "api_token": baserow_token,
@@ -34,4 +35,3 @@ config = {
   "lg_mice_url": "https://my.labguru.com/api/v1/biocollections/Mice",
   "lg_protocol_url": "https://my.labguru.com/api/v1/protocols",
 }
-#api_token is read-only token with Barna account

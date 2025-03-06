@@ -176,8 +176,8 @@ class ImagingSession(object):
         assert len(self.mm_trace) == len(self.camtimes)
         return self.camtimes, self.mm_trace
 
-    def map_eye(self, thr=0.2):
-        self.eye_trace = FitEye(self.get_face_path(), thr).get_trace()
+    def map_eye(self, thr=0.2, model_name=None):
+        self.eye_trace = FitEye(self.get_face_path(), thr, model_name=model_name).get_trace()
         self.eye_trace /= numpy.nanmax(self.eye_trace) #norm to max
         self.camtimes = self.ca.sync.load('cam')
         assert len(self.eye_trace) == len(self.camtimes)

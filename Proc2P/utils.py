@@ -162,3 +162,39 @@ def path_to_list(path):
             break
     parent_folders.reverse()
     return parent_folders
+
+class completed_list:
+    '''
+    keep persistent track of jobs that are complete. usage:
+    completed_prefix = completed_list(project_path + '_completed_prefixes.txt')
+    for prefix in jobs:
+        if prefix in completed_prefix:
+            continue
+        do stuff
+        completed_prefix(prefix)
+    '''
+    def __init__(self, filehandle):
+        self.filehandle = filehandle
+        if os.path.exists(filehandle):
+            with open(filehandle, 'r') as f:
+                completed_prefix = [s.strip() for s in f.readlines()]
+        else:
+            completed_prefix = []
+        self.list = completed_prefix
+
+    def write(self, prefix):
+        with open(self.filehandle, 'a') as of:
+            of.write(prefix + '\n')
+
+    def __contains__(self, item):
+        return item in self.list
+
+    def __call__(self, *args, **kwargs):
+        self.write(*args, **kwargs)
+
+def ts(format=None):
+    now = datetime.datetime.now().isoformat(timespec='seconds')
+    if format is None:
+        return now
+    else:
+      return now.replace(':', '')
