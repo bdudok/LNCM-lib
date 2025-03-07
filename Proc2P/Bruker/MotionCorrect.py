@@ -73,16 +73,31 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
         output_ops = suite2p.run_s2p(ops=ops, db=db)
 
         # clean up output
+        preview_channels = {'R': None, 'G': None, 'B': None}
         mean1 = output_ops['meanImg'] / output_ops['meanImg'].max() * 255
         previewname = s.procpath + prefix + f'_preview.tif'
         imgshape = [*output_ops['meanImg'].shape]
         if len(imgshape) < 3:
             imgshape.append(3)
         preview = numpy.zeros(imgshape, dtype='uint8')
-        preview[..., 1] = mean1
+
         if dual_channel:
             mean2 = output_ops['meanImg_chan2'] / output_ops['meanImg_chan2'].max() * 255
-            preview[..., 0] = mean2
+
+        if ref_ch == 'Ch2':
+            preview_channels['G'] = mean1
+            if dual_channel:
+                preview_channels['R'] = mean2
+        else:
+            preview_channels['R'] = mean1
+            if dual_channel:
+                preview_channels['G'] = mean2
+
+        for chi, chn in enumerate('GRB'):
+            x = preview_channels[chn]
+            if x is not None:
+                preview[..., chi] = x
+
         imwrite(previewname, preview)
 
         # remove raw movie
