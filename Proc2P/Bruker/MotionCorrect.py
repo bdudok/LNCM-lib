@@ -103,8 +103,13 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
         # remove raw movie
         os.remove(s.procpath + 'suite2p\plane0/data_raw.bin')
         os.rename(s.procpath + 'suite2p\plane0/data.bin',
-                  s.procpath + prefix + f'_registered_{s.channelnames[0]}.bin')
+                  s.procpath + prefix + f'_registered_{ref_ch}.bin')
         if dual_channel:
+            if ref_ch == s.channelnames[1]:
+                other_ch_name = s.channelnames[0]
+            else:
+                other_ch_name = s.channelnames[1]
+            assert not other_ch_name == ref_ch
             os.remove(s.procpath + 'suite2p\plane0/data_chan2_raw.bin')
             os.rename(s.procpath + 'suite2p\plane0/data_chan2.bin',
-                      s.procpath + prefix + f'_registered_{s.channelnames[1]}.bin')
+                      s.procpath + prefix + f'_registered_{other_ch_name}.bin')
