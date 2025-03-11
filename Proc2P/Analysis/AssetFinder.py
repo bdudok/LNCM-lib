@@ -27,22 +27,31 @@ class AssetFinder:
     def get_prefixes(self):
         return self.prefixes
 
-def get_processed_tags(procpath, prefix):
+def get_processed_tags(procpath, prefix, which_level='processed'):
     '''
     :param procpath: Parent Processed folder item['Processed.Path']
     :param prefix:
+    :param which_level: 'processed' for trace, 'roi' for just roi
     :return: list of tuples (roi tag, channel) that exist
     '''
     spath = os.path.join(procpath, prefix + '/')
     flist = os.listdir(spath)
     #pattern is f'{prefix}_trace_{tag}-ch{ch}'
-    dirlist = [d for d in flist if os.path.isdir(spath + d)]
-    pattern = prefix + r'_trace_(\w+)-ch(.)'
-    hits = []
-    for d in dirlist:
-        match = re.match(pattern, d)
-        if match is not None:
-            hits.append((match.group(1), int(match.group(2))))
+    if which_level == 'processed':
+        dirlist = [d for d in flist if os.path.isdir(spath + d)]
+        pattern = prefix + r'_trace_(\w+)-ch(.)'
+        hits = []
+        for d in dirlist:
+            match = re.match(pattern, d)
+            if match is not None:
+                hits.append((match.group(1), int(match.group(2))))
+    elif which_level == 'roi':
+        hits = []
+        for d in flist:
+            ext = '.npy'
+            pattern = '_saved_roi_'
+            if d.endswith(ext) and pattern in d:
+                hits.append((d.split(pattern)[1][:-len(ext)], 0))
     return hits
 
 

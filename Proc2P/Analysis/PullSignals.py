@@ -38,7 +38,8 @@ class Worker(Process):
                 lprint(self, retval, logger=self.log)
 
 
-def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=False, enable_alt_path=True):
+def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=False, enable_alt_path=True,
+                 overwrite=False):
     #get binary mask
     opPath = os.path.join(path, prefix + '/')
     roi_name = opPath + f'{prefix}_saved_roi_{tag}.npy'
@@ -46,7 +47,7 @@ def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=F
         print(roi_name)
         print(prefix, ': Roi file not found: ', tag)
         return -1
-    if os.path.exists(opPath + f'{prefix}_trace_{tag}.npy'):
+    if os.path.exists(opPath + f'{prefix}_trace_{tag}.npy') and not overwrite:
         print(prefix, f': Trace file for {tag} exists, skipping...')
         return -1
 

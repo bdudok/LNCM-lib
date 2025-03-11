@@ -488,13 +488,14 @@ class Gui:
     def dilate_callback(self):
         nrs = []
         for roi in self.saved_rois:
-            nrs.append(Polygon(roi).buffer(1).exterior.coords)
+            nrs.append(RoiEditor.dilate_polygon(roi, buffer=1))
         self.saved_rois = []
         self.saved_paths = []
         for roi in nrs:
             self.saved_rois.append(roi)
             self.saved_paths.append(mplpath.Path(roi))
         self.draw_result()
+
 
     def save(self):
         if len(self.saved_rois) < 1:
@@ -856,6 +857,14 @@ class RoiEditor(object):
         if not fn.endswith('.npy'):
             fn += '.npy'
         numpy.save(fn, rois[:roi_counter])
+
+    @staticmethod
+    def dilate_polygon(poly, buffer=1):
+        big_poly = Polygon(poly).buffer(buffer)
+        if big_poly.type == 'MultiPolygon':
+            # weird shaped poly causes output to have holes. use chull instead
+            big_poly = Polygon(poly).convex_hull.exterior.buffer(buffer)
+        return big_poly.exterior.coords
 
     @staticmethod
     def load_roi(fn):
