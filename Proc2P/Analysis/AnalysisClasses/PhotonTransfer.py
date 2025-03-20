@@ -226,10 +226,7 @@ class ExportPhotonTransfer:
             for key in report_keys:
                 output_report[key] = round(qs[key])
             lprint(self, channel_name, output_report, logger=log)
-            if return_channel is not None:
-                return im, qs
-            else:
-                op_df.append(pandas.DataFrame(output_report, index=[channel_name]))
+            op_df.append(pandas.DataFrame(output_report, index=[channel_name]))
         pandas.concat(op_df).to_excel(session.get_file_with_suffix('_PhotonTransfer.xlsx'))
 
 

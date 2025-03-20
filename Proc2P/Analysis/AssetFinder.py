@@ -35,6 +35,8 @@ def get_processed_tags(procpath, prefix, which_level='processed'):
     :return: list of tuples (roi tag, channel) that exist
     '''
     spath = os.path.join(procpath, prefix + '/')
+    if not os.path.exists(spath):
+        return -1
     flist = os.listdir(spath)
     #pattern is f'{prefix}_trace_{tag}-ch{ch}'
     if which_level == 'processed':

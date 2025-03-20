@@ -16,7 +16,6 @@ import pandas
 import numpy
 
 
-
 class IPSP:
     __name__ = 'IPSP'
     '''Detect and fit optically evoked IPSPs in a voltage imaging session'''
@@ -41,14 +40,14 @@ class IPSP:
     def purge(self):
         '''delete previously saved contents of the IPSP folder'''
         for f in os.listdir(self.wdir):
-            os.remove(self.wdir+f)
+            os.remove(self.wdir + f)
 
     def set_defaults(self, user_config):
         default_config = {
-            'pre': int(self.session.fps * 100/1000),  # duration included before stim (frames)
-            'post': int(self.session.fps * 200/1000),  # duration included after stim (frames)
-            'param': 'rel', #key of param for ImagingSession to use for traces ('rel')
-            'nan': 4, #frames
+            'pre': int(self.session.fps * 100 / 1000),  # duration included before stim (frames)
+            'post': int(self.session.fps * 200 / 1000),  # duration included after stim (frames)
+            'param': 'rel',  # key of param for ImagingSession to use for traces ('rel')
+            'nan': 4,  # frames
         }
         if not os.path.exists(self.wdir):
             os.mkdir(self.wdir)
@@ -75,7 +74,6 @@ class IPSP:
         Config = namedtuple('Config', 'pre, post, param, nan')
         self.config = Config(config['pre'], config['post'], config['param'], config['nan'])
 
-
     def get_matrix(self):
         # pull the individual responses for each cell and stim
         if not hasattr(self, 'raw_resps'):
@@ -83,11 +81,11 @@ class IPSP:
             if os.path.exists(mname):
                 self.raw_resps = numpy.load(mname)
             else:
-                mlen = self.config.pre+self.config.post
+                mlen = self.config.pre + self.config.post
                 Y = numpy.empty((self.n_stims, self.n_cells, mlen))
                 Y[:] = numpy.nan
 
-                #generate the pull mask
+                # generate the pull mask
                 mask = numpy.empty((self.n_stims, mlen))
                 mask[:] = numpy.nan
                 trim = max(int(self.session.fps), self.config.pre)
@@ -97,15 +95,15 @@ class IPSP:
                         continue
                     mask[ri] = numpy.arange(current_frame - self.config.pre, current_frame + self.config.post)
 
-                #set the resp values
+                # set the resp values
                 param = self.session.getparam(self.config.param)[:self.n_cells]
                 for ei, indices in enumerate(mask):
                     loc = numpy.where(numpy.logical_not(numpy.isnan(indices)))[0]
                     if len(loc):
                         Y[ei] = param[:, indices[loc].astype(numpy.int64)]
 
-                #mask the after-stim frames with nan
-                Y[:, :, self.config.pre:self.config.pre+self.config.nan] = numpy.nan
+                # mask the after-stim frames with nan
+                Y[:, :, self.config.pre:self.config.pre + self.config.nan] = numpy.nan
 
                 numpy.save(mname, Y)
                 self.raw_resps = Y
@@ -136,18 +134,42 @@ class IPSP:
         if not hasattr(self, 'mean'):
             Y = self.get_matrix()
             self.len = Y.shape[-1]
-            #identify nan samples (stim artefact)
-            self.wh_nan = numpy.where(numpy.average(numpy.isnan(Y), axis=(0, 1))>0.2)
+            # identify nan samples (stim artefact)
+            self.wh_nan = numpy.where(numpy.average(numpy.isnan(Y), axis=(0, 1)) > 0.2)
             self.mean = numpy.nanmean(Y, axis=(0, 1))
             self.mean[self.wh_nan] = numpy.nan
         return self.mean
+
+    def fit_cell(self, ci):
+        '''
+        Do the fit separately on one cell (instead on the average)
+        :param c: index
+        :return: model parameters
+        '''
+        M = self.get_matrix()
+        self.wh_nan = numpy.where(numpy.average(numpy.isnan(M[:, ci, :]), axis=0) > 0.2)
+        Y = numpy.nanmean(M[:, ci, self.config.pre:], axis=0)
+        notna = numpy.ones(len(Y), dtype='bool')
+        for x in self.wh_nan[0]:
+            if x >= self.config.pre:
+                notna[x - self.config.pre] = False
+        self.notna = notna
+        X = 1000 * numpy.arange(self.config.post) / self.session.fps
+        fitX = X[notna]
+        fitY = Y[notna]
+        bounds = ([0.01, 3, -1, 0], [1, 100, 1, 50])
+        guesses = (0.1, 25, 0, 0)
+        maxval = numpy.nanmax(Y)
+        # invert it for fitting
+        popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
+        return popt
 
     def fit_model(self, save=False):
         Y = self.get_waveform()[self.config.pre:]
         notna = numpy.ones(len(Y), dtype='bool')
         for x in self.wh_nan[0]:
             if x >= self.config.pre:
-                notna[x-self.config.pre] = False
+                notna[x - self.config.pre] = False
         self.notna = notna
         X = 1000 * numpy.arange(self.config.post) / self.session.fps
         fitX = X[notna]
@@ -162,17 +184,17 @@ class IPSP:
         if save:
             fname = self.get_fn('model')
             fig, ax = plt.subplots()
-            ax.plot(fitX, 100*(maxval - self.alpha_func(fitX, *popt)), color='red')
-            ax.scatter(X, Y*100)
+            ax.plot(fitX, 100 * (maxval - self.alpha_func(fitX, *popt)), color='red')
+            ax.scatter(X, Y * 100)
             fig.suptitle(self.session.prefix + ' ' + self.session.tag + '\n' + modstring)
-            with open(fname+'.txt', 'w') as f:
-                f.write(modstring+'\n'+str(popt))
+            with open(fname + '.txt', 'w') as f:
+                f.write(modstring + '\n' + str(popt))
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('Response (DF/F %)')
-            plt.savefig(fname+'.png')
-            numpy.save(fname+'.npy', self.model)
+            plt.savefig(fname + '.png')
+            numpy.save(fname + '.npy', self.model)
             self.fig = fig, ax
-        self.X = X #times in ms of the post
+        self.X = X  # times in ms of the post
         return self.model
 
     def get_modstring(self):
@@ -222,7 +244,6 @@ class IPSP:
         fit = self.fit_response(Y, bl[-1])
         return Y, bl, fit
 
-
     def fit_response(self, Y, bl):
         '''
         fit a trace with the IPSP model, constrained to the peak time and delay of the model
@@ -234,7 +255,7 @@ class IPSP:
         guesses = (self.model[0], self.model[2])
         x = self.X[self.notna]
         y = (bl - Y)[self.notna]
-        incl = numpy.logical_not(numpy.isnan(x)+numpy.isnan(y))
+        incl = numpy.logical_not(numpy.isnan(x) + numpy.isnan(y))
         if numpy.count_nonzero(incl) < 10:
             return None
         popt, pcov = curve_fit(self.ampl_func, x[incl], y[incl], p0=guesses, bounds=bounds)
@@ -247,11 +268,11 @@ class IPSP:
          or compute the diff of where the fit curve min is relative to baseline.
          :return: array of frame, baseline, response for each c, e
         '''
-        self.responses = numpy.empty((self.n_cells, self.n_stims, 3)) #frame, baseline, response
+        self.responses = numpy.empty((self.n_cells, self.n_stims, 3))  # frame, baseline, response
         self.responses[:] = numpy.nan
         for ci in range(self.n_cells):
             for ei in range(self.n_stims):
-                Y, bl, fit = self.fit_event(ci, ei) #bl is in DF/F actual, response (fit[0]) in DF/F change.
+                Y, bl, fit = self.fit_event(ci, ei)  # bl is in DF/F actual, response (fit[0]) in DF/F change.
                 if fit is None:
                     self.responses[ci, ei] = self.stimframes[ei], numpy.nan, numpy.nan
                 else:
@@ -275,4 +296,3 @@ class IPSP:
                 plt.close()
                 self.pull_ipsps()
         return self.responses
-
