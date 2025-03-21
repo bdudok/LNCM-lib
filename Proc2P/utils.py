@@ -45,7 +45,7 @@ def norm(d):
     y[wh_notna] = numpy.minimum(a / numpy.percentile(a, 99, axis=0), 1)
     return y
 
-def gapless(trace, gap=5, threshold=0):
+def gapless(trace, gap=5, threshold=0, expand=None):
     '''makes binary trace closing small gaps
     :param gap: in samples
     '''
@@ -63,6 +63,13 @@ def gapless(trace, gap=5, threshold=0):
                 if numpy.any(gapless[t - gap:t]) and numpy.any(gapless[t:t + gap]):
                     gapless[t] = 1
                     ready = False
+    if expand is not None:
+        eg = numpy.copy(gapless)
+        for t, m in enumerate(gapless):
+            if not m:
+                if numpy.any(gapless[t - expand:t]) or numpy.any(gapless[t:t + expand]):
+                    eg[t] = 1
+        gapless = eg
     return gapless
 
 def outlier_indices(values, thresh=3.5):

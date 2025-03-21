@@ -240,7 +240,11 @@ class ImagingSession(object):
                 if not hasattr(self.ca, 'nnd'):
                     self.ca.deconvolve(batch=1000, tau=0.75, fs=self.fps)
                 param = self.ca.nnd
-
+            elif param == 'vm':
+                if not hasattr(self.ca, 'vm'):
+                    self.ca.keys.append('vm')
+                    self.ca.load()
+                param = self.ca.vm
             # elif param == 'peaks':
             #     self.disc_param = True
             #     param = numpy.nan_to_num(self.ca.peaks.astype('bool'))

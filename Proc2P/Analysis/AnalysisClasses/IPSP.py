@@ -129,10 +129,12 @@ class IPSP:
         self.n_stims = len(self.stimframes)
         return self.stimframes
 
-    def get_waveform(self):
+    def get_waveform(self, cells=None):
         '''the average IPSP from all stims and all cells'''
         if not hasattr(self, 'mean'):
             Y = self.get_matrix()
+            if cells is not None:
+                Y = Y[:, cells, :]
             self.len = Y.shape[-1]
             # identify nan samples (stim artefact)
             self.wh_nan = numpy.where(numpy.average(numpy.isnan(Y), axis=(0, 1)) > 0.2)
@@ -161,11 +163,15 @@ class IPSP:
         guesses = (0.1, 25, 0, 0)
         maxval = numpy.nanmax(Y)
         # invert it for fitting
-        popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
+        try:
+            popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
+        except RuntimeError:
+            print(f'Optimization failed for {self.session.prefix} c{ci}')
+            popt = [numpy.nan, numpy.nan, 0, 0]
         return popt
 
-    def fit_model(self, save=False):
-        Y = self.get_waveform()[self.config.pre:]
+    def fit_model(self, save=False, include_cells=None):
+        Y = self.get_waveform(cells=include_cells)[self.config.pre:]
         notna = numpy.ones(len(Y), dtype='bool')
         for x in self.wh_nan[0]:
             if x >= self.config.pre:
