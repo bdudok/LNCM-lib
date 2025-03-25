@@ -2,6 +2,7 @@ import os
 import datetime
 import numpy
 import pandas
+from scipy import stats
 
 def lprint(obj, message, *args, logger=None):
     '''Add timestamp and object name to print calls'''
@@ -205,3 +206,32 @@ def ts(format=None):
         return now
     else:
       return now.replace(':', '')
+
+def CI_linreg(x, y):
+    # fit a curve to the data using a least squares 1st order polynomial fit
+    z = numpy.polyfit(x, y, 1)
+    p_y = z[0] * x + z[1]
+
+    # calculate the y-error (residuals)
+    y_err = y - p_y
+
+    # create series of new test x-values to predict for
+    stepsize = (numpy.max(x) - numpy.min(x)) / 100
+    p_x = numpy.arange(numpy.min(x), numpy.max(x)+stepsize, stepsize)
+
+    # now calculate confidence intervals for new test x-series
+    mean_x = numpy.mean(x)  # mean of x
+    n = len(x)  # number of samples in origional fit
+    t = stats.t.ppf(1-0.025, n-1)  # appropriate t value (where n=9, two tailed 95%)
+    s_err = numpy.sum(numpy.power(y_err, 2))  # sum of the squares of the residuals
+
+    confs = t * numpy.sqrt((s_err / (n - 2)) * (1.0 / n + (numpy.power((p_x - mean_x), 2) /
+                                                        ((numpy.sum(numpy.power(x, 2))) - n * (numpy.power(mean_x, 2))))))
+
+    # now predict y based on test x-values
+    p_y = z[0] * p_x + z[1]
+
+    # get lower and upper confidence limits based on predicted y and confidence intervals
+    lower = p_y - abs(confs)
+    upper = p_y + abs(confs)
+    return p_x, lower, upper

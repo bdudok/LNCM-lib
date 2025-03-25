@@ -52,27 +52,25 @@ class IPSP:
         if not os.path.exists(self.wdir):
             os.mkdir(self.wdir)
         self.get_stimtimes()
-        configname = self.get_fn('config.json')
-        if os.path.exists(configname):
-            with open(configname, 'r') as f:
-                config = json.loads(f.read())
-            self.set_config(config)
+        if user_config is None:
+            config = {}
         else:
-            if user_config is None:
-                config = {}
-            else:
-                config = user_config
-            assert type(config) is dict
-            for key, value in default_config.items():
-                if key not in config:
-                    config[key] = value
-            self.set_config(config)
-            with open(configname, 'w') as f:
-                f.write(json.dumps(config))
+            config = user_config
+        assert type(config) is dict
+        for key, value in default_config.items():
+            if key not in config:
+                config[key] = value
+        self.set_config(config)
+        with open(self.get_fn('config.json'), 'w') as f:
+            f.write(json.dumps(config))
 
     def set_config(self, config):
         Config = namedtuple('Config', 'pre, post, param, nan')
-        self.config = Config(config['pre'], config['post'], config['param'], config['nan'])
+        config = Config(config['pre'], config['post'], config['param'], config['nan'])
+        h = str(config.pre) + str(config.post) + str(config.param) + str(
+            config.nan)  # json serialization order not reliable
+        self.confighash = h
+        self.config = config
 
     def get_matrix(self):
         # pull the individual responses for each cell and stim
@@ -171,6 +169,7 @@ class IPSP:
         return popt
 
     def fit_model(self, save=False, include_cells=None):
+        # if loading a previously saved model, call get_ipsps
         Y = self.get_waveform(cells=include_cells)[self.config.pre:]
         notna = numpy.ones(len(Y), dtype='bool')
         for x in self.wh_nan[0]:
@@ -208,7 +207,7 @@ class IPSP:
         return f'ampl:{popt[0] * 100:.2f}%, peak:{popt[1]:.1f} ms, bias:{popt[2] * 100:.1f}%, delay:{popt[3]:.1f}ms'
 
     def get_fn(self, suffix):
-        return self.wdir + f'_{self.session.tag}_{suffix}'
+        return self.wdir + f'_{self.session.tag}_{self.confighash}_{suffix}'
 
     def alpha_func(self, x, A, B, C, D):
         '''
@@ -286,19 +285,20 @@ class IPSP:
 
         lprint(self, 'Pulled responses for', self.session.tag, 'with ', self.config, 'Model:',
                self.get_modstring(), logger=self.log)
-        fn = self.get_fn('_ipsps.npy')
+        fn = self.get_fn('ipsps.npy')
         numpy.save(fn, self.responses)
         return self.responses
 
     def get_ipsps(self):
         if not hasattr(self, 'responses'):
-            fn = self.get_fn('_ipsps.npy')
+            fn = self.get_fn('ipsps.npy')
             if os.path.exists(fn):
                 self.responses = numpy.load(fn)
                 self.model = numpy.load(self.get_fn('model.npy'))
                 lprint(self, 'Loaded IPSP model from file:', self.get_modstring())
             else:
-                self.fit_model(save=True)
-                plt.close()
-                self.pull_ipsps()
+                raise FileNotFoundError('fit_model and pull_ipsps first')
+                # self.fit_model(save=True)
+                # plt.close()
+                # self.pull_ipsps()
         return self.responses
