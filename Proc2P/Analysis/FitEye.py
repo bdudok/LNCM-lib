@@ -110,20 +110,21 @@ class FitEye:
             XY = self.coords[f, :, :2]
             Z = self.coords[f, :, 2]
             good_markers = Z>self.thr
-            if numpy.count_nonzero(good_markers) > 3: #if all markers bad, skip fitting for this frame
-                if numpy.count_nonzero(good_markers) < 5: #ellipse fitting needs at least 5 markers, use 5 best
-                    good_markers = numpy.argsort(Z)[-5:]
+            if numpy.count_nonzero(good_markers) > 5: #if too many markers bad, skip fitting for this frame
+                # if numpy.count_nonzero(good_markers) < 5: #ellipse fitting needs at least 5 markers, use 5 best
+                #     good_markers = numpy.argsort(Z)[-5:]
                 XY = self.coords[f, good_markers, :2]
                 reg = LsqEllipse().fit(XY)
                 center, width, height, phi = reg.as_parameters()
                 ED[f, :] = [*center, width, height, phi]
             else:
                 nan_frames.append(f)
+        ED_filt = numpy.copy(ED)
         #filter each ellipse paramater
-        ED_filt = numpy.empty(ED.shape)
-        ED_filt[:] = numpy.nan
-        for i in range(ED.shape[1]):
-            ED_filt[:, i] = arima_filtfilt(ED[:, i])
+        # ED_filt = numpy.empty(ED.shape)
+        # ED_filt[:] = numpy.nan
+        # for i in range(ED.shape[1]):
+        #     ED_filt[:, i] = arima_filtfilt(ED[:, i])
         numpy.save(self.ellipse_fn, ED_filt)
         ellipse_diameter = (ED_filt[:, 2]+ED_filt[:, 3])/2
         ellipse_diameter[nan_frames] = numpy.nan
@@ -155,8 +156,9 @@ class FitEye:
         eye_trace = self.get_trace()
 
         # get 9 frames
-        pick_9 = [int(len(eye_trace) * ((x / 10)+0.05)) for x in range(9)]
-        test_frames = numpy.argsort(eye_trace)[pick_9]
+        notna_indices = numpy.where(numpy.logical_not(numpy.isnan(eye_trace)))[0]
+        pick_9 = [int(len(notna_indices) * ((x / 10)+0.05)) for x in range(9)]
+        test_frames = notna_indices[numpy.argsort(eye_trace[notna_indices])[pick_9]]
 
         # load movie
         vid = LoadAvi(vid_fn)
@@ -190,7 +192,7 @@ class FitEye:
 
 def arima_filtfilt(trace, z=None, thr=0.2):
     '''
-    run a forward and backward filter to remove outliers
+    run a forward and backward filter to remove outliers and nans
     :param trace: input time series (1D)
     :param z: the goodness of fit can be passed from DLC to exclude uncertain body parts
     :param thr: z < thr will be excluded

@@ -13,7 +13,7 @@ def normalize_trace(session: ImagingSession):
     fps = session.fps
     look_back_frames = int(fps / 0.3)  # time frame for finding the range, 1/firing rate
     gauss_sigma = 3  # seconds
-    filter_order = (1, 1, 1)  # for arima. dorpna not compatible with all models, this works fine but slows signals.
+    # filter_order = (1, 1, 1)  # for arima. dorpna not compatible with all models, this works fine but slows signals.
     sliding_step = int(0.1 * fps) #resolution of calculating the range.
 
     norm_traces = numpy.empty(session.ca.trace.shape)
@@ -31,19 +31,7 @@ def normalize_trace(session: ImagingSession):
         y[exclude_move] = numpy.nan
         y[[x + 1 for x in diff_indices]] = numpy.nan
         y[[x + 2 for x in diff_indices]] = numpy.nan
-
-        # filter
-        ma_model = ARIMA(y, order=filter_order, missing='drop', )
-        model_fit = ma_model.fit()
-        result = model_fit.predict()
-        result[0] = y[0]
-        # reverse filter
-        ma_model = ARIMA(y[::-1], order=filter_order, missing='drop', )
-        model_fit = ma_model.fit()
-        result_rev = model_fit.predict()
-        result_rev[0] = y[-1]
-        # average
-        baseline = (result + result_rev[::-1]) / 2
+        baseline = arima_filtfilt(y)
         slo_baseline = gaussian_filter(baseline, int(fps * gauss_sigma))
 
         corr = Y - slo_baseline
@@ -74,17 +62,7 @@ def normalize_trace(session: ImagingSession):
         fitg[:] = numpy.nan
         for fi in (0, 1):
             rY = locq[fi][xvals]
-            ma_model = ARIMA(rY, order=filter_order, missing='drop', )
-            model_fit = ma_model.fit()
-            result = model_fit.predict()
-            result[0] = rY[0]
-            # reverse filter
-            ma_model = ARIMA(rY[::-1], order=filter_order, missing='drop', )
-            model_fit = ma_model.fit()
-            result_rev = model_fit.predict()
-            result_rev[0] = rY[-1]
-            # average
-            fitq = (result + result_rev[::-1]) / 2
+            fitq = arima_filtfilt(rY)
             # interpolate and gaussian filter
             fitg[fi, predx] = gaussian_filter(numpy.interp(predx, xvals, fitq), sigma=int(fps * gauss_sigma))
 
@@ -109,3 +87,17 @@ class Worker(Process):
             session = ImagingSession(path, prefix, tag, norip=True)
             normalize_trace(session)
             self.res_queue.put(prefix)
+
+def arima_filtfilt(y, filter_order=(1, 1, 1)):
+    # filter
+    ma_model = ARIMA(y, order=filter_order, missing='drop', )
+    model_fit = ma_model.fit()
+    result = model_fit.predict()
+    result[0] = y[0]
+    # reverse filter
+    ma_model = ARIMA(y[::-1], order=filter_order, missing='drop', )
+    model_fit = ma_model.fit()
+    result_rev = model_fit.predict()
+    result_rev[0] = y[-1]
+    # average
+    return (result + result_rev[::-1]) / 2

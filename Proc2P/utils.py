@@ -5,6 +5,7 @@ import pandas
 import json
 from scipy import stats
 
+
 def lprint(obj, message, *args, logger=None):
     '''Add timestamp and object name to print calls'''
     ts = datetime.datetime.now().isoformat(timespec='seconds')
@@ -20,6 +21,7 @@ def lprint(obj, message, *args, logger=None):
     else:
         logger.log(output)
 
+
 class logger:
     def __init__(self, filehandle=None):
         self.fn = filehandle
@@ -33,11 +35,13 @@ class logger:
         with open(self.fn, 'a') as f:
             f.write(message)
 
+
 from Proc2P.Legacy.Batch_Utils import strip_ax
 
 
 def get_user():
     return os.environ.get('USERNAME')
+
 
 def norm(d):
     wh_notna = numpy.logical_not(numpy.isnan(d))
@@ -46,6 +50,7 @@ def norm(d):
     a = d[wh_notna] - numpy.min(d[wh_notna])
     y[wh_notna] = numpy.minimum(a / numpy.percentile(a, 99, axis=0), 1)
     return y
+
 
 def gapless(trace, gap=5, threshold=0, expand=None):
     '''makes binary trace closing small gaps
@@ -74,6 +79,7 @@ def gapless(trace, gap=5, threshold=0, expand=None):
         gapless = eg
     return gapless
 
+
 def outlier_indices(values, thresh=3.5):
     '''return the list of indices of outliers in a series'''
     not_nan = numpy.logical_not(numpy.isnan(values))
@@ -83,6 +89,7 @@ def outlier_indices(values, thresh=3.5):
     med_abs_deviation = numpy.median(diff[not_nan])
     modified_z_score = 0.6745 * diff / med_abs_deviation
     return numpy.where(modified_z_score > thresh)[0]
+
 
 def startstop(speed, duration=50, gap=150, ret_loc='actual', span=None, speed_threshold=0.05, smoothing=None):
     '''
@@ -145,6 +152,7 @@ def read_excel(*args, **kwargs):
 def ewma(trace, period=15):
     return numpy.array(pandas.DataFrame(numpy.nan_to_num(trace)).ewm(span=period).mean()[0])
 
+
 def p_lookup(p):
     if numpy.isnan(p):
         return 'nan'
@@ -156,6 +164,7 @@ def p_lookup(p):
         return '*'
     else:
         return 'n.s.'
+
 
 def path_to_list(path):
     parent_folders = []
@@ -172,6 +181,7 @@ def path_to_list(path):
     parent_folders.reverse()
     return parent_folders
 
+
 class completed_list:
     '''
     *deprecated, use DataSet*
@@ -183,6 +193,7 @@ class completed_list:
         do stuff
         completed_prefix(prefix)
     '''
+
     def __init__(self, filehandle):
         self.filehandle = filehandle
         if os.path.exists(filehandle):
@@ -202,12 +213,14 @@ class completed_list:
     def __call__(self, *args, **kwargs):
         self.write(*args, **kwargs)
 
+
 def ts(format=None):
     now = datetime.datetime.now().isoformat(timespec='seconds')
     if format is None:
         return now
     else:
-      return now.replace(':', '')
+        return now.replace(':', '')
+
 
 def CI_linreg(x, y):
     # fit a curve to the data using a least squares 1st order polynomial fit
@@ -219,16 +232,17 @@ def CI_linreg(x, y):
 
     # create series of new test x-values to predict for
     stepsize = (numpy.max(x) - numpy.min(x)) / 100
-    p_x = numpy.arange(numpy.min(x), numpy.max(x)+stepsize, stepsize)
+    p_x = numpy.arange(numpy.min(x), numpy.max(x) + stepsize, stepsize)
 
     # now calculate confidence intervals for new test x-series
     mean_x = numpy.mean(x)  # mean of x
     n = len(x)  # number of samples in origional fit
-    t = stats.t.ppf(1-0.025, n-1)  # appropriate t value (where n=9, two tailed 95%)
+    t = stats.t.ppf(1 - 0.025, n - 1)  # appropriate t value (where n=9, two tailed 95%)
     s_err = numpy.sum(numpy.power(y_err, 2))  # sum of the squares of the residuals
 
     confs = t * numpy.sqrt((s_err / (n - 2)) * (1.0 / n + (numpy.power((p_x - mean_x), 2) /
-                                                        ((numpy.sum(numpy.power(x, 2))) - n * (numpy.power(mean_x, 2))))))
+                                                           ((numpy.sum(numpy.power(x, 2))) - n * (
+                                                               numpy.power(mean_x, 2))))))
 
     # now predict y based on test x-values
     p_y = z[0] * p_x + z[1]
@@ -237,6 +251,7 @@ def CI_linreg(x, y):
     lower = p_y - abs(confs)
     upper = p_y + abs(confs)
     return p_x, lower, upper
+
 
 def touch_path(*args):
     '''
@@ -247,7 +262,8 @@ def touch_path(*args):
     path = os.path.realpath(os.path.join(*args))
     if not os.path.exists(path):
         os.makedirs(path)
-    return path+'/'
+    return path + '/'
+
 
 class DataSet:
     __name__ = 'DataSet'
@@ -276,6 +292,14 @@ class DataSet:
     def __getitem__(self, item):
         return self.df.loc[self.df["Prefix"].eq(item)].iloc[0]
 
+    def _changed(func):
+
+        def wrapper(self, *args, **kwargs):
+            self.mod_flag = True
+            func(self, *args, **kwargs)
+
+        return wrapper
+
     def get_fn(self, ext=None):
         if ext is None:
             ext = self.ext
@@ -289,6 +313,8 @@ class DataSet:
         else:
             vs = [int(x[len(self.prefix):-len(self.ext)]) for x in ds]
             self.ver = max(vs) + incr
+        if incr:
+            self.mod_flag = True
 
     def load_df(self):
         fn = self.get_fn()
@@ -305,7 +331,9 @@ class DataSet:
             assert not self.readonly_flag
         elif ver == 'next':
             self.get_current_ver(incr=1)
-        self.df.to_feather(self.get_fn())
+        if self.mod_flag:
+            self.df.to_feather(self.get_fn())
+            self.mod_flag = False
 
     def new_df(self):
         self.df = pandas.DataFrame(columns=["Prefix", "Animal", "Sex", "Incl", "Excl"])
@@ -316,6 +344,7 @@ class DataSet:
         print(rtext)
         return rtext
 
+    @_changed
     def new_record(self, prefix):
         db = self.check_db()
         animal, sex = db.get_sex(prefix)
@@ -326,6 +355,7 @@ class DataSet:
             self.db = GetSessions()
         return self.db
 
+    @_changed
     def include(self, prefix, tag=None, value=True, add_fields=None):
         '''
         :param prefix: add/mark a prefix (or a list of prefixes) to be included in the dataset
@@ -341,6 +371,7 @@ class DataSet:
                 self.new_record(pf)
         self.set_field(prefix, inclfield, value)
 
+    @_changed
     def exclude(self, prefix, tag=None):
         '''
         Mark excluded.
@@ -352,6 +383,7 @@ class DataSet:
             exclfield += f'.{tag}'
         self.set_field(prefix, exclfield, True)
 
+    @_changed
     def set_field(self, prefix, key, value=True):
         prefix = self.listify(prefix)
         for pf in prefix:
@@ -359,8 +391,8 @@ class DataSet:
             if not len(index) == 1:
                 raise ValueError(f'Prefix should have exactly one match, {pf} had {len(index)}')
             self.df.loc[index[0], key] = value
-        self.mod_flag = True
 
+    @_changed
     def set_by_dict(self, prefix, add_fields):
         index = self.df.loc[self.df["Prefix"].eq(prefix)].index
         if not len(index) == 1:
@@ -384,6 +416,7 @@ class DataSet:
         if key not in self.df.columns:
             self.df[key] = value
 
+    @_changed
     def include_cells(self, prefix, roi_tag, cells, alt_tag=None, excl=False):
         '''
         Adds the specified cells to a list of included cells.
@@ -396,12 +429,12 @@ class DataSet:
         suffix = ('Incl', 'Excl')[excl]
         cellfield = f'Cells.{roi_tag}.{suffix}'
         if alt_tag is not None:
-            cellfield += f'/{alt_tag}'
+            cellfield += f'.{alt_tag}'
         if cellfield not in self.df.columns:
             self.check_key(cellfield, value=json.dumps(None))
             clist = cells
         else:
-            if cells ==None:
+            if cells == None:
                 clist = cells
             else:
                 old_list = json.loads(self.get_field(prefix, cellfield))
@@ -422,9 +455,9 @@ class DataSet:
         for suffix in ('Incl', 'Excl'):
             cellfield = f'Cells.{roi_tag}.{suffix}'
             if alt_tag is not None:
-                cellfield += f'/{alt_tag}'
+                cellfield += f'.{alt_tag}'
             if cellfield in self.df.columns:
-                rets[suffix] = json.loads(self.get_field(prefix,  cellfield))
+                rets[suffix] = json.loads(self.get_field(prefix, cellfield))
         if 'Incl' not in rets:
             return None
         if 'Excl' not in rets:
@@ -433,16 +466,15 @@ class DataSet:
             incl = rets['Incl']
             excl = rets['Excl']
             if incl is None:
-                return (incl, excl) #we don't have the max n of cells, need to look up externally
+                return (incl, excl)  # we don't have the max n of cells, need to look up externally
             if type(excl) == list:
                 return [c for c in incl if c not in excl]
             else:
                 return incl
 
-
     def get_incl(self, key="Incl", excl=None):
         '''
-        Return the df with the included prefixes. Always exlcudes ones that have the global Excl set.
+        Return the df with the included sessions. Always exlcudes ones that have the global Excl set.
         :param key: specify alternative column name
         :param excl: specify additional alternative exclusion column
         :return:
