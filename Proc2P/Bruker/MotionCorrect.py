@@ -93,7 +93,7 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
             if dual_channel:
                 preview_channels['G'] = mean2
 
-        for chi, chn in enumerate('GRB'):
+        for chi, chn in enumerate('RGB'):
             x = preview_channels[chn]
             if x is not None:
                 preview[..., chi] = x
