@@ -6,8 +6,11 @@ from BaserowAPI.config import config
 
 
 class GetSessions:
-    def __init__(self):
-        self.auth_string = f"Token {config['api_token']}"
+    def __init__(self, token=None):
+        if token is None:
+            self.auth_string = f"Token {config['api_token']}"
+        else:
+            self.auth_string = f"Token {token}"
         self.sex_cache = {} #for memoizing fetching animal metadata
 
     def get_field(self, key):
@@ -106,6 +109,50 @@ class GetSessions:
             )
             return resp.json()
 
+    def put_new(self, data_dict):
+        resp = requests.post(
+            config['session_url'],
+            headers={
+                "Authorization": self.auth_string,
+                "Content-Type": "application/json"
+            },
+            json=self.sanitize_put(data_dict)
+        )
+        if not resp.status_code == 200:
+            print(resp.json())
+        return resp
+
+    def sanitize_put(self, data_dict): #take a dict that was pulled from the DB, and form into one that can be created
+        out_dict = {}
+        for key, value in data_dict.items():
+            if key in config["drop_fields"]:
+                continue
+            t = type(value)
+            if key == 'Mouse.ID':
+                out_dict[key] = [int(value[0]['id'])]
+                continue
+            if key in config["select_fields"]:
+                if value is not None:
+                    if t == list:
+                        out_dict[key] = [x['value'] for x in value]
+                    else:
+                        out_dict[key] = value['value'] #'Channels': {'id': 2449, 'value': 'Green', 'color': 'darker-green'},
+                    continue
+            if t in (numpy.int32, numpy.int64):
+                value = int(value)
+            if t in (numpy.ndarray, ):
+                value = list(value)
+            if t in (numpy.bool_, ):
+                value = bool(value)
+            try:
+                json.dumps({key: value})
+                out_dict[key] = value
+            except:
+                print(f'not JSON serializable: {key}: {value}')
+                print(f'Value type is: {t}')
+        return out_dict
+
+
 
 class PutLogEntries:
     def __init__(self):
@@ -125,7 +172,7 @@ class PutLogEntries:
             "User": self.username
         }
 
-        return requests.post(
+        resp = requests.post(
             config['log_url'],
             headers={
                 "Authorization": self.auth_string,
@@ -133,6 +180,10 @@ class PutLogEntries:
             },
             json=put_json
         )
+
+        print(resp.json())
+        return resp
+
 
     def check(self, sessionID, source='ArchiveZip'):
         '''Return True if the sessionID is already registered in BR as archived'''
