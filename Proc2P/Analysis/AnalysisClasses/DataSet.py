@@ -139,7 +139,7 @@ class DataSet:
     def set_by_dict(self, prefix, add_fields):
         index = self.df.loc[self.df["Prefix"].eq(prefix)].index
         if not len(index) == 1:
-            raise ValueError(f'Prefix should have exactly one match, {pf} had {len(index)}')
+            raise ValueError(f'Prefix should have exactly one match, {prefix} had {len(index)}')
         for key, value in add_fields.items():
             self.check_key(key)
             self.df.loc[index[0], key] = value

@@ -47,6 +47,16 @@ def get_processed_tags(procpath, prefix, which_level='processed'):
             match = re.match(pattern, d)
             if match is not None:
                 hits.append((match.group(1), int(match.group(2))))
+        if not len(hits):
+            hyphen_roi_list = ('STICA', 'PC', 'iPC')
+            ch_list = ('G', 'R')
+            for roi in hyphen_roi_list:
+                for ch in ch_list:
+                    pattern = prefix + f'_trace_{roi}-{ch}-ch(.)'
+                    for d in dirlist:
+                        match = re.match(pattern, d)
+                        if match is not None:
+                            hits.append((f'{roi}-{ch}', int(match.group(1))))
     elif which_level == 'roi':
         hits = []
         for d in flist:

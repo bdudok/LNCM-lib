@@ -80,6 +80,9 @@ class CaTrace(object):
         elif self.ch > 0:
             return -1
         self.cells, self.frames = self.trace.shape
+        if not self.cells:
+            lprint(self, 'Zero cells in roi: ' + file_name)
+            return -1
         if self.verbose:
             print(self.prefix, 'Traces loaded', str(self.cells))
         self.bsl = numpy.empty(self.trace.shape)
