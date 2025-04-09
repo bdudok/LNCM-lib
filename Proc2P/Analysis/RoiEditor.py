@@ -1,7 +1,7 @@
 import tifffile
 
 from Proc2P.Analysis.LoadPolys import FrameDisplay
-from Proc2P.utils import lprint
+from Proc2P.utils import lprint, logger
 import matplotlib.path as mplpath
 import os
 import shutil
@@ -42,9 +42,15 @@ class Worker(Process):
 
     def run(self):
         for din in iter(self.queue.get, None):
-            lprint(self, din)
-            path, prefix, apps, config = din
-            RoiEditor(path, prefix, ).autodetect(approach=apps, config=config)
+            # the whole thing goes in a try so worker is not dead on error. remove this for debugging.
+            try:
+                path, prefix, apps, config = din
+                log = logger()
+                log.set_handle(path, prefix)
+                lprint(self, 'Calling autodetect with:', din, logger=log)
+                RoiEditor(path, prefix, ).autodetect(approach=apps, config=config, log=log)
+            except Exception as e:
+                lprint(self, 'Autodetect failed with error:', e,)
 
 
 class Lasso:
@@ -248,7 +254,8 @@ class Translate:
                     pass
         fn = self.tgt + '_saved_roi_' + str(max(exs) + 1)
         RoiEditor.save_roi(self.data, fn, self.rois.img.image.info['sz'], self.translate)
-        print(len(self.data), 'saved in', fn)
+        message = f'{len(self.data)} saved in {fn}'
+        print(message)
         if sbx:
             Process(target=save_sbx, args=(self.tgt, self.tim.shape, self.data, self.path)).start()
 
@@ -287,9 +294,13 @@ class Translate:
 
 
 class Gui:
-    def __init__(self, path, prefix, exporting=False):
+    __name__ = 'RoiEditorGUI'
+    def __init__(self, path, prefix, exporting=False, preferred_tag='1'):
         self.path = path
+        self.preferred_tag = preferred_tag
         self.prefix = prefix
+        self.log = logger()
+        self.log.set_handle(path, prefix)
         self.opPath = os.path.join(self.path, self.prefix + '/')
         self.psets = {}
         self.paths = {}
@@ -319,9 +330,10 @@ class Gui:
 
         avgfn = self.opPath + self.prefix + '_avgmax.tif'
         if os.path.exists(avgfn):
-            self.pic = cv2.cvtColor(tifffile.imread(avgfn), cv2.COLOR_RGB2BGR)
+            preview_rgb = tifffile.imread(avgfn)
         else:
-            self.pic = self.rois.get_pic()
+            preview_rgb = self.rois.get_pic()
+        self.pic = cv2.cvtColor(preview_rgb, cv2.COLOR_RGB2BGR)
 
         self.currim = self.pic
         if len(self.active_keys) > 0:
@@ -433,8 +445,9 @@ class Gui:
             self.add_current(dil='dil' in mode)
         if mode == 'draw':
             for p in ps:
-                self.saved_rois.append(p)
-                self.saved_paths.append(mplpath.Path(p))
+                if len(p) > 3:
+                    self.saved_rois.append(p)
+                    self.saved_paths.append(mplpath.Path(p))
         if mode == 'remove':
             rois = []
             for p in ps:
@@ -475,7 +488,7 @@ class Gui:
     def dilate_callback(self):
         nrs = []
         for roi in self.saved_rois:
-            nrs.append(Polygon(roi).buffer(1).exterior.coords)
+            nrs.append(RoiEditor.dilate_polygon(roi, buffer=1))
         self.saved_rois = []
         self.saved_paths = []
         for roi in nrs:
@@ -483,27 +496,30 @@ class Gui:
             self.saved_paths.append(mplpath.Path(roi))
         self.draw_result()
 
+
     def save(self):
         if len(self.saved_rois) < 1:
             print('0 rois, roi file not saved for', self.prefix)
             return -1
         # code moved to separate function, call that to save after determining file name
         # determine number for next file
-        exs = [0]
-        for f in os.listdir(self.opPath):
-            if self.prefix in f and '_saved_roi_' in f:
-                try:
-                    # ugly way to keep autodetected rois from breaking numbering
-                    exs.append(int(f[:-4].split('_')[-1]))
-                except:
-                    pass
-        exi = max(exs)+1
-        while os.path.exists(self.opPath + self.prefix + '_saved_roi_' + str(exi)):
-            exi += 1
-        fn = self.prefix + '_saved_roi_' + str(exi)
+        fn = self.prefix + '_saved_roi_' + self.preferred_tag
+        if os.path.exists(self.opPath + fn + '.npy'):
+            exs = [0]
+            for f in os.listdir(self.opPath):
+                if self.prefix in f and '_saved_roi_' in f:
+                    try:
+                        # ugly way to keep autodetected rois from breaking numbering
+                        exs.append(int(f[:-4].split('_')[-1]))
+                    except:
+                        pass
+            exi = max(exs)+1
+            while os.path.exists(self.opPath + self.prefix + '_saved_roi_' + str(exi) + '.npy'):
+                exi += 1
+            fn = self.prefix + '_saved_roi_' + str(exi)
         RoiEditor.save_roi(self.saved_rois, self.opPath + fn, self.rois.img.image.info['sz'])
         msg = f'{len(self.saved_rois)} saved in {fn}'
-        print(msg)
+        lprint(self, msg, logger=self.log)
         return msg
 
     def gammaChange(self, v):
@@ -689,6 +705,19 @@ class Gui:
         self.currim = cv2.LUT(im, self.lut)
         self.zoom()
         im = numpy.array(self.currim)
+        #fill with black the left and bottom of the pic, if it's too small for the GUI.
+        # this is done after polys are drawn, and does not effect the image data, just the drawing of the 'Rois' window
+        # the zoom will work with the new image coordinates though (top left corner)
+        min_h = 200
+        min_w = 500
+        if im.shape[1] < min_w:
+            old_im = numpy.copy(im)
+            im = numpy.zeros((im.shape[0], min_w, im.shape[2]), im.dtype)
+            im[:, min_w-old_im.shape[1]:, :] = old_im
+        if im.shape[0] < min_h:
+            old_im = numpy.copy(im)
+            im = numpy.zeros((min_h, im.shape[1], im.shape[2]), im.dtype)
+            im[:old_im.shape[0],:, :] = old_im
         if len(self.active_keys) > 0:
             cv2.putText(im, str(len(self.psets[self.current_key])) + ' of', (0, 25),
                         fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=0.5, color=(255, 255, 255))
@@ -705,6 +734,7 @@ class Gui:
                 fsc = 0.5
             cv2.putText(im, key, (0, 25 * (i + 4)), fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=fsc, color=color)
         cv2.imshow('Rois', im)
+        cv2.resizeWindow('Rois', max(min_w, im.shape[1]), max(min_h, im.shape[0]))
 
     def calc_sets(self, key):
         ps, es = [], []
@@ -728,7 +758,8 @@ class Gui:
             self.sizes[key] = []
             self.brightness[key] = numpy.zeros((len(self.data[key]), 3))
             self.paths[key] = []
-            for ip, poly in enumerate(self.data[key]):
+            for ip, coords in enumerate(self.data[key]):
+                poly = RoiEditor.trim_coords(numpy.array(coords), self.rois.img.image.info['sz'])
                 p = Polygon(poly)
                 mp = mplpath.Path(poly)
                 self.paths[key].append(mp)
@@ -755,13 +786,15 @@ class Gui:
         # self.blims = [int(min(bright)), int(max(bright) + 1)]
         # self.klims = [int(min(kurtos)), int(max(kurtos) + 1)]
 
+
     def load_rois(self):
 
         # load previous saves
         exs = []
         for f in os.listdir(self.opPath):
             if self.prefix in f and '_saved_roi_' in f:
-                exs.append(f)
+                if os.path.getsize(self.opPath + f) > 128:
+                    exs.append(f)
         exs.sort()
         for nf, f in enumerate(exs):
             polys = RoiEditor.load_roi(self.opPath + f)
@@ -812,11 +845,9 @@ class RoiEditor(object):
                     new_array[j, 1:] = p + translate
                 # check if new array is outside image region:
                 assert not numpy.any(numpy.isnan(new_array))
-                coords = new_array[:, 1:]
-                if not all([coords.min() > 0,
-                            coords[:, 0].max() < image_shape[1],
-                            coords[:, 1].max() < image_shape[0]]):
-                    new_array = junk_roi * [i, 0, 0]
+                if image_shape is not None:
+                    coords = RoiEditor.trim_coords(numpy.copy(new_array[:, 1:]), image_shape)
+                    new_array[:, 1:] = coords
             # append the new array to container
             new_length = roi_counter + len(new_array)
             if new_length > len(rois):
@@ -826,6 +857,14 @@ class RoiEditor(object):
         if not fn.endswith('.npy'):
             fn += '.npy'
         numpy.save(fn, rois[:roi_counter])
+
+    @staticmethod
+    def dilate_polygon(poly, buffer=1):
+        big_poly = Polygon(poly).buffer(buffer)
+        if big_poly.type == 'MultiPolygon':
+            # weird shaped poly causes output to have holes. use chull instead
+            big_poly = Polygon(poly).convex_hull.exterior.buffer(buffer)
+        return big_poly.exterior.coords
 
     @staticmethod
     def load_roi(fn):
@@ -846,7 +885,14 @@ class RoiEditor(object):
     def get_pic(self):
         return self.img.image.show_field()
 
-    def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config={}, exclude_opto=True):
+    @staticmethod
+    def trim_coords(old_coords, image_shape):
+        coords = numpy.maximum(1, old_coords)
+        coords[:, 0] = numpy.minimum(coords[:, 0], image_shape[1] - 1)
+        coords[:, 1] = numpy.minimum(coords[:, 1], image_shape[0] - 1)
+        return coords
+
+    def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config={}, exclude_opto=True, log=None):
         approach = list(approach)
         prefix = self.prefix
         im = self.img.image
@@ -857,10 +903,10 @@ class RoiEditor(object):
         if exclude_opto and os.path.exists(opto_name):
             have_opto = True
             bad_frames = numpy.load(opto_name)
-            lprint(self, f'opto excluding {len(bad_frames)} frames')
+            lprint(self, f'opto excluding {len(bad_frames)} frames', logger=log)
 
         else:
-            lprint(self, 'no opto')
+            # lprint(self, 'no opto')
             have_opto = False
         # find trim:
         # x0, x1, y0, y1 = 10, 15, 10, 10
@@ -926,6 +972,7 @@ class RoiEditor(object):
                 id /= numpy.percentile(id, 99)
                 nicepic[y0:-y1, x0:-x1, lut[2]] = numpy.minimum(id, 1) * 255
             cv2.imwrite(self.opPath + prefix + '_avgmax.tif', nicepic)
+            lprint(self, prefix, 'avgmax.tif saved', logger=log)
 
             # create SIMA object
             if os.path.exists(dsname) and not force_re:
@@ -963,7 +1010,7 @@ class RoiEditor(object):
             if 'PC' in item:
                 if not all_def:
                     itemtag = item + '-'.join([str(config[pname]) for pname in pnames])
-            lprint(self, item, 'Size setting: diam', config['Diameter'], 'min:', config['MinSize'], 'max:', config['MaxSize'])
+            lprint(self, item, 'Size setting: diam', config['Diameter'], 'min:', config['MinSize'], 'max:', config['MaxSize'], logger=log)
 
             py_approach = sima.segment.PlaneCA1PC(channel=ch, verbose=False,
                                                   cut_min_size=int(config['MinSize']),
@@ -975,13 +1022,13 @@ class RoiEditor(object):
                     rois = ds.segment(py_approach, 'pc_ROIs')
                     self.saveauto(rois, itemtag, x0, y0)
                 except AssertionError:
-                    lprint(self, 'CA1PC crashed for', prefix)
+                    lprint(self, 'CA1PC crashed for', prefix, logger=log)
             if 'iPC' in item:
                 try:
                     rois = ids.segment(py_approach, 'ipc_ROIs')
                     self.saveauto(rois, itemtag, x0, y0)
                 except AssertionError:
-                    lprint(self, 'CA1PC-i crashed for', prefix)
+                    lprint(self, 'CA1PC-i crashed for', prefix, logger=log)
             if 'IN' in item or 'STICA' in item:
                 # default params if not specified
                 if not 'comps' in config:
@@ -995,7 +1042,8 @@ class RoiEditor(object):
                 stica_approach.append(sima.segment.MergeOverlapping(threshold=0.5))
                 rois = ds.segment(stica_approach, 'stica_ROIs')
 
-                self.saveauto(rois, item, x0, y0, filter=50 * 50)
+                retval = self.saveauto(rois, item, x0, y0, filter=50 * 50)
+                lprint(self, retval, logger=log)
 
         # clean up sima folders
         ds, ids = None, None
@@ -1017,7 +1065,7 @@ class RoiEditor(object):
             elif Polygon(roi).area < filter:
                 nrs.append(roi)
         RoiEditor.save_roi(nrs, fn, self.img.image.info['sz'])
-        print(len(nrs), 'saved in', fn)
+        return f'{len(nrs)} ROIs saved in {fn}'
 
     def load_roiset(self):
         archive = zipfile.ZipFile(self.prefix + '_modrois.zip', 'r')
@@ -1041,14 +1089,23 @@ class RoiEditor(object):
 
 if __name__ == '__main__':
     # test single
-    wdir = 'D:/Shares/Data/_Processed/2P/testing/'
-    prefix = 'SncgTot4_2023-11-09_LFP_002'
-    r = RoiEditor(wdir, prefix, )
-    approach = ('STICA-G', )
-    # r.autodetect(approach=approach)
-
-    self = r
-    chunk_n = 100
-    chunk_size = 50
+    # wdir = 'D:/Shares/Data/_Processed/2P/testing/'
+    # prefix = 'SncgTot4_2023-11-09_LFP_002'
+    # r = RoiEditor(wdir, prefix, )
+    # approach = ('STICA-G', )
+    # # r.autodetect(approach=approach)
+    #
+    # self = r
+    # chunk_n = 100
+    # chunk_size = 50
     # ('D:/Shares/Data/_Processed/2P/testing//', 'SncgTot4_2023-11-09_LFP_002', ['PC-G', 'STICA-G'],
     #  {'Start': '0', 'Stop': 'end', 'Diameter': '20', 'MinSize': '100', 'MaxSize': '800'})
+
+
+    wdir = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
+    prefix = 'JEDI-Sncg65_2024-12-10_lfp_opto_124'
+    r = RoiEditor(wdir, prefix, )
+
+    preview_rgb = r.get_pic()
+
+    # pic = cv2.cvtColor(preview_rgb, cv2.COLOR_RGB2BGR)

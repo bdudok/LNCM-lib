@@ -1,6 +1,6 @@
 import os.path
 from Proc2P.Analysis.ImagingSession import ImagingSession
-from Proc2P.utils import lprint
+from Proc2P.utils import lprint, outlier_indices
 from datetime import datetime
 import pandas
 import numpy
@@ -105,17 +105,21 @@ class PSTH:
                 for gi, g_n in enumerate(group_names):
                     self.group_dict[cell_id][g_n] = group[gi]
 
+
+    def sanitize_filename(self, fn):
+        d, f = os.path.split(os.path.realpath(fn))
+        return os.path.join(d, f.replace('.', '_'))
     def save_items(self):
         '''stores items and groups dicts in pickled binary pandas dataframes
         also saved as excel for future proof'''
         # store items
         df = pandas.DataFrame.from_dict(self.item_dict, orient='index', dtype=None, columns=self.field_names)
         df.to_pickle(self.items_filename)
-        df.to_excel(self.items_filename.replace('.', '_') + '.xlsx')
+        df.to_excel(self.sanitize_filename(self.items_filename) + '.xlsx')
         # store groups
         df = pandas.DataFrame.from_dict(self.group_dict, orient='index', dtype=None, columns=self.group_names)
         df.to_pickle(self.groups_filename)
-        df.to_excel(self.groups_filename.replace('.', '_') + '.xlsx')
+        df.to_excel(self.sanitize_filename(self.groups_filename) + '.xlsx')
         # create lock
         self.locked = True
         with open(self.lock_name, 'w') as f:
@@ -150,7 +154,8 @@ class PSTH:
         self.session_kwargs = kwargs
 
     def set_pull_function_kwargs(self, *args, **kwargs):
-        '''Specify kwargs that will be passed to any loader function called by pull_traces'''
+        '''Specify kwargs that will be passed to any loader function called by pull_traces
+        NB this is not for mask functions! for that, pass kwargs to set_triggers'''
         if None in args:
             self.pull_function_kwargs = {}
         self.pull_function_kwargs = kwargs
@@ -195,9 +200,8 @@ class PSTH:
             else:
                 events, mask = events
             fill_line = False
-            if self.param_key == 'eye':
-                # line = load_eye(self.path + self.eyepath, prefix)
-                line = load_eye(self.eyepath, prefix)
+            if self.param_key == 'pupil':
+                line = a.map_eye(model_name=self.pull_function_kwargs.get('model_name', None))
                 fill_line = True
             elif self.param_key == 'face':
                 # line = load_face(a, self.path + self.eyepath, prefix)
@@ -217,10 +221,20 @@ class PSTH:
                 line = a.ca.get_npc(1)[:, 0]
                 fill_line = True
             elif self.param_key == 'rpw':
-                line = a.ripple_power
+                if hasattr(a, 'ripple_power'):
+                    line = a.ripple_power
+                else:
+                    line = a.ephys.ripple_power
                 fill_line = True
+            elif self.param_key == 'rpwz':
+                if hasattr(a, 'ripple_power'):
+                    line = a.ripple_power
+                else:
+                    line = a.ephys.ripple_power
+                fill_line = True
+                line /= numpy.nanstd(line)
             elif self.param_key == 'ripp-n':
-                line = a.get_ripple_number_trace() * fps
+                line = a.get_ripple_number_trace() * a.fps
                 fill_line = True
             elif self.param_key == 'maxenv':
                 nframes = a.ca.frames
@@ -242,21 +256,19 @@ class PSTH:
             elif self.param_key == 'LFP':
                 line = a.ephys.edat[1]
                 fill_line = True
-            elif self.param_key == 'inst_ev_freq':
-                np_fn = a.prefix+'_inst_sz_freq_1116.npy'# adjust between sz and epi events as needed
-                if os.path.exists(np_fn):
-                    line = numpy.load(a.prefix+'_inst_sz_freq_1116.npy')
-                else:
-                    line = numpy.empty(a.ca.frames)
-                    line[:] = numpy.nan
-                fill_line = True
-            elif 'corr' in self.param_key:
-                line = load_corr(a, path, prefix, **self.pull_function_kwargs)
-                fill_line = True
+            # elif self.param_key == 'inst_ev_freq':
+            #     np_fn = a.prefix+'_inst_sz_freq_1116.npy'# adjust between sz and epi events as needed
+            #     if os.path.exists(np_fn):
+            #         line = numpy.load(a.prefix+'_inst_sz_freq_1116.npy')
+            #     else:
+            #         line = numpy.empty(a.ca.frames)
+            #         line[:] = numpy.nan
+            #     fill_line = True
+            # elif 'corr' in self.param_key:
+            #     line = load_corr(a, path, prefix, **self.pull_function_kwargs)
+            #     fill_line = True
             elif 'gpw' in self.param_key:
-                try:
-                    assert hasattr(self, 'gamma_band')
-                except:
+                if not hasattr(self, 'gamma_band'):
                     raise ValueError('Specify gamma band s, f, or b with set_pull_params')
                 filt_func = {'s': a.ripples.calc_sgamma,
                              'f': a.ripples.calc_fgamma,
@@ -343,6 +355,9 @@ class PSTH:
 
     def get_numpy_name(self, prefix, tag, ch, weight=False):
         str_builder = [self.identifier, prefix, tag, ch, self.trigger_name, self.param_key, self.window_w]
+        if self.mask_function_kwargs is not None:
+            stripchars = r'"{:} ' + "'"
+            str_builder.append(''.join([x for x in str(self.mask_function_kwargs) if x not in stripchars]))
         fn = self.wdir + '_'.join([str(s) for s in str_builder])
         if weight:
             return fn + '_weights.npy'
@@ -376,11 +391,12 @@ class PSTH:
             self.weights = weights[:data_counter]
 
     def get_data(self, group_criteria=None, group_by=None, avg_cells=False, return_indices=False, keep_all=False,
-                 weighted=False):
+                 weighted=False, baseline=None, mask_outliers=False):
         '''group criteria provided as a list of key-value pairs applied sequentially
         group_by: average items that have the same value in the specified parameter
         return_indices: also return the original cell indices for each line
-        if group_by is specified, returns group keys instead of indices'''
+        if group_by is specified, returns group keys instead of indices
+        If baseline is specified as a slice, this period is subtracted from each individual event'''
         if group_criteria is None and group_by is None and avg_cells is False:
             data = self.data[:, :2 * self.window_w]
             if weighted:
@@ -418,7 +434,7 @@ class PSTH:
                         # compute mean of lines belonging to the same unique cell. maintain cells that have no events as nan
                         unique_cell_ids = self.data[element_included, -1]
                         data, cell_indices = self.collapse_cells(data, unique_cell_ids, cell_indices, indices,
-                                                                 keep_all=keep_all)
+                                                                 keep_all=keep_all, mask_outliers=mask_outliers)
                 else:
                     data = None
                     cell_indices = None
@@ -437,6 +453,11 @@ class PSTH:
                     element_included = numpy.isin(self.get_unique_indices(), indices)
                     data[gi] = numpy.nanmean(self.data[element_included, :2 * self.window_w], axis=0)
                 cell_indices = groups
+        if baseline is not None:
+            nd = numpy.empty(data.shape, data.dtype)
+            for i in range(len(data)):
+                nd[i] = data[i] - numpy.nanmean(data[i][baseline])
+            data = numpy.copy(nd)
         if data is None:
             if return_indices:
                 return None, None
@@ -446,7 +467,7 @@ class PSTH:
         else:
             return numpy.copy(data)
 
-    def collapse_cells(self, data, unique_cell_ids, cell_indices, indices, keep_all):
+    def collapse_cells(self, data, unique_cell_ids, cell_indices, indices, keep_all, mask_outliers=False):
         '''input pre-selected lines, and array of unique ids and original indices
         returns avg trace by cell, and the orig index for each
         if keep_all: cells that are included but have no events are included as nans
@@ -463,7 +484,13 @@ class PSTH:
         for gi, grp in enumerate(groups):
             wh = numpy.where(unique_cell_ids == grp)[0]
             if len(wh) > 0:
-                mean_data[gi] = numpy.nanmean(data[wh, :2 * self.window_w], axis=0)
+                Y = data[wh, :2 * self.window_w]
+                #set outliers to nan
+                if mask_outliers:
+                    for t in range(Y.shape[1]):
+                        ol_index = outlier_indices(Y[:, t])
+                        Y[ol_index, t] = numpy.nan
+                mean_data[gi] = numpy.nanmean(Y, axis=0)
                 mean_indices[gi] = cell_indices[wh[0]]
         return mean_data, mean_indices
 
@@ -504,15 +531,22 @@ class PSTH:
         return mid, mid - err, mid + err
 
     def return_mean(self, group_criteria=None, spread_mode='SEM', mid_mode='mean', group_by=None, avg_cells=True,
-                    multiply=1, print_n=False, scale=False, use_n=None):
+                    multiply=1, print_n=False, scale=False, use_n=None, baseline=None, mask_outliers=False):
         '''# filter data according to criteria, and calculate average of all lines.
         if group_by is specified, first average by that parameter.
         if avg cells, cell averages instead of all individual trace. has no effect with group_by'''
-        data = self.get_data(group_criteria=group_criteria, group_by=group_by, avg_cells=avg_cells)
+        data = self.get_data(group_criteria=group_criteria, group_by=group_by,
+                             avg_cells=avg_cells, baseline=baseline, mask_outliers=mask_outliers)
         if data is None:
             return None, None, None
-        else:
-            data *= multiply
+        return self.calc_mean(data=data, spread_mode=spread_mode, mid_mode=mid_mode,
+                    multiply=multiply, print_n=print_n, scale=scale, use_n=use_n)
+
+    @staticmethod
+    def calc_mean(data, spread_mode='SEM', mid_mode='mean', multiply=1, scale=False, use_n=None,
+                  print_n=False, group_criteria=None):
+        '''separated out from return_mean so can be used as static method'''
+        data *= multiply
         if scale:
             data /= numpy.nanmax(numpy.nanmean(data, axis=0))
         # determine mid values:
@@ -520,7 +554,6 @@ class PSTH:
             mid = numpy.nanmedian(data, axis=0)
         elif mid_mode == 'mean':
             mid = numpy.nanmean(data, axis=0)
-
         # determine spread values
         if spread_mode == 'IQR':
             lower = numpy.nanpercentile(data, 25, axis=0)
@@ -543,17 +576,24 @@ class PSTH:
         return mid, lower, upper
 
 
-def pull_session_with_mask(session:ImagingSession, mask, param_key='rel'):
+
+def pull_session_with_mask(session:ImagingSession, mask, param_key='rel', ext_line=None):
     '''
     Get the mean response of all cells in a session
     :param session:
     :param event: output of EventMasks
     :param mask:
+    :param ext_line: if supplied, use this trace instead of getparam
     :return: response array, ncells x 2*w
     '''
     w = mask.shape[1] // 2
     data = numpy.empty((len(mask), session.ca.cells, 2 * w))
-    param = session.getparam(param_key)
+    if ext_line is None:
+        param = session.getparam(param_key)
+    else:
+        param = numpy.zeros(session.ca.rel.shape)
+        l_dat = min(len(ext_line), session.ca.frames)
+        param[:, :l_dat] = ext_line[:l_dat]
     # pull values
     for ei, indices in enumerate(mask):
         lines = numpy.empty((session.ca.cells, 2 * w))

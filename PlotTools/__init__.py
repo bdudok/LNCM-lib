@@ -1,1 +1,1 @@
-from PlotTools.Formatting import prep_ax_psth, prep_ax_graph, strip_ax
+from PlotTools.Formatting import prep_ax_psth, prep_ax_graph, strip_ax, jitter

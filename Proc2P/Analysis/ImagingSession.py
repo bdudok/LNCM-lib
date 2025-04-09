@@ -8,14 +8,19 @@ from sklearn.metrics import mutual_info_score
 # from BehaviorSession import BehaviorSession
 from Proc2P.Analysis.LoadPolys import FrameDisplay, LoadPolys
 from Proc2P.Analysis.CaTrace import CaTrace
+from Proc2P.Analysis.FitEye import FitEye
 from Proc2P.Bruker.ConfigVars import CF
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Bruker.LoadEphys import Ephys
 from LFP import Filter
-from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel
-# from Ripples import Ripples
+from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel, strip_ax, ewma
+from Proc2P.Analysis.Ripples import Ripples
 import time
 from scipy import stats
+from Proc2P.Bruker.Video import CropVideo
+from Video.PullMotion import pull_motion_energy
+
+
 
 
 class Pos:
@@ -31,7 +36,28 @@ class Pos:
             self.relpos = numpy.maximum(0, self.pos - numpy.nanpercentile(self.pos, 1))
             self.relpos = numpy.minimum(1, self.relpos / numpy.nanpercentile(self.relpos, 99))
         else:
-            self.relpos = self.pos / numpy.nanmax(self.pos)
+            if self.pos is not None:
+                self.relpos = self.pos / numpy.nanmax(self.pos)
+
+    def drop_nan(self):
+        self.speed = numpy.nan_to_num(self.speed)
+        self.smspd = numpy.nan_to_num(self.smspd)
+        self.movement = numpy.nan_to_num(self.movement)
+        self.pos = numpy.nan_to_num(self.pos)
+        self.laps = numpy.nan_to_num(self.laps)
+
+    def get_total_distance(self):
+        tdt = 0
+        wh_notna = numpy.where(numpy.logical_not(numpy.isnan(self.laps)))
+        if len(wh_notna[0]) > 10:
+            pos = self.pos[wh_notna]
+            laps = self.laps[wh_notna].astype('int64')
+            for l in numpy.unique(laps):
+                curr_lap = pos[laps == l]
+                tdt += numpy.nan_to_num(numpy.nanmax(curr_lap) - numpy.nanmin(curr_lap))
+        if numpy.isnan(tdt):
+            tdt = 0
+        return int(tdt)
 
 
 class ImagingSession(object):
@@ -56,13 +82,18 @@ class ImagingSession(object):
         # load polygons, option to access image data
         self.rois = FrameDisplay(procpath, prefix, tag=tag, lazy=True)
 
-        # load processed tracces
+        # load processed traces
         self.ca = CaTrace(procpath, prefix, tag=tag, ch=ch)
-        self.ca.load()
+        self.has_ca = self.ca.load() is True
         self.ftimes = numpy.load(self.get_file_with_suffix('_FrameTimes.npy'))
 
         # load photostimulation if available:
-        self.map_opto()
+        if self.has_ca:
+            self.map_opto()
+
+        #load treadmill speed
+        self.has_behavior = False
+        self.map_pos()
 
         # map ephys
         self.lfp_ch = lfp_ch
@@ -73,14 +104,14 @@ class ImagingSession(object):
         # self.map_spiketimes()
 
         # map video
-        self.eye = None  # implement later
+        self.eye = None
         self.has_eye = False
+        #to map motion energy trace, call self.map_face()
+        #to map pupil diameter trace, call self.map_eye()
 
         if tag == 'skip':
             self.ca.frames = self.si['n_frames']
         self.dualch = self.ca.is_dual
-        self.has_behavior = False
-        self.map_pos()
 
         self.pltnum = 0
         self.zscores = {}
@@ -88,6 +119,7 @@ class ImagingSession(object):
         self.colors = {}
 
         self.preview = None
+        self.version = 'LNCM'
 
     def get_file_with_suffix(self, suffix):
         return os.path.join(self.path, self.prefix + suffix)
@@ -107,9 +139,11 @@ class ImagingSession(object):
     def map_pos(self):
         self.pos = Pos(self.ca.sync, self.fps)
         if self.pos.speed is None:  # in case this data is missing
-            self.pos.speed = numpy.zeros(self.ca.frames)
-            self.pos.pos = numpy.zeros(self.ca.frames)
-            self.pos.movement = numpy.zeros(self.ca.frames)
+            if self.has_ca:
+                self.pos.speed = numpy.zeros(self.ca.frames)
+                self.pos.smspd = numpy.zeros(self.ca.frames)
+                self.pos.pos = numpy.zeros(self.ca.frames)
+                self.pos.movement = numpy.zeros(self.ca.frames, dtype='bool')
         else:
             bdat = self.get_file_with_suffix('_bdat.json')
             if os.path.exists(bdat):
@@ -117,11 +151,73 @@ class ImagingSession(object):
                     self.bdat = json.load(f)
                 self.has_behavior = True
 
+    def get_face_path(self):
+        self.face_path = os.path.join(self.path, '_face/')
+        if not os.path.exists(self.face_path):
+            os.mkdir(self.face_path)
+        return self.face_path
+
+    def map_face(self):
+        self.get_face_path()
+        trace_file = self.face_path + '_motion_energy.npy'
+        if os.path.exists(trace_file):
+            self.mm_trace = numpy.load(trace_file)
+        else:
+            #open the video and make sure face is cropped.
+            cam_file = self.si.info['cam_file']
+            movie = CropVideo(cam_file, self.face_path)
+            if movie.load_motion_crop() == False:
+                movie.crop()
+            #then call motion energy trace proceesing
+            lprint(self, 'Pulling motion energy from cropped face field',)
+            mm_trace = pull_motion_energy(cam_file, trace_file)
+            self.mm_trace = mm_trace
+        self.camtimes = self.ca.sync.load('cam')
+        assert len(self.mm_trace) == len(self.camtimes)
+        return self.camtimes, self.mm_trace
+
+    def map_eye(self, thr=0.2, model_name='final'):
+        if model_name == 'final':
+            self.eye_trace = numpy.load(os.path.join(self.get_face_path(), '_pupil_trace_final.npy'))
+        else:
+            self.eye_trace = FitEye(self.get_face_path(), thr, model_name=model_name).get_trace()
+        self.eye_trace /= numpy.nanmax(self.eye_trace) #norm to max
+        self.camtimes = self.ca.sync.load('cam')
+        assert len(self.eye_trace) == len(self.camtimes)
+        self.has_eye = True
+        #self.camtimes, self.eye_trace are every frame captured by the camera.
+        # this is not necessarily 1:1 with microscope frames
+        if len(self.eye_trace) == self.ca.frames:
+            return self.eye_trace
+        # if not all scope frames are available on the cam, interpolate.
+        return self.interpolate_trace(self.camtimes, self.eye_trace)
+
+    def interpolate_trace(self, trace_x, trace_y):
+        '''For use with camera if not triggered in every frame, to get a trace with equal lenght of imaging'''
+        incl_times = numpy.logical_and(numpy.logical_not(numpy.isnan(trace_x)), numpy.logical_not(numpy.isnan(trace_x)))
+        incl_times = numpy.logical_and(incl_times, trace_x>0)
+        all_frames = numpy.empty(self.ca.frames)
+        all_frames[:] = numpy.nan
+        pred_x = numpy.arange(trace_x[incl_times][0], trace_x[incl_times][-1] + 1)
+        all_frames[pred_x] = numpy.interp(pred_x, trace_x[incl_times], trace_y[incl_times])
+        return all_frames
+
+
     def startstop(self, *args, **kwargs):
+        cf = {'gap': int(10*self.fps), 'duration': int(5*self.fps), 'speed_threshold': 2, 'smoothing': int(self.fps)}
+        #pycontrol treadmill needs longer smoothing parameter for gapless to bridge "stepping" of the mouse (1 s).
+        for key, value in cf.items():
+            if key not in kwargs:
+                kwargs[key] = value
         return startstop(self.pos.speed, **kwargs)
 
     def get_preview(self):
         return self.rois.get_preview()
+
+    def get_photons(self):
+        fn = self.get_file_with_suffix('_PhotonTransfer.xlsx')
+        if os.path.exists(fn):
+            return read_excel(fn)
 
     def getparam(self, param):
         opn = param
@@ -141,8 +237,14 @@ class ImagingSession(object):
             elif param == 'smtr':
                 param = self.ca.smtr
             elif param == 'nnd':
-                if hasattr(self.ca, 'nnd'):
-                    param = self.ca.nnd
+                if not hasattr(self.ca, 'nnd'):
+                    self.ca.deconvolve(batch=1000, tau=0.75, fs=self.fps)
+                param = self.ca.nnd
+            elif param == 'vm':
+                if not hasattr(self.ca, 'vm'):
+                    self.ca.keys.append('vm')
+                    self.ca.load()
+                param = self.ca.vm
             # elif param == 'peaks':
             #     self.disc_param = True
             #     param = numpy.nan_to_num(self.ca.peaks.astype('bool'))
@@ -160,6 +262,13 @@ class ImagingSession(object):
                 param = numpy.empty(self.ca.rel.shape)
                 param[:, 0] = numpy.nan
                 param[:, 1:] = numpy.diff(self.ewma_smooth(3, norm=False), axis=1)
+            elif 'optomask' in param:
+                #pass with a number at the end of the string to mask n frames after stim
+                maskn=int(param[-1])+1
+                stims = numpy.where(self.opto)[0]
+                param=numpy.copy(self.ca.rel)
+                for t in stims:
+                    param[:, t:t+maskn] = numpy.nan
         elif type(param) == int:
             param = self.ewma_smooth(param)
         try:
@@ -197,75 +306,142 @@ class ImagingSession(object):
         self.ephys = Ephys(self.procpath, self.prefix, channel=self.lfp_ch)
         self.has_ephys = self.ephys.trace is not None
 
+    def ewma_smooth(self, period):
+        if not self.dualch:
+            data = numpy.empty((self.ca.cells, self.ca.frames))
+            for c in range(self.ca.cells):
+                data[c, :] = ewma(self.ca.ntr[c], period)
+        else:
+            data = numpy.empty((self.ca.cells, self.ca.frames, 2))
+            for ch in range(2):
+                for c in range(self.ca.cells):
+                    data[c, :, ch] = ewma(self.ca.ntr[c, :, ch], period)
+        return data
     def map_spiketimes(self):
         '''
         Load existing spiketime excel files and convert to frames
         '''
         suffix = '_spiketimes.xlsx'
         stfield = 'SpikeTimes(s)'
+        spiketag = self.kwargs.get('spiketag', None)
         n_channels = self.ephys.edat.shape[0] - 1
         fs = self.si.info['fs']
         self.spiketime_channels = []
         self.spiketimes = []
         for i in range(n_channels):
-            fname = self.get_file_with_suffix(f'_Ch{i+1}{suffix}')
+            if spiketag in (None, 'None'):
+                fullsuffix = f'_Ch{i+1}{suffix}'
+            else:
+                fullsuffix = f'_{spiketag}_Ch{i+1}{suffix}'
+            fname = self.get_file_with_suffix(fullsuffix)
+            self.spiketime_channels.append(i + 1)
             if os.path.exists(fname):
-                self.spiketime_channels.append(i+1)
                 stdat = read_excel(fname)
                 self.spiketimes.append(self.ephys.edat[0, (stdat[stfield].values * fs).astype('int64')])
+            else:
+                self.spiketimes.append(numpy.array([]))
 
     def map_seizuretimes(self):
         '''
         Load existing spiketime excel files and convert to frames
         '''
-        suffix = '_seizure_times.xlsx'
         stfield = ('Sz.Start(s)', 'Sz.Stop(s)')
+        spiketag = self.kwargs.get('spiketag', None)
         n_channels = self.ephys.edat.shape[0] - 1
         fs = self.si.info['fs']
-        self.sztime_channels = []
-        self.sztimes = []
-        for i in range(n_channels):
-            fname = self.get_file_with_suffix(f'_ch{i+1}{suffix}')
-            if os.path.exists(fname):
-                self.sztime_channels.append(i+1)
-                stdat = read_excel(fname)
-                sztimes = [self.ephys.edat[0, (stdat[x].values * fs).astype('int64')] for x in stfield]
-                self.sztimes.append(sztimes)
+        for suffix, stfield, do_filter in zip(('_seizure_times_curated.xlsx', '_seizure_times.xlsx'),
+                                   (('Start', 'Stop'), ('Sz.Start(s)', 'Sz.Stop(s)')), (True, False)):
+            found_any = False
+            self.sztime_channels = []
+            self.sztimes = []
+            for i in range(n_channels):
+                if spiketag in (None, 'None'):
+                    fullsuffix = f'_Ch{i+1}{suffix}'
+                else:
+                    fullsuffix = f'_{spiketag}_Ch{i+1}{suffix}'
+                fname = self.get_file_with_suffix(fullsuffix)
+                self.sztime_channels.append(i + 1)
+                if os.path.exists(fname): #this is not supposed to be case sensitive on Windows (confirmed). if it fails to open,
+                    # fix ch vs Ch in name.
+                    found_any = True
+                    stdat = read_excel(fname)
+                    if do_filter:
+                        stdat = stdat.loc[~stdat['Included'].eq(False)]
+                    sztimes = [self.ephys.edat[0, (stdat[x].values * fs).astype('int64')] for x in stfield] #start and stop
+                    self.sztimes.append(sztimes)
+                else:
+                    self.sztimes.append([[], []])
+            if found_any:
+                print(f'using seizures from {fname}')
+                break
 
 
     def map_ripples(self):
-        # self.ripples = Ripples(self.prefix, tag=self.ripple_tag, strict_tag=True, )
-        # store power per frame in files (or load if already exists)
-        nframes = self.ca.frames
         fs = self.si['fs']
+        self.ripples = Ripples(self.procpath, self.prefix, tag=self.ripple_tag, strict_tag=True,
+                               ephys_channel=self.lfp_ch, fs=fs)
+        nframes = self.ca.frames
+        frs = []
+        for e in self.ripples.events:
+            f = self.sampletoframe(e.p[0])
+            if f < nframes and f not in frs:
+                if not self.pos.movement[f]:
+                    frs.append(f)
+        frs.sort()
+        self.ripple_frames = numpy.array(frs)
+        #store power per frame in files (or load if already exists)
+
         keys = ('ripple_power', 'theta_power', 'hf_power')
         bands = ('ripple', 'theta', 'HF')
-        path = os.path.join(self.path, 'ephys/')
-        if not os.path.exists(path):
-            os.mkdir(path)
-        cfn = path + keys[0] + f'{self.lfp_ch}.npy'
+        power_getter = {'ripple': 'envelope', 'theta': 'theta', 'HF': None}
+        path = self.ripples.path
         # later extend this to use multiple channels
-        if os.path.exists(cfn):
-            for key in keys:
+        for band, key in zip(bands, keys):
+            cfn = path + key + '.npy'
+            if os.path.exists(cfn):
                 setattr(self.ephys, key, numpy.load(path + key + '.npy'))
-        else:
-            lprint(self, 'Creating ripple power files...')
-            filt = Filter.Filter(self.ephys.edat[1], fs)
-            for band, key in zip(bands, keys):
-                power = numpy.zeros(nframes)
-                locut, hicut = self.CF.bands[band]
-                ftr, envelope = filt.run_filt(filt.gen_filt(locut, hicut))
-                numpy.save(path + key + '_filtered.npy', numpy.array([ftr, envelope]))
+            else:
+                lprint(self, f'Saving {band} power file ...')
+                filt = Filter.Filter(self.ephys.trace, fs)
+                frame_power = numpy.zeros(nframes)
+                power_key = power_getter[band]
+                if power_key is not None:
+                    envelope = getattr(self.ripples, power_key)
+                else:
+                    locut, hicut = self.CF.bands[band]
+                    ftr, envelope = filt.run_filt(filt.gen_filt(locut, hicut))
                 t0, f = 0, 0
                 for t1, s in enumerate(self.ephys.frames):
                     if s > f:
                         if f < nframes:
-                            power[f] = envelope[t0:t1].mean()
+                            frame_power[f] = envelope[t0:t1].mean()
                             t0 = t1
                             f += 1
-                setattr(self.ephys, key, power)
-                numpy.save(path + key + '.npy', power)
-            lprint(self, 'power measured in bands: ' + str(bands))
+                setattr(self.ephys, key, frame_power)
+                numpy.save(cfn, frame_power)
+        # lprint(self, f'power available in bands: ' + str(bands))
+
+    def rippletrigger(self, param=None, ch=0):
+        # plot averaged time course ripp triggered. using channel
+        if param is None:
+            param = self.getparam('ntr')
+            if self.dualch:
+                param = param[..., ch]
+        length = int(self.fps)
+        nzr = self.ripple_frames
+        self.ripplerates = numpy.zeros((length, self.ca.cells))
+        brmean = numpy.empty((len(nzr), length))
+        for c in range(self.ca.cells):
+            brmean[:] = numpy.nan
+            for i, frame in enumerate(nzr):
+                if (length < frame < (self.ca.frames - length)):
+                    i0 = frame - int(length / 2)
+                    y = param[c][i0:i0+length]
+                    brmean[i, :] = y
+            brflat = numpy.nanmean(brmean, axis=0)
+            brflat -= brflat.min()
+            brflat /= brflat.max()
+            self.ripplerates[:, c] = brflat
 
     def pull_means(self, param, span, cells=None):
         # return mean of param in the bins of self.bin
@@ -285,12 +461,15 @@ class ImagingSession(object):
         self.zscores[self.pltnum] = zscores
         return zscores
 
-    def qc(self, trim=10):
+    def qc(self, trim=10, nnd=None):
         '''returns a bool mask for cells that pass qc
         trim: if >0, remove cells that are close to the top or bottom row to avoid artefacts
         '''
 
         qc_pass = numpy.any(numpy.nan_to_num(self.getparam('ntr')) > 3, axis=1)
+        if hasattr(self.ca, 'nnd') and nnd is not None:
+            nnd_pass = numpy.any(self.ca.nnd > nnd, axis=1)
+            qc_pass = numpy.logical_and(nnd_pass, qc_pass)
         if trim:
             if not self.rois.image_loaded:
                 self.rois.load_image()
@@ -502,22 +681,65 @@ class ImagingSession(object):
         sfn = self.get_file_with_suffix(f'_ROI-{self.tag}_Ch{self.ca.ch}_{epc + 1}LFP.xlsx')
         df.to_excel(sfn)
 
+    def behavior_plot(self):
+        # draw pos, draw reward zones, correct licks
+        mins = numpy.arange(0, len(self.pos.pos)) / self.fps / 60
+        rz = self.bdat['RZ']
+        licks = numpy.array(self.bdat['licks'])
+        rewards = numpy.array(self.bdat['rewards'])
+        has_rewards = numpy.zeros(len(self.pos.pos), dtype='bool')
+        r_window = int(0.5*self.fps)
+        rlim = len(self.pos.pos) - r_window
+        for r in rewards:
+            if 0 < r < rlim:
+                has_rewards[r:r+r_window] = True
+
+        self.fig, ax = plt.subplots(4, 1, figsize=(9, 6),
+                                                           gridspec_kw={'height_ratios': [1, 0.5, 0.5, 0.5, ]},
+                                                           sharex=True)
+        for ca in ax[1:]:
+            strip_ax(ca, full=False)
+        (axp, axz, axr, axl,) = ax
+        axp.scatter(mins, self.pos.pos, s=2, c=self.pos.movement, cmap='winter')
+        axp.text(0, 0, f'{int(numpy.nan_to_num(self.pos.laps).max())} laps')
+
+        for z in rz:
+            axz.axvspan(*[x / self.fps / 60 for x in z], color='#e2efda', label='zones')
+        axz.text(0, -0.5, f'{len(rz)} zones')
+        axz.set_ylim(-0.6, 0.4)
+
+        axr.scatter(rewards / self.fps / 60, numpy.zeros(len(rewards)), marker="|", s=50, label='drops')
+        axr.text(0, -0.5, f'{len(rewards)} drops')
+        axr.set_ylim(-0.6, 0.4)
+
+        try:
+            licks = licks[numpy.where(numpy.nan_to_num(licks) > 0)]
+            licks = licks[numpy.where(licks < self.ca.frames)]
+        except:
+            print(licks)
+            assert False
+        if len(licks):
+            axl.scatter(licks / self.fps / 60, numpy.zeros(len(licks)), marker="|", c=has_rewards[licks], s=50,
+                        cmap='bwr_r', label='licks')
+            axl.text(0, -0.5, f'{len(licks)} / {numpy.count_nonzero(has_rewards[licks])} licks')
+        else:
+            axl.text(0, -0.5, f'{0} licks')
+        axl.set_ylim(-0.6, 0.4)
+
+        axl.set_xlabel('Minutes')
+        for ca in ax[1:]:
+            ca.yaxis.set_ticklabels([])
+        axp.set_ylabel('Position')
+        axz.set_ylabel('Zones')
+        axr.set_ylabel('Drops')
+        axl.set_ylabel('Licks')
+        self.fig.suptitle(self.prefix)
+        self.fig.savefig(self.get_file_with_suffix('_behaviorplot.png'), dpi=300)
+        self.fig.clf()
 
 if __name__ == '__main__':
-    path = 'D:/Shares/Data/_Processed/2P/SncgTot/'
-    prefix = 'SncgTot4_2023-11-09_LFP_001'
-    tag = 'checked'
-    a = ImagingSession(path, prefix, tag=tag, ch=0)
-
-    # e = Ephys(a.procpath, a.prefix)
-    # trace = e.edat[1]
-    # r = Filter.Filter(trace, 2000)
-    # a.map_ripples()
-
-    # fig, ax = plt.subplots(nrows=3, sharex=True)
-    # ax[0].imshow(a.ca.smtr, aspect='auto')
-    # ax[0].set_ylabel('DF/F')
-    # ax[1].plot(a.pos.speed)
-    # ax[1].set_ylabel('Speed (cm/s)')
-    # ax[2].plot(a.opto)
-    # ax[2].set_ylabel('Opto stim')
+    procpath = 'D:\Shares\Data\_Processed/2P\PVTot/'
+    prefix = 'PVtot9_2024-03-07_RF_224'
+    tag = 'skip'
+    a = ImagingSession(procpath, prefix, tag=tag)
+    a.behavior_plot()

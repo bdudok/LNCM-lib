@@ -1,7 +1,14 @@
+#repo specifics
+/Proc2P/scratch_path.txt
+/BaserowAPI/LG_API_token.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+#token
+../2p_code/Utilities/LG_API_token.py
 
 # C extensions
 *.so

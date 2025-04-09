@@ -5,7 +5,7 @@ from pyedflib import highlevel
 
 class EDF:
     __name__ = 'ReadEDF'
-    def __init__(self, path, prefix, rejection_ops=None):
+    def __init__(self, path, prefix, rejection_ops=None, ch=0):
         self.path = path
         self.prefix = prefix
         if not prefix.endswith('.edf'):
@@ -16,7 +16,7 @@ class EDF:
         self.unit = d[1][0]['dimension']
         self.channels = [x['label'] for x in d[1]]
         self.rejection_ops = rejection_ops
-        self.set_channel(0)
+        self.set_channel(ch)
         self.d = d
 
     def get_TTL(self, channel='GPIO0'):
@@ -31,13 +31,16 @@ class EDF:
 
     def set_channel(self, ch):
         if type(ch) is int:
+            assert ch < len(self.channels), f'Channel {ch} not available. Channels: {self.channels}'
             chi = ch
         else:
-            if ch in self.channels:
-               chi = self.channels.index(ch)
-            else:
-                print(f'Channel {ch} not found. available: {self.channels}')
-                assert False
+            chi = None
+            for ni, chn in enumerate(self.channels):
+                if ch in chn:
+                    chi = ni
+                    break
+            assert chi is not None, f'Channel {ch} not found. available: {self.channels}'
+        self.chi = chi
         self.active_channel = self.channels[chi]
         if self.rejection_ops is not None and 'rejection_value' in self.rejection_ops:
             tr = numpy.copy(self.data[chi])
@@ -45,7 +48,10 @@ class EDF:
             rejection_step = int(self.rejection_ops['rejection_step'] * self.fs)
             rejection_tail = int(self.rejection_ops['rejection_tail'] * self.fs)
             rejection_factor = self.rejection_ops['rejection_factor']
-            min_n = int(rejection_step * rejection_factor)
+            if rejection_factor > 1.1:
+                min_n = int(rejection_factor) #use factor as n of samples
+            else:
+                min_n = int(rejection_step * rejection_factor) #use factor as ratio
 
             bad_index = numpy.where(numpy.absolute(tr) > rejection_value)[0]
             if len(bad_index) > min_n:
@@ -53,8 +59,8 @@ class EDF:
                 labels = clustering.labels_
                 for cid in range(labels.max() + 1):
                     x = bad_index[numpy.where(labels == cid)[0]]  # this is expected to be in order
-                    r_start = max(0, x.min() - rejection_step)
-                    r_stop = min(len(tr), x.max() + rejection_tail)
+                    r_start = int(max(0, x.min() - rejection_step))
+                    r_stop = int(min(len(tr), x.max() + rejection_tail))
                     tr[r_start:r_stop] = 0
             self.trace = tr
             self.raw_trace = self.data[chi]
@@ -63,6 +69,6 @@ class EDF:
             self.raw_trace = None
 
 if __name__ == '__main__':
-    path = 'D:\Shares\Data\_RawData\Pinnacle\Tottering\Tot6_Tottering++/'
-    fn = 'Tot6_0014_2023-12-27_11_00_59_TS_2023-12-27_11_00_59_export.edf'
-    a = EDF(path+fn)
+    path = 'D:\Shares\Data\_RawData\Pinnacle\Kainate\VKPV6/2024-03-25/'
+    fn = 'VKPV6_2024-03-25_2024-03-25_12_31_50_TS_2024-03-25_14_31_50_export.edf'
+    a = EDF(path, fn)

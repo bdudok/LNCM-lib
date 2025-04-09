@@ -6,17 +6,18 @@ from scipy import signal
 import pandas
 import shutil
 from Proc2P.Bruker.SyncTools import Sync
-from Proc2P.utils import lprint, gapless, outlier_indices
+from Proc2P.utils import lprint, gapless, outlier_indices, logger
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from Proc2P.Bruker.ConfigVars import CF
 from matplotlib import pyplot as plt
+from _Dependencies.S2P.dcnv import oasis
 
 
 class CaTrace(object):
     __name__ = 'CaTrace'
     def __init__(self, path, prefix, verbose=False, bsltype='poly', exclude=(0, 0), peakdet=False, ch=0, invert=False,
-                 tag=None):
+                 tag=None, last_bg=None):
         if verbose:
             print(f'Firing called with ch={ch}, tag={tag}')
         self.peakdet = peakdet  # removed peakdet from old Firing class, this doesn't do anything.
@@ -24,6 +25,9 @@ class CaTrace(object):
         self.prefix = prefix
         self.opPath = os.path.join(self.path, self.prefix + '/')
         self.is_dual = False
+        self.log = logger()
+        self.log.set_handle(path, prefix)
+        self.last_bg = last_bg # if True, will use the last ROI to correct for background before baseline fitting
         # parse channel
         if ch in (0, 'Ch2', 'First', 'Green'):
             ch = 0
@@ -39,7 +43,7 @@ class CaTrace(object):
         self.tag = tag
         self.pf = self.opPath + f'{prefix}_trace_{tag}-ch{ch}'  # folder name
         self.sync = Sync(path, prefix)
-        self.keys = ['bsl', 'rel', 'ntr', 'trace', 'smtr', ]
+        self.keys = ['bsl', 'rel', 'ntr', 'trace', 'smtr',]
         self.verbose = verbose
         self.bsltype = bsltype
         self.exclude = exclude
@@ -50,6 +54,12 @@ class CaTrace(object):
 
     # def open_trace(self):
     #     self.open_raw(trace=numpy.load(self.pf))
+
+    def deconvolve(self, batch=1000, tau=0.75, fs=None):
+        X = self.rel
+        if fs is None:
+            fs = float(self.version_info['fps'])
+        self.nnd = oasis(X - numpy.min(X, axis=0), batch_size=batch, tau=tau, fs=fs)
 
     def open_raw(self, trace=None):
         # init containers and pool
@@ -80,20 +90,27 @@ class CaTrace(object):
         try:
             self.movement = gapless(self.sync.load('speed'))
         except:
-            lprint(self, 'movement not found')
+            lprint(self, 'movement not found', logger=self.log)
             self.movement = numpy.zeros(self.frames, dtype=numpy.bool)
         # save outlier data points to exclude from analysis:
         # mask with bad frames
         self.ol_index = []
-        bad_frames = self.sync.load('opto')
+        bad_frames = self.sync.load('opto', suppress=True)
         if bad_frames is not None:
+            lprint(self, f'{len(bad_frames)} opto frames excluded from baseline fit', logger=self.log)
             self.ol_index.extend(bad_frames)
         self.ol_index.extend(outlier_indices(numpy.nanmean(self.trace, axis=0), thresh=12))
 
     def pack_data(self, c):
-        tr = self.trace[c]
-        if self.invert:
-            tr = numpy.nanmax(tr) - tr
+        if self.last_bg is not None:
+            if self.last_bg is False:
+                tr = self.trace[c]
+            elif self.last_bg is True:
+                tr = self.trace[c] - self.trace[-1]
+            else:
+                raise ValueError(f'{self.last_bg} not implemented for bg correction')
+        else:
+            tr = self.trace[c]
         return c, tr, self.bsltype, self.movement, self.exclude, self.peakdet, self.ol_index
 
     def unpack_data(self, data):
@@ -103,7 +120,10 @@ class CaTrace(object):
             print('Saving cell ' + str(c))
         for att in self.keys:
             # print('saving', att, self.__getattribute__(att).shape, data[att].shape)
-            self.__getattribute__(att)[c] = data[att]
+            tr = data[att]
+            if self.invert:
+                tr = numpy.nanmax(tr) - tr
+            self.__getattribute__(att)[c] = tr
 
         self.computed_cells += 1
         if self.computed_cells == self.cells:
@@ -118,11 +138,12 @@ class CaTrace(object):
         os.mkdir(self.pf)
         for key in self.keys:
             numpy.save(self.pf + '//' + key, self.__getattribute__(key))
-        self.version_info = {'v': '11', 'bsltype': self.bsltype,
+        self.version_info = {'v': '12', 'bsltype': self.bsltype,
                              'channel': str(self.ch),
-                             'fps': str(CF.fps)}  # should contain only single strings as values
+                             'fps': str(CF.fps),
+                             'bg_corr':str(self.last_bg)}  # should contain only single strings as values
         numpy.save(self.pf + '//' + 'info', self.version_info)
-        lprint(self, self.prefix, self.cells, 'cells saved.')
+        lprint(self, self.prefix, self.cells, 'cells saved.', f'Tag: {self.tag}, Ch: {self.ch}', logger=self.log)
 
     def load(self):
         if not os.path.exists(self.pf):
@@ -177,8 +198,11 @@ class CaTrace(object):
             for pair in vtx[1:-1].split(','):
                 key, value = [x.strip()[1:-1] for x in pair.strip().split(':')]
                 self.version_info[key] = value
+            if 'bg_corr' in self.version_info:
+                self.last_bg = bool(self.version_info['bg_corr'] == 'True')
         else:
             self.version_info = {'v': '<4', 'bsltype': 'original'}
+        return True
 
     def repair_outliers(self):
         pass
@@ -195,6 +219,7 @@ class CaTrace(object):
 
 
 class Worker(Process):
+    __name__ = 'CaTrace-Worker'
     def __init__(self, queue, res_queue, verbose=False):
         super(Worker, self).__init__()
         self.queue = queue
@@ -269,7 +294,7 @@ class Worker(Process):
                     for i in range(frames):
                         bsl[i] = numpy.polyval(poly, i)
                     if numpy.any(bsl < 0):
-                        lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline')
+                        lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline',)
                         bsltype = 'original'
                 if bsltype in ['original', 'both']:  # both not implemented
                     for t in range(frames):
@@ -279,6 +304,7 @@ class Worker(Process):
                         else:
                             minv = numpy.nan_to_num(smw[ti0])
                         bsl[t] = minv
+                    bsl[0] = bsl[1]
                 rel = (data - bsl) / bsl
                 ntr = rel / numpy.nanstd(rel)
                 # additional iteration for more accurate noise levels
@@ -286,6 +312,8 @@ class Worker(Process):
                 ontr = numpy.copy(ntr)
                 # ewma
                 smtr = numpy.array(pandas.DataFrame(ntr).ewm(span=CF.fps).mean()[0])
+                # deconvolution
+                # nnd = oasis(ntr-numpy.nanmin(ntr, axis=0), batch_size=1000, tau=0.75, fs=fps)
 
             result = {'trace': data, 'bsl': bsl, 'rel': rel, 'ntr': ntr, 'smtr': smtr}
             self.res_queue.put((c, result))

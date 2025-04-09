@@ -68,6 +68,8 @@ class LoadImage(object):
         self.info = {'sz': (self.imdat.Ly, self.imdat.Lx)}
         self.nframes = self.imdat.n_frames
         self.nplanes = 1
+        if not len(self.imdat.channel_keys):
+            self.imdat.find_alt_path()
         self.channels = self.imdat.channel_keys
 
     def get_frame(self, frame, ch=None, zplane=0):
@@ -79,8 +81,7 @@ class LoadImage(object):
     def show_field(self):
         preview_fn = self.opPath + self.prefix + '_preview.tif'
         pic = tifffile.imread(preview_fn)
-        #return as multi channel
-        if self.imdat.n_channels < 2:
+        if len(pic.shape) < 3:
             rgb_array = numpy.zeros((*pic.shape, 3), dtype='uint8')
             rgb_array[..., 1] = 255 * pic / pic.max()
         else:
@@ -102,8 +103,9 @@ class FrameDisplay(object):
         self.preview = None
 
     def load_image(self):
-        self.image = LoadImage(self.procpath, self.prefix, )
-        self.image_loaded = True
+        if not self.image_loaded:
+            self.image = LoadImage(self.procpath, self.prefix, )
+            self.image_loaded = True
 
     def get_preview(self, ch=1):
         if self.preview is None:
