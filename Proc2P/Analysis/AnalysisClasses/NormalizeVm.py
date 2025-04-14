@@ -62,6 +62,8 @@ def normalize_trace(session: ImagingSession):
         fitg[:] = numpy.nan
         for fi in (0, 1):
             rY = locq[fi][xvals]
+            if len(rY) < 5:
+                continue
             fitq = arima_filtfilt(rY)
             # interpolate and gaussian filter
             fitg[fi, predx] = gaussian_filter(numpy.interp(predx, xvals, fitq), sigma=int(fps * gauss_sigma))

@@ -148,9 +148,9 @@ class Cfg:
         Label(self.frame, text='Plot config').grid(row=self.row(), pady=10)
         Label(self.frame, text='Parameter').grid(row=self.row())
         MODES = ['Raw', u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F', 'EWMA',
-                 u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F (z)', 'NND', 'smtr', ]
+                 u"\N{GREEK CAPITAL LETTER DELTA}" + 'F/F (z)', 'NND', 'smtr', 'Vm']
         self.config['param'] = StringVar()
-        self.config['param'].set(MODES[-1])
+        self.config['param'].set(MODES[-2])
         for r, text in enumerate(MODES):
             Radiobutton(self.frame, text=text, variable=self.config['param'], value=text).grid(row=self.row(),
                                                                                                sticky=N + W)
@@ -319,7 +319,8 @@ class View:
                        'AUPeaks': 'aupeaks',
                        'NND': 'nnd',
                        'ontr': 'ontr',
-                       'Raw': 'trace'
+                       'Raw': 'trace',
+                       'Vm': 'vm',
                        }
         param = resolvedict[self.parent.pltconfigs.config['param'].get()]
         if param == 'ewma':

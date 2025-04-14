@@ -193,7 +193,7 @@ class DataSet:
             clist.sort()
         self.set_field(prefix, cellfield, json.dumps(clist))
 
-    def get_cells(self, prefix, roi_tag, alt_tag=None):
+    def _get_cells(self, prefix, roi_tag, alt_tag=None):
         rets = {}
         for suffix in ('Incl', 'Excl'):
             cellfield = f'Cells.{roi_tag}.{suffix}'
@@ -214,6 +214,14 @@ class DataSet:
                 return [c for c in incl if c not in excl]
             else:
                 return incl
+
+    def get_cells(self, *args, **kwargs):
+        cells = self._get_cells(*args, **kwargs)
+        if not type(cells) is list:
+            return None
+        if not len(cells):
+            return None
+        return cells
 
     def get_incl(self, key="Incl", excl=None):
         '''
