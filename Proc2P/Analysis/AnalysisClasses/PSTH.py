@@ -201,7 +201,7 @@ class PSTH:
                 events, mask = events
             fill_line = False
             if self.param_key == 'pupil':
-                line = a.map_eye(model_name=self.pull_function_kwargs.get('model_name', None))
+                line = a.map_eye(model_name=self.pull_function_kwargs.get('model_name', 'final'))
                 fill_line = True
             elif self.param_key == 'face':
                 # line = load_face(a, self.path + self.eyepath, prefix)
