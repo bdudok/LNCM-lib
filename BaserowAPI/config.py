@@ -31,6 +31,7 @@ config = {
         'Project': 4637,
         'Image.ID': 4517,
         'Archive': 5011,
+        'User': 5020,
     },
     "LogID": {
         'Name': 4995,

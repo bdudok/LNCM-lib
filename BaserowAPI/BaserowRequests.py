@@ -22,11 +22,12 @@ class GetSessions:
             self.sex_cache[a_tag] = self.get_mouse(mtag=a_tag, ret_sex=True)
         return a_tag, self.sex_cache[a_tag]
 
-    def search(self, project, task=None, incltag=None, more_filters=None):
+    def search(self, project=None, task=None, incltag=None, user=None, more_filters=None):
         '''
-        :param project: string to search the Project field
+        :param project: string to search the Project field, None to ignore
         :param task: string to search the Task field, None to ignore
         :param incltag: string to search the InclTag field, None to ignore
+        :param user: string to search the User field, None to ignore
         :param more_filters: pass a list of 2-tuples for additional searches (key, value)
         :return: DataFrame of the search result
         '''
@@ -37,6 +38,8 @@ class GetSessions:
             params[f"filter__field_{self.get_field('Task')}__contains"] = task
         if incltag is not None:
             params[f"filter__field_{self.get_field('InclTag')}__contains"] = incltag
+        if user is not None:
+            params[f"filter__field_{self.get_field('User')}__contains"] = user
         if more_filters is not None:
             for key, value in more_filters:
                 params[key] = value
