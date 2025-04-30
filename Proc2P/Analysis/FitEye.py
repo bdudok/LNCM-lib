@@ -19,13 +19,15 @@ class FitEye:
      outliers.
      '''
 
-    def __init__(self, path, thr=0.2, filter=True, overwrite=False, model_name=None, debug=False, input_pattern='.csv'):
+    def __init__(self, path, thr=0.2, filter=True, overwrite=False, model_name=None, debug=False, input_pattern='.csv',
+                 filt_coord_names='P'):
         '''
         :param path: where the coords are. get from ImagingSession.get_face_path()
         :param thr: likelihood threshold for dropping body part markers.
         :param filter: if True, markers are filtered with ARIMA.
         :param overwrite: if False, loads files from previous run
         :param model_name: look for this subfolder if specified
+        :param filt_coord_names: substring of bodyparts that will be included
         '''
         if model_name is None:
             self.path = path
@@ -37,6 +39,7 @@ class FitEye:
         self.ellipse_fn = os.path.join(self.path, f'_ellipse_fit_{int(thr*100)}{filt_str}.npy')
         self.eye_trace_fn = os.path.join(self.path, f'_pupil_trace_{int(thr*100)}{filt_str}.npy')
         self.coords_fn = os.path.join(self.path, f'_pupil_coords_{int(thr*100)}{filt_str}.npy')
+        self.filt_coord_names = filt_coord_names
         if not debug:
             if not os.path.exists(self.eye_trace_fn) or overwrite:
                 self.load_coords(filter=filter, overwrite=overwrite, pattern=input_pattern)
@@ -70,6 +73,8 @@ class FitEye:
         :param pattern: which DLC file to load if there are multiple. May include model, shuffle and snapshot info.
         :return: ndarray shape(frames, bodyparts, (x,y,z)).
         '''
+        filt_coord_names = self.filt_coord_names
+        assert filt_coord_names is not None
         if not overwrite and os.path.exists(self.coords_fn):
             self.coords = numpy.load(self.coords_fn)
             return self.coords
@@ -83,7 +88,7 @@ class FitEye:
         df = pandas.read_csv(os.path.join(self.path, fn), header=[0,1,2]) #3 levels of labels
         #1st is scorer, 2 is bodypart, 3 is x/y/likelihood
         #reshape to x,y,likelihood of each coord.
-        pupil_cols = [col for col in df.columns if 'upil' in col[1]]
+        pupil_cols = [col for col in df.columns if filt_coord_names in col[1]]
         df = df[pupil_cols]
         #filter the points
         raw_coords = df.values.reshape((df.shape[0], df.shape[1]//3, 3))

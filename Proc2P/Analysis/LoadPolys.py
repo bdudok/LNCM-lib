@@ -93,7 +93,7 @@ class FrameDisplay(object):
     # future: instead of passing these paths, use the session info dict instead
 
     def __init__(self, procpath, prefix, raw=False, force=None, tag=None, lazy=False):
-        if tag not in ('skip', 'off'):
+        if tag not in ('skip', 'off', 'dummy'):
             self.polys = LoadPolys(procpath, prefix, tag)
         self.procpath = procpath
         self.prefix = prefix

@@ -163,11 +163,11 @@ class CaTrace(object):
                     lprint(self, 'Loading traces from', pf)
                 break
         if not os.path.exists(self.pf):
-            if self.tag not in ('skip', 'off'):
-                raise FileNotFoundError(f'Make sure the .np folder exists: {self.pf}\nPath is: {os.getcwd()}')
-            else:
+            if self.tag in ('skip', 'off', 'dummy'):
                 lprint(self, 'skipped loading ca')
                 return -1
+            else:
+                raise FileNotFoundError(f'Make sure the .np folder exists: {self.pf}\nPath is: {os.getcwd()}')
         for key in self.keys:
             fn = self.pf + '//' + key + '.npy'
             if os.path.exists(fn):
@@ -206,6 +206,14 @@ class CaTrace(object):
         else:
             self.version_info = {'v': '<4', 'bsltype': 'original'}
         return True
+
+    def dummy_load(self, n_frames):
+        dummy_trace = numpy.zeros((1, n_frames))
+        for key in self.keys:
+            self.__setattr__(key, dummy_trace)
+        self.cells, self.frames = 1, n_frames
+        self.channels = 1
+        self.is_dual = False
 
     def repair_outliers(self):
         pass

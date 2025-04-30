@@ -85,6 +85,8 @@ class ImagingSession(object):
         # load processed traces
         self.ca = CaTrace(procpath, prefix, tag=tag, ch=ch)
         self.has_ca = self.ca.load() is True
+        if tag == 'dummy':
+            self.ca.dummy_load(int(self.si['n_frames']))
         self.ftimes = numpy.load(self.get_file_with_suffix('_FrameTimes.npy'))
 
         # load photostimulation if available:
