@@ -1,5 +1,6 @@
 import os.path
 from Proc2P.Analysis.ImagingSession import ImagingSession
+from Proc2P.Analysis.AnalysisClasses.NormalizeVm import arima_filtfilt
 from Proc2P.utils import lprint, outlier_indices
 from datetime import datetime
 import pandas
@@ -203,10 +204,10 @@ class PSTH:
             if self.param_key == 'pupil':
                 line = a.map_eye(model_name=self.pull_function_kwargs.get('model_name', 'final'))
                 fill_line = True
-            elif self.param_key == 'face':
-                # line = load_face(a, self.path + self.eyepath, prefix)
-                line = load_face(a, self.eyepath, prefix)
-                fill_line = True
+            # elif self.param_key == 'face':
+            #     # line = load_face(a, self.path + self.eyepath, prefix)
+            #     line = load_face(a, self.eyepath, prefix)
+            #     fill_line = True
             elif self.param_key == 'speed':
                 line = a.pos.speed
                 fill_line = True
@@ -313,6 +314,8 @@ class PSTH:
                             param[ci] = b_param[cj]
                     else:
                         param = b_param
+            if self.pull_function_kwargs.get('fillnan'):
+                line = arima_filtfilt(line)
             if fill_line:
                 param = numpy.zeros(a.ca.rel.shape)
                 l_dat = min(len(line), a.ca.frames)
