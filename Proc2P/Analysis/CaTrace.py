@@ -148,6 +148,20 @@ class CaTrace(object):
         numpy.save(self.pf + '//' + 'info', self.version_info)
         lprint(self, self.prefix, self.cells, 'cells saved.', f'Tag: {self.tag}, Ch: {self.ch}', logger=self.log)
 
+
+    #these functions are used to save additional time series shaped (c, f) in the traces folder.
+    def save_custom(self, key, value):
+        numpy.save(self.pf + '//' + key, value)
+
+    def get_custom(self, key):
+        if not hasattr(self, key):
+            fn = self.pf + '//' + key + '.npy'
+            if os.path.exists(fn):
+                self.__setattr__(key, numpy.load(fn))
+            else:
+                raise FileNotFoundError(f'{key} not available at {self.pf}')
+        return self.__getattribute__(key)
+
     def load(self):
         if not os.path.exists(self.pf):
             self.pf = self.opPath + f'{self.prefix}_trace_{self.tag}'
@@ -214,9 +228,6 @@ class CaTrace(object):
         self.cells, self.frames = 1, n_frames
         self.channels = 1
         self.is_dual = False
-
-    def repair_outliers(self):
-        pass
 
     def get_npc(self, components=1):
         cells = []

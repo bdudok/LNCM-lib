@@ -247,6 +247,9 @@ class ImagingSession(object):
                     self.ca.keys.append('vm')
                     self.ca.load()
                 param = self.ca.vm
+            elif 'custom' in param:
+                ckey = param.split('custom')[1]
+                param = self.ca.get_custom(ckey)
             # elif param == 'peaks':
             #     self.disc_param = True
             #     param = numpy.nan_to_num(self.ca.peaks.astype('bool'))
