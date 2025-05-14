@@ -17,7 +17,7 @@ If cloning the conda  env doesn't work, here are the steps to start from scratch
 =======
 - conda create -n py36 python=3.6
 - conda activate py36
->>>>>>> origin/main
+
 
 - conda install shapely
 - pip install sima pandas

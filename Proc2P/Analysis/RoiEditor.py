@@ -10,7 +10,12 @@ import cv2
 import numpy
 import zipfile
 from shapely.geometry import Polygon, Point
-import sima
+import sys
+if sys.version_info < (3, 7):
+    import sima
+    sima_available = True
+else:
+    sima_available = False
 from multiprocessing import Process
 from TkApps import SourceTarget, PickFromList, ShowMessage
 import copy
@@ -429,7 +434,7 @@ class Gui:
     def lasso_callback(self, mode):
         # add rois included in lasso
         ps = Lasso(self, mode).retval
-        if ps is -1:
+        if ps == -1:
             return
         if 'add' in mode:
             rois = []
@@ -573,7 +578,7 @@ class Gui:
             #     self.zoom_flag = not self.zoom_flag
             # elif event == cv2.EVENT_LBUTTONDOWN:
             ps = Newroi(self, x, y).retval
-            if not ps is -1:
+            if ps != -1:
                 for p in ps:
                     self.saved_rois.append(p)
                     self.saved_paths.append(mplpath.Path(p))
@@ -829,8 +834,7 @@ class RoiEditor(object):
     @staticmethod
     def save_roi(roi_list, fn, image_shape, translate=(0, 0)):
         rois_chunk = 1000
-        rois = numpy.empty((rois_chunk, 3), dtype='int32')
-        rois[:] = numpy.nan
+        rois = numpy.zeros((rois_chunk, 3), dtype='int32')
         roi_counter = 0
         junk_roi = numpy.ones((3, 3))
         translate = numpy.array(translate)
@@ -892,7 +896,11 @@ class RoiEditor(object):
         coords[:, 1] = numpy.minimum(coords[:, 1], image_shape[0] - 1)
         return coords
 
-    def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config={}, exclude_opto=True, log=None):
+    def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config={}, exclude_opto=True,
+                   log=None):
+        if not sima_available:
+            print('For using segmentation, run using 3.6 env (2pcode36)' )
+            raise EnvironmentError('SIMA not compatible with current Python version.')
         approach = list(approach)
         prefix = self.prefix
         im = self.img.image
