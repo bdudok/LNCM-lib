@@ -160,6 +160,9 @@ class FitEye:
         ED = numpy.load(self.ellipse_fn)
         eye_trace = self.get_trace()
 
+        if numpy.count_nonzero(numpy.logical_not(numpy.isnan(eye_trace))) < 10:
+            return -1
+
         # get 9 frames
         notna_indices = numpy.where(numpy.logical_not(numpy.isnan(eye_trace)))[0]
         pick_9 = [int(len(notna_indices) * ((x / 10)+0.05)) for x in range(9)]
