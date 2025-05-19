@@ -72,8 +72,8 @@ class DataSet:
         if ver == 'current':
             assert not self.readonly_flag
         elif ver == 'next':
-            self.report()
             self.get_current_ver(incr=1)
+            self.report()
         if self.mod_flag:
             self.df.to_feather(self.get_fn())
             self.mod_flag = False

@@ -1,3 +1,5 @@
+import os.path
+
 from scipy.ndimage import gaussian_filter
 from statsmodels.tsa.arima.model import ARIMA
 import numpy
@@ -85,9 +87,10 @@ class Worker(Process):
 
     def run(self):
         for data in iter(self.queue.get, None):
-            path, prefix, tag = data
+            path, prefix, tag, overwrite = data
             session = ImagingSession(path, prefix, tag, norip=True)
-            normalize_trace(session)
+            if overwrite or not os.path.exists(os.path.join(session.pf, 'vm.npy')):
+                normalize_trace(session)
             self.res_queue.put(prefix)
 
 def arima_filtfilt(y, filter_order=(1, 1, 1)):
