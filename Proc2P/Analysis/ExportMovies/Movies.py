@@ -77,7 +77,7 @@ class Movie:
         h, w = 0, 0
         if session is not None:
             path, prefix = session
-            self.session = ImagingSession(path, prefix, tag=tag) # we will use this to get conversions
+            self.session = ImagingSession(path, prefix, tag=tag)  # we will use this to get conversions
             # from time -> to frame, sample, video frame, etc
             self.fps_precision = 0.5 / self.session.fps
         for p in panels:
@@ -118,7 +118,7 @@ class Movie:
             # TODO this needs to be updated to new time/frame logic.
             assert False
             for t in numpy.arange(start, stop, float(fps) * playback_speed / vrate):
-                if prog > fps: #to limit on-screen refresh rate for performance, all frames get rendered in output.
+                if prog > fps:  # to limit on-screen refresh rate for performance, all frames get rendered in output.
                     cv2.waitKey(3)
                     prog = 0
                 prog += 1
@@ -152,7 +152,6 @@ class Movie:
                 self.current_2P_frame = int(self.time * self.session.fps)
             self.previous_frame_lookup = self.time
         return self.current_2P_frame
-
 
     def tbonChange(self, v):
         t = cv2.getTrackbarPos('Time', self.title)
@@ -444,8 +443,8 @@ class Panel_MouseCam(Panel):
         super().__init__(p)
         self.crop = crop
         self.cam_file = cam_file
-        self.need_session = False #but parent needs session
-        self.movie_frame = 0 #frame in the input video file
+        self.need_session = False  # but parent needs session
+        self.movie_frame = 0  # frame in the input video file
         self.gamma = numpy.array([((i / 255.0) ** (1.0 / gamma)) * 255 for i in numpy.arange(0, 256)]).astype('uint8')
         # for picklability:
         self.cam = None
@@ -459,7 +458,7 @@ class Panel_MouseCam(Panel):
         self.syncframes = self.parent.session.ca.sync.load('cam')
 
     def run_update(self):
-        #if time_to_frame is slow, we can 1) do it in parent once per update, 2) unless necessary to avoid, use time/fps
+        # if time_to_frame is slow, we can 1) do it in parent once per update, 2) unless necessary to avoid, use time/fps
         next_frame = self.syncframes[self.parent.get_2p_frame()]
 
         if next_frame != self.movie_frame:
@@ -901,19 +900,16 @@ class Panel_MouseCam(Panel):
 class Sliding_LFP(Panel):
     '''This doesn't update every second but shows a resampled lfp that is continous bw duration'''
 
-    def __init__(self, p, prefix, fps, refresh, session_length, length='minute', title=None, color=None):
+    def __init__(self, p, length=30, title=None, color=None):
         super().__init__(p)
-        self.prefix = prefix
-        self.samplerate = 10000
-        self.refresh = float(fps) / refresh
         self.pts = []
+        self.length = length
         self.title = title
-        self.session_length = session_length
-        if length == 'minute':
-            self.length = 30 * self.samplerate
         if color is None:
             color = (112, 195, 237)
         self.color = color
+        self.nyquistrate = 2.7
+
         # for picklability:
         self.trace = None
         self.ephysframes = None
@@ -921,32 +917,35 @@ class Sliding_LFP(Panel):
         self.plot_y = None
 
     def nonpickle_init(self):
-        a = numpy.fromfile(self.prefix + '.ephys', dtype='float32')
-        b = numpy.reshape(a, (int(len(a) / 2), 2))
-        trace = b[:, 1]
-        self.ephysframes = b[:, 0]
+        self.samplerate = self.parent.session.si.info['fs']
+
+        # downsample the entire trace at the start.
+        trace = numpy.copy(self.parent.session.ephys.trace)
+        nsamples = len(trace)
         trace -= trace.mean()
         trace /= numpy.percentile(numpy.absolute(trace), 99) * 1.5
-        self.trace = trace
-        y = numpy.copy(trace)
         l = self.p[2]
-        session_pixels = self.session_length * l
-        factor = len(y) / l
+        session_duration = len(trace) / self.samplerate
+        session_pixels = round((session_duration / (2 * self.length)) * l * self.nyquistrate)
+        factor = len(trace) / session_pixels
         while factor > 10:
-            y = decimate(y, 10)
-            factor = len(y) / l
-        y = resample(y, int(session_pixels) + 1)
-        self.plot_y = y
-        self.resampling_factor = len(trace) / len(y)
+            trace = decimate(trace, 10)
+            factor = len(trace) / session_pixels
+        trace = resample(trace, session_pixels)
+        self.plot_y = trace
+        self.resampling_factor = nsamples / len(trace)
+        self.halfscreen = int(self.length * self.samplerate / self.resampling_factor)
 
     def run_update(self):
-        sample = numpy.argmax(self.ephysframes > (int(self.frame / self.refresh)))
-        t0 = int(max(0, sample - self.length) / self.resampling_factor)
-        t1 = int(min((sample + self.length) / self.resampling_factor, len(self.plot_y)))
+        sample = self.parent.session.frametosample(self.parent.get_2p_frame()) / self.resampling_factor
+        t0 = int(max(0, sample - self.halfscreen))
+        t1 = int(min(sample + self.halfscreen, len(self.plot_y)))
 
         h = int(self.p[3] / 2)
         l = self.p[2]
-        x = numpy.arange(t1 - t0)
+        xmin = l / 2 - (sample - t0) / self.nyquistrate
+        xmax = l / 2 + (t1 - sample) / self.nyquistrate
+        x = numpy.linspace(xmin, xmax, t1-t0)
         self.im = numpy.ones((2 * h, l, 3), dtype=numpy.uint8) * 255
         self.im[:, l // 2, :] = 0
         y = self.plot_y[t0:t1] * h + h
@@ -970,8 +969,8 @@ if __name__ == '__main__':
     fps = 25
     refresh = 20
     # # p1 = TestPanel((0,0,256,256))
-    cam_file = r'D:\\Shares\\Data\\_RawData\\Bruker\\LFP-Pupil\\JEDI-Sncg80_2025-04-18_lfp_005-000/JEDI-Sncg80_2025-04-18_lfp_005.avi'
-    cam = Panel_MouseCam(0, 0, cam_file, fps, refresh)
+    # cam_file = r'D:\\Shares\\Data\\_RawData\\Bruker\\LFP-Pupil\\JEDI-Sncg80_2025-04-18_lfp_005-000/JEDI-Sncg80_2025-04-18_lfp_005.avi'
+    # cam = Panel_MouseCam(0, 0, cam_file, fps, refresh)
     # cx, cy = cam.p[2:]
     # field = Panel_2PMovie(cx, 0, prefix, fps, refresh)
     # gx, gy = field.p[2:]
