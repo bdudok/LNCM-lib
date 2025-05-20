@@ -28,19 +28,19 @@ class LoadAvi:
         retval = self.frame
         if retval is not None:
             ret, frame = self.im.read()
-            self.cache_frame(self.index+1, frame)
+            if frame is not None:
+                self.cache_frame(self.index + 1, frame)
             retval = self.frame
         return retval
-
-
-
 
     def cache_frame(self, index, frame):
         self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         self.frame_buffer[index] = self.frame
 
+
 class WriteAvi:
     __name__ = 'WriteAvi'
+
     def __init__(self, handle, shape, vidformat='avi', framerate=20.0):
         self.outfile_handle = handle
         self.shape = shape
