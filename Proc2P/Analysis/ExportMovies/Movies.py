@@ -99,6 +99,7 @@ class Movie:
 
         # start timer to call update
         if not testing and render is None:
+            self.sliders_enabled = True
             for _ in iter(trig.recv, None):
                 cv2.waitKey(10)
                 if cv2.getWindowProperty(self.title, 0) < 0:
@@ -108,6 +109,7 @@ class Movie:
 
         # or render all frames in file:
         if render is not None:
+            self.sliders_enabled = False
             vrate = self.refresh_rate
             start, stop = render
             if output_filename is None:
@@ -115,15 +117,12 @@ class Movie:
             fourcc = cv2.VideoWriter_fourcc(*'DIVX')
             out = cv2.VideoWriter(output_filename, fourcc, vrate, vres)
             prog = 0
-            # TODO this needs to be updated to new time/frame logic.
-            assert False
-            for t in numpy.arange(start, stop, float(fps) * playback_speed / vrate):
-                if prog > fps:  # to limit on-screen refresh rate for performance, all frames get rendered in output.
-                    cv2.waitKey(3)
+            self.time = start
+            while self.time < stop:
+                if prog > refresh_rate:
+                    cv2.waitKey(3) # to allow rendering occasional frames while exporting
                     prog = 0
                 prog += 1
-                frame = int(t)
-                cv2.setTrackbarPos('Time', self.title, frame)
                 self.tick()
                 out.write(cv2.resize(self.img, vres))
             out.release()
@@ -154,10 +153,11 @@ class Movie:
         return self.current_2P_frame
 
     def tbonChange(self, v):
-        t = cv2.getTrackbarPos('Time', self.title)
-        if int(t) != int(self.time):
-            self.time = t
-            self.slider_moved = True
+        if self.sliders_enabled:
+            t = cv2.getTrackbarPos('Time', self.title)
+            if int(t) != int(self.time):
+                self.time = t
+                self.slider_moved = True
 
     def onCellChange(self, v):
         self.cell = cv2.getTrackbarPos('Cell', self.title) - 1
