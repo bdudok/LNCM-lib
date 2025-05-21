@@ -19,7 +19,7 @@ import time
 from scipy import stats
 from Proc2P.Bruker.Video import CropVideo
 from Video.PullMotion import pull_motion_energy
-
+from sklearn.neighbors import KernelDensity
 
 
 
@@ -380,6 +380,29 @@ class ImagingSession(object):
                 print(f'using seizures from {fname}')
                 break
 
+    def map_instrate(self):
+        '''get the instantaneous rate of LFP spikes in each 2P imaging frame'''
+        mapped_fn = self.get_file_with_suffix(f'_Ch{self.lfp_ch}_instrate_mapped.npy')
+        if os.path.exists(mapped_fn):
+            return numpy.load(mapped_fn)
+        else:
+            spikes = read_excel(self.get_file_with_suffix(f'_Ch{self.lfp_ch}_spiketimes.xlsx'))
+            spk_times = spikes['SpikeTimes(s)'].values
+            nframes = self.si.info['n_frames']
+            X = self.ftimes[1:-1, 0] # skip first and last frames, because ephys samples may not align with imaging
+            spkrate = numpy.zeros(nframes)
+            # fitting a gaussian kernel on the event distribution.
+            # higher value for bandwidth = more smoothing. the 1/3 sec works very well for
+            #  approximating a rolling count of spikes within 1 sec
+            kde_bandwidth = 1/3
+            kde = KernelDensity(kernel='gaussian', bandwidth=kde_bandwidth).fit(spk_times.reshape(-1, 1))
+            inst_rate = numpy.exp(kde.score_samples(X.reshape(-1, 1)))[1:]  # this returns log prob density, so we exp it
+            # calibrate to Hz. the returned probability density does not have units.
+            mean_freq = len(spk_times) / X[-1]
+            inst_rate *= mean_freq / inst_rate.mean()
+            spkrate[2:-1] = inst_rate
+            numpy.save(mapped_fn, spkrate)
+            return spkrate
 
     def map_ripples(self):
         fs = self.si['fs']
