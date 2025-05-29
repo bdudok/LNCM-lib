@@ -16,8 +16,19 @@ class GetSessions:
     def get_field(self, key):
         return config['FieldID'].get(key, None)
 
-    def get_sex(self, prefix):
-        a_tag = prefix.split('_')[0]
+    def get_sex(self, prefix=None, item=None):
+        '''
+        Get the name and sex of the mouse.
+        :param prefix: If provided, item is looked up from db using prefix.
+        :param item: pass the row from the db instead of the session prefix to ensure using correct mouse info
+        :return: (mouse_name, sex)
+        '''
+        if item is None:
+            item = self.get_session(prefix).iloc[0]
+            # we have to do it because prefix is not always correct for mouse info
+        a_tag = item['Mouse.ID']
+        if type(a_tag) != str:
+            a_tag = a_tag[0]['value']
         if a_tag not in self.sex_cache:
             self.sex_cache[a_tag] = self.get_mouse(mtag=a_tag, ret_sex=True)
         return a_tag, self.sex_cache[a_tag]
@@ -155,6 +166,21 @@ class GetSessions:
                 print(f'Value type is: {t}')
         return out_dict
 
+    @staticmethod
+    def parse_config(item):
+        '''
+        Return the stim duration and intensity, if a json is present
+        :param item: a line from the db
+        :return: (dur, int)
+        '''
+        config_json = item["Stim.Config"]
+        keys = 'vnflp'
+        if config_json is not None and type(config_json) != float and len(config_json):
+            if all([x in config_json for x in keys]):
+                config = json.loads(config_json)
+                return float(config["l"]), float(config["p"])
+        else:
+            return None, None
 
 
 class PutLogEntries:
