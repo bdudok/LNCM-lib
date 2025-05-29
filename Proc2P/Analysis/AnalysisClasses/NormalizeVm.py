@@ -89,7 +89,7 @@ class Worker(Process):
         for data in iter(self.queue.get, None):
             path, prefix, tag, overwrite = data
             session = ImagingSession(path, prefix, tag, norip=True)
-            if overwrite or not os.path.exists(os.path.join(session.pf, 'vm.npy')):
+            if overwrite or not os.path.exists(os.path.join(session.ca.pf, 'vm.npy')):
                 normalize_trace(session)
             self.res_queue.put(prefix)
 
