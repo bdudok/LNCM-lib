@@ -18,12 +18,13 @@ class PreProc:
     __name__ = 'PreProc'
 
     def __init__(self, dpath, procpath, prefix, btag='000', rsync_channel=0, led_channel=1,
-                 debug=False, overwrite=False):
+                 debug=False, overwrite=False, db_entry=None):
         self.dpath = os.path.join(dpath, prefix + f'-{btag}/')  # raw data
         self.procpath = os.path.join(procpath, prefix) + '/'  # output processed data
         self.prefix = prefix  # recorder prefix tag
         self.btag = btag  # tag appended by bruker (000 by default)
         self.logstring = ''
+        self.db_entry = db_entry
 
         # setup config
         self.led_channel = led_channel
@@ -76,6 +77,7 @@ class PreProc:
         self.convert_ephys()
         self.parse_treadmill(tm_fig)
         self.parse_cam()
+        self.parse_notes()
         self.save_metadata()
         self.lprint(self, 'Found:', ','.join(self.found_output))
         self.save_log()
@@ -431,6 +433,33 @@ class PreProc:
                 indices[i] = ix
         return indices
 
+    def parse_notes(self):
+        '''
+        Transfer certain fields from the Baserow entry to the SessionInfo
+        '''
+        parse_fields = ("Stim.Config", "Notes", "User")
+        if self.db_entry is None:
+            return False
+        for key in parse_fields:
+            v = self.db_entry.get(key)
+            if v is None:
+                continue
+            if key == "Stim.Config":
+                config_json = v
+                if config_json is not None and type(config_json) != float and len(config_json):
+                    config = json.loads(config_json)
+                    for subkey, subtag in zip (('l', 'p'), ('Duration', 'Power')):
+                        if subkey in config_json:
+                            subv = float(config[subkey])
+                            okey = 'Baserow_' + key.replace('.', '_') + '_' + subtag
+                            self.md_keys.append(okey)
+                            setattr(self, okey, subv)
+            else:
+                okey = 'Baserow_'+key.replace('.', '_')
+                self.md_keys.append(okey)
+                setattr(self, okey, v)
+
+
     def save_metadata(self):
         '''
         Create a SessionInfo, add all the relevant attrs, and save to json in the output path.
@@ -481,8 +510,7 @@ if __name__ == '__main__':
     dpath = 'D:\Shares\Data\_RawData\Bruker\JEDI-IPSP/'
     # procpath = 'D:\Shares\Data\_Processed/testing/'
     procpath = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
-    prefix = 'JEDI-Sncg65_2024-12-10_lfp_opto_127'
-    # prefix = 'JEDI-PV21_2024-04-18_Fast_050'
+    prefix = 'JEDI-Sncg123_2025-05-16_stim_params_842'
     btag = '000'
 
     if not os.path.exists(procpath):
@@ -490,14 +518,15 @@ if __name__ == '__main__':
     #
     s = PreProc(dpath, procpath, prefix, btag, debug=True)
     self = s
+    s.parse_notes()
 
     # tm = TreadmillRead.Treadmill(os.path.join(dpath, prefix + f'-{btag}/'), prefix)  # raw data, prefix)
 
 
-    self.si = SessionInfo(self.procpath, prefix)
-    self.is_processed = self.si.load()
-    self.skip_analysis = False
-    self.found_output = []
+    # self.si = SessionInfo(self.procpath, prefix)
+    # self.is_processed = self.si.load()
+    # self.skip_analysis = False
+    # self.found_output = []
     # self.parse_frametimes()
 
 

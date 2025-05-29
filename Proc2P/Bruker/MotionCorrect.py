@@ -6,7 +6,7 @@ import suite2p
 from Proc2P.Bruker import PreProc
 from tifffile import imwrite
 
-'''This function runs the pre processing and motion correction, should be called bys script in suite2p repo.
+'''This function runs the pre processing and motion correction, should be called by script in suite2p repo.
 Should be called from suite2p env.
 See: _TEMPLATE_SCRIPT/20241126_BatchRun_MotionCorrect_Template.py
 '''
@@ -29,7 +29,7 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
             os.mkdir(processed_path)
 
         # preprocess session
-        s = PreProc.PreProc(dpath, processed_path, prefix, btag, overwrite=overwrite_preproc)
+        s = PreProc.PreProc(dpath, processed_path, prefix, btag, overwrite=overwrite_preproc, db_entry=item)
         if pre_only:
             continue
 
