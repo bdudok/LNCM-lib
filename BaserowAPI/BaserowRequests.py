@@ -27,8 +27,10 @@ class GetSessions:
             item = self.get_session(prefix).iloc[0]
             # we have to do it because prefix is not always correct for mouse info
         a_tag = item['Mouse.ID']
-        if type(a_tag) != str:
+        if type(a_tag) != str: #if it's a fied from a baserow web export
             a_tag = a_tag[0]['value']
+        elif '{' in a_tag: #if field is from baserow api-generated export
+            a_tag = a_tag[2:-2].split(',')[1].split(':')[1].strip(' }]"'+"'")
         if a_tag not in self.sex_cache:
             self.sex_cache[a_tag] = self.get_mouse(mtag=a_tag, ret_sex=True)
         return a_tag, self.sex_cache[a_tag]
@@ -66,7 +68,12 @@ class GetSessions:
                                 headers={"Authorization": self.auth_string},
                                 params=params
                                 )
-            assert resp.status_code == 200
+            if resp.status_code != 200:
+                if resp.status_code == 400 and "ERROR_INVALID_PAGE" in str(resp.content):
+                    #this can happen if returned results exactly match page len
+                    break
+                print('Bad request',  resp.status_code, resp.content)
+                return resp
             rjs = resp.json()['results']
             session_jsons.append(pandas.DataFrame(rjs, index=numpy.arange(session_index, session_index + len(rjs))))
             if len(rjs) < params['page_size']:
