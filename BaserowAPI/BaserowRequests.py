@@ -11,7 +11,7 @@ class GetSessions:
             self.auth_string = f"Token {config['api_token']}"
         else:
             self.auth_string = f"Token {token}"
-        self.sex_cache = {} #for memoizing fetching animal metadata
+        self.sex_cache = {}  # for memoizing fetching animal metadata
 
     def get_field(self, key):
         return config['FieldID'].get(key, None)
@@ -27,10 +27,10 @@ class GetSessions:
             item = self.get_session(prefix).iloc[0]
             # we have to do it because prefix is not always correct for mouse info
         a_tag = item['Mouse.ID']
-        if type(a_tag) != str: #if it's a fied from a baserow web export
+        if type(a_tag) != str:  # if it's a fied from a baserow web export
             a_tag = a_tag[0]['value']
-        elif '{' in a_tag: #if field is from baserow api-generated export
-            a_tag = a_tag[2:-2].split(',')[1].split(':')[1].strip(' }]"'+"'")
+        elif '{' in a_tag:  # if field is from baserow api-generated export
+            a_tag = a_tag[2:-2].split(',')[1].split(':')[1].strip(' }]"' + "'")
         if a_tag not in self.sex_cache:
             self.sex_cache[a_tag] = self.get_mouse(mtag=a_tag, ret_sex=True)
         return a_tag, self.sex_cache[a_tag]
@@ -70,9 +70,9 @@ class GetSessions:
                                 )
             if resp.status_code != 200:
                 if resp.status_code == 400 and "ERROR_INVALID_PAGE" in str(resp.content):
-                    #this can happen if returned results exactly match page len
+                    # this can happen if returned results exactly match page len
                     break
-                print('Bad request',  resp.status_code, resp.content)
+                print('Bad request', resp.status_code, resp.content)
                 return resp
             rjs = resp.json()['results']
             session_jsons.append(pandas.DataFrame(rjs, index=numpy.arange(session_index, session_index + len(rjs))))
@@ -94,14 +94,13 @@ class GetSessions:
         '''
         params = {f"filter__field_{self.get_field('Image.ID')}__{match}": prefix}
         resp = requests.get(config['session_url'],
-            headers={"Authorization": self.auth_string},
-            params=params
-        )
+                            headers={"Authorization": self.auth_string},
+                            params=params
+                            )
         self.results = pandas.DataFrame(resp.json()['results'])
         if not len(self.results):
             print(f'{prefix} not found in DB')
         return self.results
-
 
     def get_mouse(self, item=None, mtag=None, ret_sex=False):
         '''
@@ -126,8 +125,8 @@ class GetSessions:
             url = config['mice_url'].split('?')
             params = {f"filter__field_{self.get_field('Mouse.ID')}__equals": mtag}
             resp = requests.get(f'{url[0]}{mid}/?{url[1]}',
-                headers={"Authorization": self.auth_string},
-            )
+                                headers={"Authorization": self.auth_string},
+                                )
             return resp.json()
 
     def put_new(self, data_dict):
@@ -143,7 +142,7 @@ class GetSessions:
             print(resp.json())
         return resp
 
-    def sanitize_put(self, data_dict): #take a dict that was pulled from the DB, and form into one that can be created
+    def sanitize_put(self, data_dict):  # take a dict that was pulled from the DB, and form into one that can be created
         out_dict = {}
         for key, value in data_dict.items():
             if key in config["drop_fields"]:
@@ -157,13 +156,14 @@ class GetSessions:
                     if t == list:
                         out_dict[key] = [x['value'] for x in value]
                     else:
-                        out_dict[key] = value['value'] #'Channels': {'id': 2449, 'value': 'Green', 'color': 'darker-green'},
+                        out_dict[key] = value[
+                            'value']  # 'Channels': {'id': 2449, 'value': 'Green', 'color': 'darker-green'},
                     continue
             if t in (numpy.int32, numpy.int64):
                 value = int(value)
-            if t in (numpy.ndarray, ):
+            if t in (numpy.ndarray,):
                 value = list(value)
-            if t in (numpy.bool_, ):
+            if t in (numpy.bool_,):
                 value = bool(value)
             try:
                 json.dumps({key: value})
@@ -195,7 +195,7 @@ class PutLogEntries:
         self.auth_string = f"Token {config['logger_token']}"
         self.username = os.environ.get('USERNAME')
 
-    def put(self, sessionID, imtag, message='', sourceclass='',):
+    def put(self, sessionID, imtag, message='', sourceclass='', ):
         if sessionID in (None, 'None'):
             sessionID = 0
         put_json = {
@@ -220,7 +220,6 @@ class PutLogEntries:
         print(resp.json())
         return resp
 
-
     def check(self, sessionID, source='ArchiveZip'):
         '''Return True if the sessionID is already registered in BR as archived'''
         params = {
@@ -229,15 +228,71 @@ class PutLogEntries:
         }
 
         resp = requests.get(config['log_url'],
-            headers={
-                "Authorization": self.auth_string,
-            },
-            params=params
-        )
-
+                            headers={
+                                "Authorization": self.auth_string,
+                            },
+                            params=params
+                            )
 
         return pandas.DataFrame(resp.json())
 
+
+class Exclusions:
+    def __init__(self):
+        self.auth_string = f"Token {config['logger_token']}"
+        self.username = os.environ.get('USERNAME')
+
+    def put(self, item, excltype, notes=None):
+        '''
+        Log an exclusion of a session for a specific reason.
+        :param item: db entry
+        :param excltype: reason for exclusion. needs to be one of the defined types, use int or string id
+            2640 - BadRegistration
+        :param notes:
+        :return: response
+        '''
+
+        put_json = {
+            "Name": item["Image.ID"],
+            "Sessions": [
+                int(item['id'])
+            ],
+            "Exclusion": excltype,
+            "User": self.username
+        }
+        if notes is not None:
+            put_json["Notes"] = str(notes)
+
+        resp = requests.post(
+            config['excl_url'],
+            headers={
+                "Authorization": self.auth_string,
+                "Content-Type": "application/json"
+            },
+            json=put_json
+        )
+
+        print(resp.json())
+        return resp
+
+    def check(self, sessionID):
+        '''Return True if the sessionID is already registered in BR as archived'''
+        params = {
+            f"filter__field_{config['ExclID']['Name']}__contains": sessionID,
+        }
+
+        resp = requests.get(config['excl_url'],
+                            headers={
+                                "Authorization": self.auth_string,
+                            },
+                            params=params
+                            )
+
+        return pandas.DataFrame(resp.json())
+
+    @staticmethod
+    def parse(resp):
+        return set([resp['results'][i]['Exclusion']['value'] for i in range(len(resp['results']))])
 
 
 if __name__ == '__main__':
@@ -245,5 +300,5 @@ if __name__ == '__main__':
     task = "MotionCorr"  # or None to ignore. default: "MotionCorr"
     incltag = 'voltage'  # or None to ignore. default: None
     db = GetSessions()
-    session_df = db.search(project=project, task=task, incltag=incltag)
-    print(session_df[['Image.ID', 'Processed.Path']])
+    # session_df = db.search(project=project, task=task, incltag=incltag)
+    # print(session_df[['Image.ID', 'Processed.Path']])
