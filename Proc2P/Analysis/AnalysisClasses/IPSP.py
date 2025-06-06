@@ -271,17 +271,24 @@ class IPSP:
         store baseline and amplitude for each stim in each cell
         using the parameter of the fit as amplitude. NB that alternatively, we could add the bias,
          or compute the diff of where the fit curve min is relative to baseline.
-         :return: array of frame, baseline, response for each c, e
+         :return: array of frame, baseline, response, amplitude for each c, e
         '''
-        self.responses = numpy.empty((self.n_cells, self.n_stims, 3))  # frame, baseline, response
+        #response is ampl parameter of the fit, compared to where it returns to
+        #amplitude is the peak value minus baseline value
+        self.responses = numpy.empty((self.n_cells, self.n_stims, 4))  # frame, baseline, response, amplitude
+
         self.responses[:] = numpy.nan
         for ci in range(self.n_cells):
             for ei in range(self.n_stims):
                 Y, bl, fit = self.fit_event(ci, ei)  # bl is in DF/F actual, response (fit[0]) in DF/F change.
                 if fit is None:
-                    self.responses[ci, ei] = self.stimframes[ei], numpy.nan, numpy.nan
+                    self.responses[ci, ei] = self.stimframes[ei], numpy.nan, numpy.nan, numpy.nan
                 else:
-                    self.responses[ci, ei] = self.stimframes[ei], bl[-1], fit[0]
+                    # peak value:
+                    B = self.model[1]
+                    D = self.model[3]
+                    y_at_peak = self.alpha_func(B, fit[0], B, fit[1], D)
+                    self.responses[ci, ei] = self.stimframes[ei], bl[-1], fit[0], bl[-1] - y_at_peak
 
         lprint(self, 'Pulled responses for', self.session.tag, 'with ', self.config, 'Model:',
                self.get_modstring(), logger=self.log)
