@@ -42,6 +42,7 @@ config = {
     },
     "ExclID": {
         'Name': 5024,
+        'Exclusion': 5028,
     },
     "MouseID": {
         'Mouse.ID': 4570,

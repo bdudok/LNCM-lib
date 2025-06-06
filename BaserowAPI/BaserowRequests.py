@@ -275,8 +275,26 @@ class Exclusions:
         print(resp.json())
         return resp
 
-    def check(self, sessionID):
-        '''Return True if the sessionID is already registered in BR as archived'''
+    def get_excluded(self, excltype, parse=True):
+        '''Get list of prefixes that are exclued with specific tag'''
+        params = {
+            f"filter__field_{config['ExclID']['Exclusion']}__single_select_equal": excltype,
+        }
+
+        resp = requests.get(config['excl_url'],
+                            headers={
+                                "Authorization": self.auth_string,
+                            },
+                            params=params
+                            )
+
+        resp = pandas.DataFrame(resp.json())
+        if parse:
+            return set([resp['results'][i]['Sessions'][0]['value'][:-4] for i in range(len(resp['results']))])
+        else:
+            return resp
+
+    def check(self, sessionID, parse=True):
         params = {
             f"filter__field_{config['ExclID']['Name']}__contains": sessionID,
         }
@@ -287,13 +305,11 @@ class Exclusions:
                             },
                             params=params
                             )
-
-        return pandas.DataFrame(resp.json())
-
-    @staticmethod
-    def parse(resp):
-        return set([resp['results'][i]['Exclusion']['value'] for i in range(len(resp['results']))])
-
+        resp = pandas.DataFrame(resp.json())
+        if parse:
+            return set([resp['results'][i]['Exclusion']['value'] for i in range(len(resp['results']))])
+        else:
+            return resp
 
 if __name__ == '__main__':
     project = 'Voltage'
