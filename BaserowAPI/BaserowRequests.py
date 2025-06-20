@@ -178,16 +178,21 @@ class GetSessions:
         '''
         Return the stim duration and intensity, if a json is present
         :param item: a line from the db
-        :return: (dur, int)
+        :return:
+            (dur, int) for single stims (version "g")
+            (n, dur, int) for burst stims (version "b")
         '''
         config_json = item["Stim.Config"]
-        keys = 'vnflp'
+        stim_keys = 'vnlp'
         if config_json is not None and type(config_json) != float and len(config_json):
-            if all([x in config_json for x in keys]):
+            if all([x in config_json for x in stim_keys]):
                 config = json.loads(config_json)
-                return float(config["l"]), float(config["p"])
+                if config["v"] == 'g':
+                    return float(config["l"]), float(config["p"])
+                elif config["v"] == 'b':
+                    return int(config["n"]), float(config["l"]), float(config["p"])
         else:
-            return None, None
+            return None
 
 
 class PutLogEntries:
