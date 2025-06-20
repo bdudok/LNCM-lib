@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy
 import scipy
 import cv2
+import os
 import copy, math
 import tifffile
 
@@ -13,13 +14,13 @@ from Proc2P.utils import lprint
 class LoadPolys(object):
     __name__ = 'LoadPolys'
     def __init__(self, procpath, prefix, tag=None):
-        self.opPath = procpath + prefix + '/'
+        self.opPath = os.path.join(procpath, prefix + '/')
         self.prefix = prefix
         if '+' in tag:
             tags = tag.split('+')
             sets = []
             for tag in tags:
-                roi_name = f'{self.opPath + prefix}_saved_roi_{tag}.npy'
+                roi_name = os.path.join(self.opPath, f'{prefix}_saved_roi_{tag}.npy')
                 sets.append(load_roi_file(roi_name))
             polys = []
             for s in sets:
@@ -27,7 +28,7 @@ class LoadPolys(object):
                     polys.append(p)
             self.data = numpy.array([numpy.array(xi) for xi in polys])
         else:
-            roi_name = f'{self.opPath + prefix}_saved_roi_{tag}.npy'
+            roi_name = roi_name = os.path.join(self.opPath, f'{prefix}_saved_roi_{tag}.npy')
             self.data = load_roi_file(roi_name)
         lprint(self, f'Polys loaded from {roi_name}')
 
