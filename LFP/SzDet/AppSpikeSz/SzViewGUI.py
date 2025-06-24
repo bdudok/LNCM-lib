@@ -10,7 +10,7 @@ from LFP.SzDet.AppSpikeSz.SzViewData import SzReviewData
 #GUI
 # import sys
 # from PyQt5 import Qt
-# from PyQt5 import QtWidgets, QtGui, QtCore
+from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (QApplication, QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
                                     QGroupBox, QListWidget, QAction, QAbstractItemView, QLineEdit, QCheckBox)
 
@@ -122,6 +122,9 @@ class GUI_main(QtWidgets.QMainWindow):
         #horizontal layout for buttons
         horizontal_layout = QHBoxLayout()
 
+        #horizontal layout for indicators
+        indicators_layout = QHBoxLayout()
+
         #prev button
         left = "\u2190"
         button = QPushButton(f'Previous [{left}]', )
@@ -162,6 +165,17 @@ class GUI_main(QtWidgets.QMainWindow):
         self.ToggleAction.setShortcut('t')
         self.ToggleAction.triggered.connect(self.toggle_callback)
         self.addAction(self.ToggleAction)
+
+        #add indicators
+        self.DurationLabel = QLabel('SzDur', )
+        self.FreqLabel = QLabel('SzFreq', )
+        self.PISLabel = QLabel('Suppression', )
+        for label in (self.DurationLabel, self.FreqLabel, self.PISLabel):
+            label.setFixedWidth(30)
+            label.setFixedHeight(20)
+            label.setFont(QFont('Arial', 10))
+            horizontal_layout.addWidget(label)
+
 
         vbox.addLayout(horizontal_layout)
 
@@ -255,6 +269,26 @@ class GUI_main(QtWidgets.QMainWindow):
         self.new_plot=True
         self.refresh_data()
 
+    def update_indicators(self):
+        self.curation_checks = {}
+        dur = self.szdat.current_sz["Duration"]
+        if dur > self.szdat.settings["Curation.MinDur"]:
+            self.DurationLabel.setStyleSheet("background-color: green")
+            self.curation_checks["Duration"] = True
+        else:
+            self.DurationLabel.setStyleSheet("background-color: red")
+            self.curation_checks["Duration"] = False
+        self.DurationLabel.setText(f'{dur:.1f} s')
+        szfreq = (self.szdat.current_sz["SpkCount"] / self.szdat.current_sz["Duration"])
+        if szfreq > self.szdat.settings["Curation.MinFreq"]:
+            self.FreqLabel.setStyleSheet("background-color: green")
+            self.curation_checks["Frequency"] = True
+        else:
+            self.FreqLabel.setStyleSheet("background-color: red")
+            self.curation_checks["Frequency"] = False
+        self.FreqLabel.setText(f'{szfreq:.1f} Hz')
+
+
     def list_clicked(self):
         self.current_selected_i = self.sz_list.currentRow()
         self.select_sz()
@@ -286,6 +320,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def refresh_data(self):
         self.szdat.plot_sz(self.active_sz, self.FigCanvas1.axd)
+        self.update_indicators()
         self.FigCanvas1.draw()
         if self.unsaved_changes > 9:
             self.save_callback()

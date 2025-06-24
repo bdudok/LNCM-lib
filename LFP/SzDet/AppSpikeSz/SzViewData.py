@@ -10,6 +10,12 @@ from LFP.Pinnacle import ReadEDF
 from Proc2P.Bruker import LoadEphys
 from Proc2P.Bruker.PreProc import SessionInfo
 
+#analysis for sz curation
+from scipy import signal
+from scipy.ndimage import gaussian_filter
+from LFP.EphysFunctions import butter_bandpass_filter
+
+
 '''
 Manually review automatically detected seizures
 '''
@@ -33,10 +39,11 @@ class SzReviewData:
         self.input_sz = read_excel(self.get_fn('sztime'))
         self.spikes = read_excel(self.get_fn('spiketime'))
         with open(self.get_fn('settings'), 'r') as f:
-            self.settings = json.loads(f.read())
+            self.settings = self.read_settings_with_defaults(json.loads(f.read()))
         self.fs = int(float(self.settings['fs']))
         self.spike_samples = (self.spikes['SpikeTimes(s)'].values * self.fs).astype('int')
         self.read_ephys()
+        self.get_session_gamma()
 
         # ignore video now. add this after the lfp review features work and can be used in practice
         # get all ttl times from ephys and pass to video class to align all. this should be done once and stored
@@ -57,6 +64,8 @@ class SzReviewData:
                 fn = f'.edf{tagstr}_Ch{self.ch}_spiketimes.xlsx'
             elif suffix == 'settings':
                 fn = f'_Ch{self.ch}_SpikeSzDet{tagstr}.json'
+            elif suffix == 'gamma':
+                fn = f'_Ch{self.ch}_gamma{tagstr}.npy'
             else:
                 return -1
             return os.path.join(self.path, self.prefix + fn)
@@ -69,6 +78,8 @@ class SzReviewData:
                 fn = f'_Ch{self.ch}_spiketimes.xlsx'
             elif suffix == 'settings':
                 fn = f'_Ch{self.ch}_SpikeSzDet.json'
+            elif suffix == 'gamma':
+                fn = f'_Ch{self.ch}_gamma.npy'
             else:
                 return -1
             return os.path.join(self.path, self.prefix, self.prefix + fn)
@@ -99,6 +110,29 @@ class SzReviewData:
             'startdate': startdate,
             'annotations': annotations
         }
+
+    def read_settings_with_defaults(self, user_settings):
+        '''complete user settings with defaults if not specified'''
+        defaults = {
+            "Curation.MinDur": 10, #minimum duration for ictal/interictal (s)
+            "Curation.MinFreq": 2.5,  # minimum average spike rate for seizure (Hz)
+            "Curation.PISBand": (20, 50), # frequency band for evaluating postictal suppression (Hz)
+            "Curation.PISDur": 6, # postictal window (s)
+            "Curation.PISMultiplier": 2, #max postictal relative to peak during sz
+        }
+        for key, value in defaults.items():
+            if key not in user_settings:
+                user_settings[key] = value
+        return user_settings
+
+    def get_session_gamma(self):
+        gamma_fn = self.get_fn('gamma')
+        if os.path.exists(gamma_fn):
+            self.gamma_power = numpy.load(gamma_fn)
+        else:
+            ftr = butter_bandpass_filter(self.ephys.trace, *self.settings["Curation.PISBand"], self.fs)
+            self.gamma_power = numpy.abs(signal.hilbert(ftr))
+            numpy.save(gamma_fn, self.gamma_power)
 
     def init_output(self):
         sznames, sztimes, szdurs = [], [], []
@@ -138,11 +172,13 @@ class SzReviewData:
     #     return SyncVid(path, prefix)
 
     def plot_sz(self, sz_name, axd):
+        self.current_sz = {}
         for _, ca in axd.items():
             ca.cla()
         sz = self.get_sz(sz_name, True)
-        span_sec = 5  # plot flanking the sz start and stop
+        span_sec = 10  # plot flanking the sz start and stop
         t0, t1 = sz['Start'], sz['Stop']
+        self.current_sz["Duration"] = t1 - t0
         s0 = max(0, int((t0 - span_sec) * self.fs))  # sample where plot starts
         s1 = min(int((t1 + span_sec) * self.fs), len(self.ephys.trace))  # sample where the plot ends
         ds0 = int(t0 * self.fs) - s0  # samples between plot start and sz start
@@ -153,6 +189,11 @@ class SzReviewData:
 
         y = self.ephys.trace[s0:s1]
         y_range = numpy.percentile(numpy.absolute(y), 99) * 1.5
+        lprint(self, 'starting gauss smooth')
+        sz_gamma = gaussian_filter(self.gamma_power[s0:s1], self.fs)
+        lprint(self, 'gauss smooth done')
+        sz_max_gamma = sz_gamma.max()
+        gamma_mask = sz_gamma < (sz_max_gamma / self.settings["Curation.PISMultiplier"])
 
         # full sz trace
         ca = axd['top']
@@ -163,12 +204,18 @@ class SzReviewData:
         ca.set_xticks(secs * self.fs)
         ca.set_xticklabels(secs)
         ca.plot(sx, y, color='black')
+        norm_gamma = numpy.copy(sz_gamma)
+        norm_gamma /= norm_gamma.max()
+        ca.plot(sx, norm_gamma * y.max(), color='blue')
         ca.set_ylim(-y_range, y_range)
         sz_spikes = []
         for s in self.spike_samples:
             if s0 < s < s1:
                 ca.axvline(s - s0, color='orange', linestyle=':', zorder=0)
                 sz_spikes.append(s)
+
+        self.current_sz["SpkCount"] = len(sz_spikes)
+        self.current_sz["PISCount"] = 0
 
         # sz start example
         ca = axd['lower left']
