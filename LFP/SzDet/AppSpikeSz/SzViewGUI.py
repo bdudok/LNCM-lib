@@ -171,9 +171,9 @@ class GUI_main(QtWidgets.QMainWindow):
         self.FreqLabel = QLabel('SzFreq', )
         self.PISLabel = QLabel('Suppression', )
         for label in (self.DurationLabel, self.FreqLabel, self.PISLabel):
-            label.setFixedWidth(30)
+            label.setFixedWidth(60)
             label.setFixedHeight(20)
-            label.setFont(QFont('Arial', 10))
+            label.setFont(QFont('Arial', 12))
             horizontal_layout.addWidget(label)
 
 
@@ -287,6 +287,14 @@ class GUI_main(QtWidgets.QMainWindow):
             self.FreqLabel.setStyleSheet("background-color: red")
             self.curation_checks["Frequency"] = False
         self.FreqLabel.setText(f'{szfreq:.1f} Hz')
+        PISdur = self.szdat.current_sz["PISDur"]
+        if PISdur > self.szdat.settings["Curation.PISDur"]:
+            self.PISLabel.setStyleSheet("background-color: green")
+            self.curation_checks["PIS"] = True
+        else:
+            self.PISLabel.setStyleSheet("background-color: red")
+            self.curation_checks["PIS"] = False
+        self.PISLabel.setText(f'{PISdur:.1f} s')
 
 
     def list_clicked(self):

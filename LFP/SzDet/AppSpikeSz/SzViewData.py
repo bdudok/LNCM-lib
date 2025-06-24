@@ -22,6 +22,7 @@ Manually review automatically detected seizures
 
 
 class SzReviewData:
+    __name__ = 'SzReviewData'
     '''
     Used by Sz Review GUI to access data
     '''
@@ -118,7 +119,7 @@ class SzReviewData:
             "Curation.MinFreq": 2.5,  # minimum average spike rate for seizure (Hz)
             "Curation.PISBand": (20, 50), # frequency band for evaluating postictal suppression (Hz)
             "Curation.PISDur": 6, # postictal window (s)
-            "Curation.PISMultiplier": 2, #max postictal relative to peak during sz
+            "Curation.PISMultiplier": 10, #max postictal relative to peak during sz
         }
         for key, value in defaults.items():
             if key not in user_settings:
@@ -184,29 +185,32 @@ class SzReviewData:
         ds0 = int(t0 * self.fs) - s0  # samples between plot start and sz start
         ds1 = int((t1 - t0) * self.fs) - ds0  # samples between plot start and sz end
         sx = numpy.arange(s1 - s0)
-        secs = numpy.arange(-span_sec, span_sec + 1 + t1 - t0, span_sec, dtype='int')
+        secs = numpy.arange(-span_sec, 2*span_sec + 1 + t1 - t0, span_sec, dtype='int')
         window_w = int(0.1 * self.fs)
 
         y = self.ephys.trace[s0:s1]
+        first_plot_sample = int(span_sec * self.fs)
+        last_plot_sample = int((span_sec + t1 - t0) * self.fs)
         y_range = numpy.percentile(numpy.absolute(y), 99) * 1.5
-        lprint(self, 'starting gauss smooth')
-        sz_gamma = gaussian_filter(self.gamma_power[s0:s1], self.fs)
-        lprint(self, 'gauss smooth done')
+        sz_gamma = gaussian_filter(self.gamma_power[s0:s1], int(self.fs*0.3))
+        sz_gamma -= sz_gamma.min()
         sz_max_gamma = sz_gamma.max()
         gamma_mask = sz_gamma < (sz_max_gamma / self.settings["Curation.PISMultiplier"])
+        gamma_mask[:last_plot_sample] = False
 
         # full sz trace
         ca = axd['top']
         strip_ax(ca, False)
         ca.set_ylabel('LFP(uV)')
-        ca.axvline(span_sec * self.fs, color='red', )  # linestyle=':')
-        ca.axvline((span_sec + t1 - t0) * self.fs, color='red', )  # linestyle=':')
+
+        ca.axvline(first_plot_sample, color='red', )  # linestyle=':')
+        ca.axvline(last_plot_sample, color='red', )  # linestyle=':')
         ca.set_xticks(secs * self.fs)
         ca.set_xticklabels(secs)
         ca.plot(sx, y, color='black')
-        norm_gamma = numpy.copy(sz_gamma)
-        norm_gamma /= norm_gamma.max()
-        ca.plot(sx, norm_gamma * y.max(), color='blue')
+        #plot where suppressed
+        ca.plot(numpy.ma.masked_where(~gamma_mask, sx), numpy.ma.masked_where(~gamma_mask, y), color='blue')
+        #TODO add where gamma > 3 SD with red
         ca.set_ylim(-y_range, y_range)
         sz_spikes = []
         for s in self.spike_samples:
@@ -215,7 +219,7 @@ class SzReviewData:
                 sz_spikes.append(s)
 
         self.current_sz["SpkCount"] = len(sz_spikes)
-        self.current_sz["PISCount"] = 0
+        self.current_sz["PISDur"] = numpy.count_nonzero(gamma_mask) / self.fs
 
         # sz start example
         ca = axd['lower left']
