@@ -135,15 +135,20 @@ class GUI_main(QtWidgets.QMainWindow):
         # sp = "\u2423"
         # up = "\u2191"
         # down = "\u2193"
-        button = QPushButton(f'Toggle [T]', )
+        button = QPushButton(f'Toggle [t]', )
         horizontal_layout.addWidget(button)
         button.clicked.connect(self.toggle_callback)
 
+        #interictal button
+        button = QPushButton(f'Interictal [i]', )
+        horizontal_layout.addWidget(button)
+        button.clicked.connect(self.interictal_callback)
+
         #next button
         right = "\u2192"
-        button = QPushButton(f'Next [{right}]', )
-        horizontal_layout.addWidget(button)
-        button.clicked.connect(self.next_callback)
+        self.next_button = QPushButton(f'Next [{right}]', )
+        horizontal_layout.addWidget(self.next_button)
+        self.next_button.clicked.connect(self.next_callback)
 
         #save button
         self.save_button = QPushButton(f'Save', )
@@ -165,6 +170,11 @@ class GUI_main(QtWidgets.QMainWindow):
         self.ToggleAction.setShortcut('t')
         self.ToggleAction.triggered.connect(self.toggle_callback)
         self.addAction(self.ToggleAction)
+
+        self.InterictalAction = QAction('Interictal', self)
+        self.InterictalAction.setShortcut('i')
+        self.InterictalAction.triggered.connect(self.interictal_callback)
+        self.addAction(self.InterictalAction)
 
         #add indicators
         self.DurationLabel = QLabel('SzDur', )
@@ -241,14 +251,23 @@ class GUI_main(QtWidgets.QMainWindow):
         self.path_label.setText(self.prefix)
 
     def mark_complete(self, i, color):
-        if color == 'true':
-            color ='#50a3a4'
-        elif color == 'false':
-            color = '#fcaf38'
+        color = self.color_lut(color)
         self.sz_list.item(i).setForeground(QtGui.QColor(color))
         self.sz_list.item(i).setSelected(False)
 
+    def color_lut(self, color):
+        lut = {
+        'true': '#38fc59',
+        'false': '#fc8638',
+        'interictal': '#38cbfc'
+        }
+        return lut.get(color, 'grey')
+
+
     def next_callback(self):
+        if self.szdat.get_sz(self.active_sz) == '': #if pressed next without marking it not sz, we set it as reviewed
+            self.szdat.set_sz(self.active_sz, True)
+            self.mark_complete(self.current_selected_i, 'true')
         if self.current_selected_i is None:
             self.current_selected_i = 0
         elif (self.current_selected_i + 1) < len(self.szdat.output_sz):
@@ -268,10 +287,25 @@ class GUI_main(QtWidgets.QMainWindow):
         self.sz_list.setCurrentItem(current_item)
         self.new_plot=True
         self.refresh_data()
+        self.color_next_button()
+
+    def color_next_button(self):
+        sz = self.szdat.get_sz(self.active_sz, full=True)
+        is_sz = sz["Included"] != False #value can be ''
+        is_iis = sz["Interictal"] == True
+        if is_sz and not is_iis:
+            self.next_button.setStyleSheet(f"background-color: {self.color_lut('true')}")
+        elif is_sz and is_iis:
+            self.next_button.setStyleSheet(f"background-color: {self.color_lut('interictal')}")
+        elif not is_sz:
+            self.next_button.setStyleSheet(f"background-color: {self.color_lut('false')}")
+
+
 
     def update_indicators(self):
         self.curation_checks = {}
-        dur = self.szdat.current_sz["Duration"]
+        sz = self.szdat.get_sz(self.active_sz, full=True)
+        dur = sz["Duration(s)"]
         if dur > self.szdat.settings["Curation.MinDur"]:
             self.DurationLabel.setStyleSheet("background-color: green")
             self.curation_checks["Duration"] = True
@@ -279,7 +313,7 @@ class GUI_main(QtWidgets.QMainWindow):
             self.DurationLabel.setStyleSheet("background-color: red")
             self.curation_checks["Duration"] = False
         self.DurationLabel.setText(f'{dur:.1f} s')
-        szfreq = (self.szdat.current_sz["SpkCount"] / self.szdat.current_sz["Duration"])
+        szfreq = sz["SpkFreq"]
         if szfreq > self.szdat.settings["Curation.MinFreq"]:
             self.FreqLabel.setStyleSheet("background-color: green")
             self.curation_checks["Frequency"] = True
@@ -287,7 +321,7 @@ class GUI_main(QtWidgets.QMainWindow):
             self.FreqLabel.setStyleSheet("background-color: red")
             self.curation_checks["Frequency"] = False
         self.FreqLabel.setText(f'{szfreq:.1f} Hz')
-        PISdur = self.szdat.current_sz["PISDur"]
+        PISdur = sz["PostIctalSuppression(s)"]
         if PISdur > self.szdat.settings["Curation.PISDur"]:
             self.PISLabel.setStyleSheet("background-color: green")
             self.curation_checks["PIS"] = True
@@ -325,6 +359,34 @@ class GUI_main(QtWidgets.QMainWindow):
         elif curr == False:
             self.szdat.set_sz(self.active_sz, True)
             self.mark_complete(self.current_selected_i, 'true')
+        self.color_next_button()
+
+    def interictal_callback(self):
+        if self.active_sz is None:
+            self.next_callback()
+
+        if not self.unsaved_changes:
+            self.save_button.setStyleSheet("background-color: red")
+        self.unsaved_changes += 1
+        self.save_button.setText(f'Save ({self.unsaved_changes})')
+
+        sz = self.szdat.get_sz(self.active_sz, full=True)
+        is_sz = sz["Included"] != False #value can be ''
+        if is_sz and sz["Included"] == '': #set to reviewed
+            self.szdat.set_sz(self.active_sz, value=True)
+        is_iis = sz["Interictal"] == True
+        if is_sz and not is_iis: #toggle ii
+            self.szdat.set_sz(self.active_sz, value=True, key='Interictal')
+            self.mark_complete(self.current_selected_i, 'interictal')
+        elif is_sz and is_iis: #toggle ii
+            self.szdat.set_sz(self.active_sz, value=False, key='Interictal')
+            self.mark_complete(self.current_selected_i, 'true')
+        elif not is_sz: #set to sz and ii
+            self.szdat.set_sz(self.active_sz, True)
+            self.szdat.set_sz(self.active_sz, value=True, key='Interictal')
+            self.mark_complete(self.current_selected_i, 'interictal')
+        self.color_next_button()
+
 
     def refresh_data(self):
         self.szdat.plot_sz(self.active_sz, self.FigCanvas1.axd)

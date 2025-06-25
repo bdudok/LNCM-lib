@@ -1,4 +1,7 @@
 import os.path
+
+import matplotlib.pyplot as plt
+
 from Proc2P.utils import *
 import json
 import numpy
@@ -10,11 +13,10 @@ from LFP.Pinnacle import ReadEDF
 from Proc2P.Bruker import LoadEphys
 from Proc2P.Bruker.PreProc import SessionInfo
 
-#analysis for sz curation
+# analysis for sz curation
 from scipy import signal
 from scipy.ndimage import gaussian_filter
 from LFP.EphysFunctions import butter_bandpass_filter
-
 
 '''
 Manually review automatically detected seizures
@@ -51,7 +53,7 @@ class SzReviewData:
         # there should be a selector in the gui that allows the user to browse to video path if these are not in config
         # self.vid = self.read_video(self.settings['vid'], self.settings['vidfn'])
 
-    def get_fn(self, suffix):
+    def get_fn(self, suffix, timestamp=False):
         if self.setup == 'Pinnacle':
             if self.tag is None:
                 tagstr = ''
@@ -60,7 +62,11 @@ class SzReviewData:
             if suffix == 'sztime':
                 fn = f'.edf{tagstr}_Ch{self.ch}_seizure_times.xlsx'
             elif suffix == 'save':
-                fn = f'.edf{tagstr}_Ch{self.ch}_seizure_times_curated.xlsx'
+                if timestamp:
+                    datestr = f'_{datetime.datetime.now():%Y%m%d}_'
+                else:
+                    datestr = ''
+                fn = f'.edf{tagstr}_Ch{self.ch}_seizure_times_curated{datestr}.xlsx'
             elif suffix == 'spiketime':
                 fn = f'.edf{tagstr}_Ch{self.ch}_spiketimes.xlsx'
             elif suffix == 'settings':
@@ -115,11 +121,11 @@ class SzReviewData:
     def read_settings_with_defaults(self, user_settings):
         '''complete user settings with defaults if not specified'''
         defaults = {
-            "Curation.MinDur": 10, #minimum duration for ictal/interictal (s)
+            "Curation.MinDur": 10,  # minimum duration for ictal/interictal (s)
             "Curation.MinFreq": 2.5,  # minimum average spike rate for seizure (Hz)
-            "Curation.PISBand": (20, 50), # frequency band for evaluating postictal suppression (Hz)
-            "Curation.PISDur": 6, # postictal window (s)
-            "Curation.PISMultiplier": 10, #max postictal relative to peak during sz
+            "Curation.PISBand": (20, 50),  # frequency band for evaluating postictal suppression (Hz)
+            "Curation.PISDur": 6,  # postictal window (s)
+            "Curation.PISMultiplier": 10,  # max postictal relative to peak during sz
         }
         for key, value in defaults.items():
             if key not in user_settings:
@@ -132,7 +138,13 @@ class SzReviewData:
             self.gamma_power = numpy.load(gamma_fn)
         else:
             ftr = butter_bandpass_filter(self.ephys.trace, *self.settings["Curation.PISBand"], self.fs)
-            self.gamma_power = numpy.abs(signal.hilbert(ftr))
+            g = numpy.abs(signal.hilbert(ftr))
+            # z score based on baseline
+            g1 = g - g.mean()
+            gmask = g1 < g1.std()
+            g -= g[gmask].mean()
+            g /= g[gmask].std()
+            self.gamma_power = g
             numpy.save(gamma_fn, self.gamma_power)
 
     def init_output(self):
@@ -155,11 +167,12 @@ class SzReviewData:
                                            'Stop': self.input_sz[stop_key].values, 'Duration(s)': szdurs,
                                            'SpikeCount': spkcount,
                                            'SpkFreq': numpy.array(spkcount) / numpy.array(szdurs),
-                                           'Time': sztimes, 'Included': '', }, index=[sznames])
+                                           'PostIctalSuppression(s)': '',
+                                           'Time': sztimes, 'Included': '', 'Interictal': False, }, index=[sznames])
         self.szlist = sznames
 
-    def set_sz(self, sz, value):
-        self.output_sz.loc[sz, 'Included'] = value
+    def set_sz(self, sz, value, key='Included'):
+        self.output_sz.loc[sz, key] = value
 
     def get_sz(self, sz, full=False):
         if full:
@@ -173,29 +186,26 @@ class SzReviewData:
     #     return SyncVid(path, prefix)
 
     def plot_sz(self, sz_name, axd):
-        self.current_sz = {}
         for _, ca in axd.items():
             ca.cla()
         sz = self.get_sz(sz_name, True)
         span_sec = 10  # plot flanking the sz start and stop
         t0, t1 = sz['Start'], sz['Stop']
-        self.current_sz["Duration"] = t1 - t0
         s0 = max(0, int((t0 - span_sec) * self.fs))  # sample where plot starts
         s1 = min(int((t1 + span_sec) * self.fs), len(self.ephys.trace))  # sample where the plot ends
         ds0 = int(t0 * self.fs) - s0  # samples between plot start and sz start
-        ds1 = int((t1 - t0) * self.fs) - ds0  # samples between plot start and sz end
+        # ds1 = int((t1 - t0) * self.fs) - ds0  # samples between plot start and sz end
         sx = numpy.arange(s1 - s0)
-        secs = numpy.arange(-span_sec, 2*span_sec + 1 + t1 - t0, span_sec, dtype='int')
+        secs = numpy.arange(-span_sec, 2 * span_sec + 1 + t1 - t0, span_sec, dtype='int')
         window_w = int(0.1 * self.fs)
 
         y = self.ephys.trace[s0:s1]
         first_plot_sample = int(span_sec * self.fs)
         last_plot_sample = int((span_sec + t1 - t0) * self.fs)
         y_range = numpy.percentile(numpy.absolute(y), 99) * 1.5
-        sz_gamma = gaussian_filter(self.gamma_power[s0:s1], int(self.fs*0.3))
-        sz_gamma -= sz_gamma.min()
-        sz_max_gamma = sz_gamma.max()
-        gamma_mask = sz_gamma < (sz_max_gamma / self.settings["Curation.PISMultiplier"])
+        sz_gamma = gaussian_filter(self.gamma_power[s0:s1], self.fs * 1.0)
+
+        gamma_mask = sz_gamma < (sz_gamma.max() / self.settings["Curation.PISMultiplier"])
         gamma_mask[:last_plot_sample] = False
 
         # full sz trace
@@ -208,9 +218,9 @@ class SzReviewData:
         ca.set_xticks(secs * self.fs)
         ca.set_xticklabels(secs)
         ca.plot(sx, y, color='black')
-        #plot where suppressed
-        ca.plot(numpy.ma.masked_where(~gamma_mask, sx), numpy.ma.masked_where(~gamma_mask, y), color='blue')
-        #TODO add where gamma > 3 SD with red
+        # plot where suppressed
+        if numpy.any(gamma_mask):
+            ca.plot(numpy.ma.masked_where(~gamma_mask, sx), numpy.ma.masked_where(~gamma_mask, y), color='blue')
         ca.set_ylim(-y_range, y_range)
         sz_spikes = []
         for s in self.spike_samples:
@@ -218,8 +228,8 @@ class SzReviewData:
                 ca.axvline(s - s0, color='orange', linestyle=':', zorder=0)
                 sz_spikes.append(s)
 
-        self.current_sz["SpkCount"] = len(sz_spikes)
-        self.current_sz["PISDur"] = numpy.count_nonzero(gamma_mask) / self.fs
+        pisdur = numpy.count_nonzero(gamma_mask) / self.fs
+        self.set_sz(sz_name, pisdur, 'PostIctalSuppression(s)')
 
         # sz start example
         ca = axd['lower left']
@@ -249,7 +259,11 @@ class SzReviewData:
         # return fig
 
     def save(self):
-        self.output_sz.to_excel(self.get_fn('save'))
+        try:
+            self.output_sz.to_excel(self.get_fn('save'))
+        except PermissionError:
+            print('''Permission error writing the output spreadsheet. Saving to new file, please rename later.''')
+            self.output_sz.to_excel(self.get_fn('save', timestamp=True))
 
 
 if __name__ == '__main__':
@@ -259,8 +273,6 @@ if __name__ == '__main__':
     setup = 'LNCM'
     path = 'D:\Shares\Data\_Processed/2P\PVTot/'
     prefix = 'PVTot9_2024-02-20_lfp_181'
-
-
 
     szdat = SzReviewData(path, prefix, 2, setup=setup)
     self = szdat
