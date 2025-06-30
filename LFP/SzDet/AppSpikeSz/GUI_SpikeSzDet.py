@@ -345,10 +345,16 @@ class GUI_main(QtWidgets.QMainWindow):
             ca.cla()
 
         #get data
+        fs = self.fs
+        lo = int(float(self.get_field('LoCut')))
+        hi = int(float(self.get_field('HiCut')))
+        if (lo != self.previous_lo) or (hi != self.previous_hi):
+            self.spikedet = SpikesPower.Detect(self.trace, fs=fs, lo=lo, hi=hi)
+            self.previous_lo = lo
+            self.previous_hi = hi
         t = self.spikedet.get_spikes(tr1=float(self.get_field('Tr1')), tr2=float(self.get_field('Tr2')),
                                      trdiff=float(self.get_field('TrDiff')), dur=float(self.get_field('Dur')),
                                      dist=float(self.get_field('Dist')))
-        fs = self.spikedet.fs
         framesize = int(self.get_field('SzDet.Framesize'))
         sz_burden, sz_times_raw = InstRate.SpikeTrace(t, framesize,
                                                   # length=int(len(self.spikedet.trace/framesize)),
@@ -375,7 +381,7 @@ class GUI_main(QtWidgets.QMainWindow):
                       marker='x', s=20, linewidth=0.7, zorder=2, alpha=0.8)
         for hv in ('Tr1', 'Tr2'):
             v = float(self.get_field(hv))
-            ax[1].axhline(self.spikedet.stdev_env * v, color='black', linewidth=0.5)
+            ax[1].axhline(self.spikedet.mean_env + self.spikedet.stdev_env * v, color='black', linewidth=0.5)
         ax[1].set_ylabel('HF envelope')
 
         ax[2].plot(X, sz_burden, color='blue', linewidth=1)
@@ -524,9 +530,11 @@ class GUI_main(QtWidgets.QMainWindow):
                 trace = trace[want_slice]
                 raw_trace = raw_trace[want_slice]
         self.raw_trace = raw_trace
-        self.spikedet = SpikesPower.Detect(trace, fs=fs, lo=float(self.get_field('LoCut')),
-                                                         hi=float(self.get_field('HiCut')))
+        self.trace = trace
+        self.fs = fs
         self.set_result('Prefix', self.active_prefix)
+        self.previous_lo = 0
+        self.previous_hi = 0
         self.update_plot1()
 
 class SubplotsCanvas(FigureCanvasQTAgg):

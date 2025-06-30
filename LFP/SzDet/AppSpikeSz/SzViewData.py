@@ -29,16 +29,16 @@ class SzReviewData:
     Used by Sz Review GUI to access data
     '''
 
-    def __init__(self, path, prefix, ch, tag=None, setup='Pinnacle'):
+    def __init__(self, path, prefix, ch, tag=None, setup='Pinnacle', skip_gamma=False):
         self.path = path
         self.prefix = prefix
         self.ch = ch
         self.tag = tag
         self.setup = setup
-        self.load_data()
+        self.load_data(skip_gamma)
         self.init_output()
 
-    def load_data(self):
+    def load_data(self, skip_gamma):
         self.input_sz = read_excel(self.get_fn('sztime'))
         self.spikes = read_excel(self.get_fn('spiketime'))
         with open(self.get_fn('settings'), 'r') as f:
@@ -46,7 +46,8 @@ class SzReviewData:
         self.fs = int(float(self.settings['fs']))
         self.spike_samples = (self.spikes['SpikeTimes(s)'].values * self.fs).astype('int')
         self.read_ephys()
-        self.get_session_gamma()
+        if not skip_gamma:
+            self.get_session_gamma()
 
         # ignore video now. add this after the lfp review features work and can be used in practice
         # get all ttl times from ephys and pass to video class to align all. this should be done once and stored
@@ -95,7 +96,7 @@ class SzReviewData:
 
     def read_ephys(self):
         if self.setup == 'Pinnacle':
-            self.ephys = ReadEDF.EDF(self.path, self.prefix, ch=self.ch)
+            self.ephys = ReadEDF.EDF(self.path, self.prefix, ch=int(self.ch)-1)
             # ttls = self.ephys.get_TTL()
             startdate = self.ephys.d[-1]['startdate']
             annotations = self.ephys.d[-1]['annotations']
