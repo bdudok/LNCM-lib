@@ -8,6 +8,7 @@ from scipy import stats
 def lprint(obj, message, *args, logger=None):
     '''Add timestamp and object name to print calls'''
     ts = datetime.datetime.now().isoformat(timespec='seconds')
+    message = str(message)
     for x in args:
         message += ' ' + str(x)
     if obj is None:
