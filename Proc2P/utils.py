@@ -155,7 +155,7 @@ def read_excel(*args, **kwargs):
     fn = args[0]
     if fn.endswith('csv'):
         return pandas.read_csv(*args, **kwargs)
-    return pandas.read_excel(*args, **kwargs, engine='openpyxl')
+    return pandas.read_excel(*args, **kwargs, engine='openpyxl', index_col=0)
 
 
 def ewma(trace, period=15):
