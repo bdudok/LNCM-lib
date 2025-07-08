@@ -163,6 +163,7 @@ class SzReviewData:
             szdurs.append(sz[stop_key] - sz[start_key])
             incl_spikes = numpy.logical_and(spiketimes > sz[start_key], spiketimes < sz[stop_key])
             spkcount.append(numpy.count_nonzero(incl_spikes) + 1)
+
         # compute features for analysis
         self.output_sz = pandas.DataFrame({'Start': self.input_sz[start_key].values,
                                            'Stop': self.input_sz[stop_key].values, 'Duration(s)': szdurs,
@@ -170,6 +171,14 @@ class SzReviewData:
                                            'SpkFreq': numpy.array(spkcount) / numpy.array(szdurs),
                                            'PostIctalSuppression(s)': '',
                                            'Time': sztimes, 'Included': '', 'Interictal': False, }, index=[sznames])
+        # load previous exclusions
+        fn = self.get_fn('save')
+        if os.path.exists(fn):
+            saved = read_excel(fn)
+            for szname in sznames:
+                for fieldname in ('Included', 'Interictal'):
+                    self.output_sz.loc[szname, fieldname] = saved.loc[szname][fieldname]
+
         self.szlist = sznames
 
     def set_sz(self, sz, value, key='Included'):
@@ -192,6 +201,7 @@ class SzReviewData:
         sz = self.get_sz(sz_name, True)
         span_sec = 10  # plot flanking the sz start and stop
         t0, t1 = sz['Start'], sz['Stop']
+
         s0 = max(0, int((t0 - span_sec) * self.fs))  # sample where plot starts
         s1 = min(int((t1 + span_sec) * self.fs), len(self.ephys.trace))  # sample where the plot ends
         ds0 = int(t0 * self.fs) - s0  # samples between plot start and sz start
