@@ -268,6 +268,7 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.szdat.get_sz(self.active_sz) == '': #if pressed next without marking it not sz, we set it as reviewed
             self.szdat.set_sz(self.active_sz, True)
             self.mark_complete(self.current_selected_i, 'true')
+            self.flag_unsaved()
         if self.current_selected_i is None:
             self.current_selected_i = 0
         elif (self.current_selected_i + 1) < len(self.szdat.output_sz):
@@ -336,22 +337,23 @@ class GUI_main(QtWidgets.QMainWindow):
         self.select_sz()
 
     def previous_callback(self):
-        print('Prev cb')
         if self.current_selected_i is None:
             self.current_selected_i = 0
         elif self.current_selected_i > 0:
             self.current_selected_i -= 1
         self.select_sz()
 
-    def toggle_callback(self):
-        if self.active_sz is None:
-            self.next_callback()
-
+    def flag_unsaved(self):
         if not self.unsaved_changes:
             self.save_button.setStyleSheet("background-color: red")
         self.unsaved_changes += 1
         self.save_button.setText(f'Save ({self.unsaved_changes})')
 
+
+    def toggle_callback(self):
+        if self.active_sz is None:
+            self.next_callback()
+        self.flag_unsaved()
         curr = self.szdat.get_sz(self.active_sz)
         if curr == '' or curr:
             self.szdat.set_sz(self.active_sz, False)
@@ -365,11 +367,7 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.active_sz is None:
             self.next_callback()
 
-        if not self.unsaved_changes:
-            self.save_button.setStyleSheet("background-color: red")
-        self.unsaved_changes += 1
-        self.save_button.setText(f'Save ({self.unsaved_changes})')
-
+        self.flag_unsaved()
         sz = self.szdat.get_sz(self.active_sz, full=True)
         is_sz = sz["Included"] != False #value can be ''
         if is_sz and sz["Included"] == '': #set to reviewed
@@ -392,7 +390,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.szdat.plot_sz(self.active_sz, self.FigCanvas1.axd)
         self.update_indicators()
         self.FigCanvas1.draw()
-        if self.unsaved_changes > 9:
+        if self.unsaved_changes > 5:
             self.save_callback()
 
 class SubplotsCanvas(FigureCanvasQTAgg):
