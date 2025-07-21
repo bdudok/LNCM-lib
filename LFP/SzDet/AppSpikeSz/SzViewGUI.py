@@ -242,9 +242,13 @@ class GUI_main(QtWidgets.QMainWindow):
         #color if already completed:
         included_sz = self.szdat.output_sz['Included'].isin((1, 'TRUE', True))
         excluded_sz = self.szdat.output_sz['Included'].isin((0, 'FALSE', False))
+        interictal_sz = self.szdat.output_sz['Interictal'].isin((1, 'TRUE', True))
         for i, sz in enumerate(self.szdat.szlist):
             if included_sz[i]:
-                self.mark_complete(i, color='true')
+                if interictal_sz[i]:
+                    self.mark_complete(i, color='interictal')
+                else:
+                    self.mark_complete(i, color='true')
             elif excluded_sz[i]:
                 self.mark_complete(i, color='false')
         print(self.szdat.output_sz['Included'])
