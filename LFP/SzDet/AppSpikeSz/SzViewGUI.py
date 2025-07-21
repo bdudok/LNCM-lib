@@ -240,13 +240,16 @@ class GUI_main(QtWidgets.QMainWindow):
         self.active_sz = None
 
         #color if already completed:
-        included_sz = self.szdat.output_sz['Included'].eq(True)
-        excluded_sz = self.szdat.output_sz['Included'].eq(False)
+        included_sz = self.szdat.output_sz['Included'].isin((1, 'TRUE', True))
+        excluded_sz = self.szdat.output_sz['Included'].isin((0, 'FALSE', False))
         for i, sz in enumerate(self.szdat.szlist):
             if included_sz[i]:
                 self.mark_complete(i, color='true')
-            elif excluded_sz[1]:
+            elif excluded_sz[i]:
                 self.mark_complete(i, color='false')
+        print(self.szdat.output_sz['Included'])
+        print(excluded_sz)
+
 
         self.path_label.setText(self.prefix)
 

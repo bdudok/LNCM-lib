@@ -177,7 +177,12 @@ class SzReviewData:
             saved = read_excel(fn)
             for szname in sznames:
                 for fieldname in ('Included', 'Interictal'):
-                    self.output_sz.loc[szname, fieldname] = saved.loc[szname][fieldname]
+                    x = saved.loc[szname][fieldname]
+                    if x in (1, 'TRUE', True):
+                        x = True
+                    elif x in (0, 'FALSE', False):
+                        x = False
+                    self.output_sz.loc[szname, fieldname] = x
 
         self.szlist = sznames
 
