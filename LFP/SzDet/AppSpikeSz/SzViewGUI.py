@@ -192,8 +192,8 @@ class GUI_main(QtWidgets.QMainWindow):
         vbox.addWidget(self.separator)
         #later add a middle, thinner row for motion
         self.FigCanvas1 = SubplotsCanvas()
-        toolbar = NavigationToolbar2QT(self.FigCanvas1, self)
-        vbox.addWidget(toolbar)
+        custom_toolbar = SelectorToolbar(self.FigCanvas1, self)
+        vbox.addWidget(custom_toolbar)
         vbox.addWidget(self.FigCanvas1)
 
         return groupbox
@@ -392,6 +392,8 @@ class GUI_main(QtWidgets.QMainWindow):
             self.mark_complete(self.current_selected_i, 'interictal')
         self.color_next_button()
 
+    def edit_sz_callback(self, event_type, xcoord):
+        print(f'{event_type} at {xcoord}')
 
     def refresh_data(self):
         self.szdat.plot_sz(self.active_sz, self.FigCanvas1.axd)
@@ -408,6 +410,32 @@ class SubplotsCanvas(FigureCanvasQTAgg):
                                       gridspec_kw={'width_ratios': [1, 0.3, ]},
                                       figsize=(12, 6), layout="constrained")
         super(SubplotsCanvas, self).__init__(self.fig)
+
+class SelectorToolbar(NavigationToolbar2QT):
+    def __init__(self, canvas, parent=None):
+        super().__init__(canvas, parent)
+        self.main_gui = parent
+        # Add a custom button to the toolbar
+        self.addSeparator()
+        self.start_button = QPushButton("Edit start")
+        self.start_button.clicked.connect(self.start_action)
+        self.addWidget(self.start_button)
+        self.stop_button = QPushButton("Edit end")
+        self.stop_button.clicked.connect(self.stop_action)
+        self.addWidget(self.stop_button)
+
+
+    def start_action(self, event):
+        self.event_type = 'start'
+        self.cid = self.canvas.mpl_connect('button_press_event', self.on_click)
+
+    def stop_action(self):
+        self.event_type = 'stop'
+        self.cid = self.canvas.mpl_connect('button_press_event', self.on_click)
+
+    def on_click(self, event):
+        if event.inaxes:
+            self.main_gui.edit_sz_callback(self.event_type, event.xdata)
 
 def launch_GUI(*args, **kwargs):
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
