@@ -151,6 +151,7 @@ class SzReviewData:
     def init_output(self):
         sznames, sztimes, szdurs = [], [], []
         spkcount = []
+        self.plot_margin = 10 #time plotted before and after each sz
         if self.setup in ('Pinnacle', 'LNCM'):
             start_key = 'Sz.Start(s)'
             stop_key = 'Sz.Stop(s)'
@@ -166,7 +167,8 @@ class SzReviewData:
 
         # compute features for analysis
         self.output_sz = pandas.DataFrame({'Start': self.input_sz[start_key].values,
-                                           'Stop': self.input_sz[stop_key].values, 'Duration(s)': szdurs,
+                                           'Stop': self.input_sz[stop_key].values,
+                                           'Edited': False, 'Duration(s)': szdurs,
                                            'SpikeCount': spkcount,
                                            'SpkFreq': numpy.array(spkcount) / numpy.array(szdurs),
                                            'PostIctalSuppression(s)': '',
@@ -176,13 +178,17 @@ class SzReviewData:
         if os.path.exists(fn):
             saved = read_excel(fn)
             for szname in sznames:
+                curated_sz = saved.loc[szname]
                 for fieldname in ('Included', 'Interictal'):
-                    x = saved.loc[szname][fieldname]
+                    x = curated_sz[fieldname]
                     if x in (1, 'TRUE', True):
                         x = True
                     elif x in (0, 'FALSE', False):
                         x = False
                     self.output_sz.loc[szname, fieldname] = x
+                if 'Edited' in saved.columns and curated_sz['Edited']:
+                    for fieldname in('Start', 'Stop'):
+                        self.output_sz.loc[szname, fieldname] = curated_sz[fieldname]
 
         self.szlist = sznames
 
@@ -200,11 +206,24 @@ class SzReviewData:
     #     #provide interface for getting a frame by rec time, and getting all frames between two time points
     #     return SyncVid(path, prefix)
 
+
+    def edit_sz_from_gui(self, event_type, xcoord):
+        sz = self.get_sz(self.active_sz, True)
+        t0, t1 = sz['Start'], sz['Stop']
+        new_time = t0+xcoord/self.fs - self.plot_margin
+        if not sz['Edited']:
+            self.set_sz(self.active_sz, value=True, key='Edited')
+            self.set_sz(self.active_sz, value=t0, key='OriginalStart')
+            self.set_sz(self.active_sz, value=t1, key='OriginalStop')
+        self.set_sz(self.active_sz, value=new_time, key=event_type)
+
+
     def plot_sz(self, sz_name, axd):
+        self.active_sz = sz_name
         for _, ca in axd.items():
             ca.cla()
         sz = self.get_sz(sz_name, True)
-        span_sec = 10  # plot flanking the sz start and stop
+        span_sec = self.plot_margin  # plot flanking the sz start and stop
         t0, t1 = sz['Start'], sz['Stop']
 
         s0 = max(0, int((t0 - span_sec) * self.fs))  # sample where plot starts

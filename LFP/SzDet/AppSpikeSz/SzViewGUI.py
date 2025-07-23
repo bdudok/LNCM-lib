@@ -112,6 +112,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.sz_list.currentRowChanged.connect(self.list_clicked)
         vbox.addWidget(self.sz_list)
 
+        groupbox.setFixedWidth(180)
         return groupbox
 
     def make_traces_groupbox(self):
@@ -121,9 +122,6 @@ class GUI_main(QtWidgets.QMainWindow):
 
         #horizontal layout for buttons
         horizontal_layout = QHBoxLayout()
-
-        #horizontal layout for indicators
-        indicators_layout = QHBoxLayout()
 
         #prev button
         left = "\u2190"
@@ -393,7 +391,10 @@ class GUI_main(QtWidgets.QMainWindow):
         self.color_next_button()
 
     def edit_sz_callback(self, event_type, xcoord):
-        print(f'{event_type} at {xcoord}')
+        self.szdat.edit_sz_from_gui(event_type, xcoord)
+        self.flag_unsaved()
+        self.refresh_data()
+
 
     def refresh_data(self):
         self.szdat.plot_sz(self.active_sz, self.FigCanvas1.axd)
@@ -426,11 +427,11 @@ class SelectorToolbar(NavigationToolbar2QT):
 
 
     def start_action(self, event):
-        self.event_type = 'start'
+        self.event_type = 'Start'
         self.cid = self.canvas.mpl_connect('button_press_event', self.on_click)
 
     def stop_action(self):
-        self.event_type = 'stop'
+        self.event_type = 'Stop'
         self.cid = self.canvas.mpl_connect('button_press_event', self.on_click)
 
     def on_click(self, event):
