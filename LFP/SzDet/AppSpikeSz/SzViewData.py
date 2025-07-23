@@ -156,13 +156,13 @@ class SzReviewData:
             start_key = 'Sz.Start(s)'
             stop_key = 'Sz.Stop(s)'
             spike_key = 'SpikeTimes(s)'
-        spiketimes = self.spikes[spike_key].values
+        self.spiketimes = self.spikes[spike_key].values
         for _, sz in self.input_sz.iterrows():
             sztime = self.rec_info['startdate'] + datetime.timedelta(seconds=sz[start_key])
             sznames.append(f'{sztime:%H:%M:%S(%m%d)}')
             sztimes.append(sztime)
             szdurs.append(sz[stop_key] - sz[start_key])
-            incl_spikes = numpy.logical_and(spiketimes > sz[start_key], spiketimes < sz[stop_key])
+            incl_spikes = numpy.logical_and(self.spiketimes > sz[start_key], self.spiketimes < sz[stop_key])
             spkcount.append(numpy.count_nonzero(incl_spikes) + 1)
 
         # compute features for analysis
@@ -216,6 +216,16 @@ class SzReviewData:
             self.set_sz(self.active_sz, value=t0, key='OriginalStart')
             self.set_sz(self.active_sz, value=t1, key='OriginalStop')
         self.set_sz(self.active_sz, value=new_time, key=event_type)
+        #update other sz features
+        if event_type == 'Start':
+            t0 = new_time
+        elif event_type == 'Stop':
+            t1 = new_time
+        self.set_sz(self.active_sz, value=t1-t0, key='Duration(s)')
+        n_spikes = numpy.count_nonzero(numpy.logical_and(self.spiketimes > t0, self.spiketimes < t1)) + 1
+        self.set_sz(self.active_sz, value=n_spikes, key='SpikeCount')
+        self.set_sz(self.active_sz, value=n_spikes/(t1-t0), key='SpkFreq')
+        # PostIctalSuppression(s) is computed by plot_sz
 
 
     def plot_sz(self, sz_name, axd):
@@ -231,7 +241,7 @@ class SzReviewData:
         ds0 = int(t0 * self.fs) - s0  # samples between plot start and sz start
         # ds1 = int((t1 - t0) * self.fs) - ds0  # samples between plot start and sz end
         sx = numpy.arange(s1 - s0)
-        secs = numpy.arange(-span_sec, 2 * span_sec + 1 + t1 - t0, span_sec, dtype='int')
+        secs = numpy.arange(-span_sec, span_sec + t1 - t0, span_sec, dtype='int')
         window_w = int(0.1 * self.fs)
 
         y = self.ephys.trace[s0:s1]
@@ -250,8 +260,6 @@ class SzReviewData:
 
         ca.axvline(first_plot_sample, color='red', )  # linestyle=':')
         ca.axvline(last_plot_sample, color='red', )  # linestyle=':')
-        ca.set_xticks(secs * self.fs)
-        ca.set_xticklabels(secs)
         ca.plot(sx, y, color='black')
         # plot where suppressed
         if numpy.any(gamma_mask):
@@ -265,6 +273,8 @@ class SzReviewData:
 
         pisdur = numpy.count_nonzero(gamma_mask) / self.fs
         self.set_sz(sz_name, pisdur, 'PostIctalSuppression(s)')
+        ca.set_xticks((secs + span_sec) * self.fs)
+        ca.set_xticklabels(secs)
 
         # sz start example
         ca = axd['lower left']

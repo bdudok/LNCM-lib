@@ -249,8 +249,8 @@ class GUI_main(QtWidgets.QMainWindow):
                     self.mark_complete(i, color='true')
             elif excluded_sz[i]:
                 self.mark_complete(i, color='false')
-        print(self.szdat.output_sz['Included'])
-        print(excluded_sz)
+        # print(self.szdat.output_sz['Included'])
+        # print(excluded_sz)
 
 
         self.path_label.setText(self.prefix)
