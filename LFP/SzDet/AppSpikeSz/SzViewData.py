@@ -96,7 +96,7 @@ class SzReviewData:
 
     def read_ephys(self):
         if self.setup == 'Pinnacle':
-            self.ephys = ReadEDF.EDF(self.path, self.prefix, ch=int(self.ch)-1)
+            self.ephys = ReadEDF.EDF(self.path, self.prefix, ch=int(self.ch) - 1)
             # ttls = self.ephys.get_TTL()
             startdate = self.ephys.d[-1]['startdate']
             annotations = self.ephys.d[-1]['annotations']
@@ -127,6 +127,7 @@ class SzReviewData:
             "Curation.PISBand": (20, 50),  # frequency band for evaluating postictal suppression (Hz)
             "Curation.PISDur": 6,  # postictal window (s)
             "Curation.PISMultiplier": 10,  # max postictal relative to peak during sz
+            "PlotMargin": 10,  # time shown before/after each sz
         }
         for key, value in defaults.items():
             if key not in user_settings:
@@ -151,7 +152,7 @@ class SzReviewData:
     def init_output(self):
         sznames, sztimes, szdurs = [], [], []
         spkcount = []
-        self.plot_margin = 10 #time plotted before and after each sz
+        self.plot_margin = self.settings["PlotMargin"]
         if self.setup in ('Pinnacle', 'LNCM'):
             start_key = 'Sz.Start(s)'
             stop_key = 'Sz.Stop(s)'
@@ -187,7 +188,8 @@ class SzReviewData:
                         x = False
                     self.output_sz.loc[szname, fieldname] = x
                 if 'Edited' in saved.columns and curated_sz['Edited']:
-                    for fieldname in('Start', 'Stop'):
+                    for fieldname in (
+                    'Start', 'Stop', 'Duration(s)', 'SpikeCount', 'SpkFreq', 'PostIctalSuppression(s)'):
                         self.output_sz.loc[szname, fieldname] = curated_sz[fieldname]
 
         self.szlist = sznames
@@ -206,27 +208,25 @@ class SzReviewData:
     #     #provide interface for getting a frame by rec time, and getting all frames between two time points
     #     return SyncVid(path, prefix)
 
-
     def edit_sz_from_gui(self, event_type, xcoord):
         sz = self.get_sz(self.active_sz, True)
         t0, t1 = sz['Start'], sz['Stop']
-        new_time = t0+xcoord/self.fs - self.plot_margin
+        new_time = t0+xcoord/self.fs - self.plot_delta
         if not sz['Edited']:
             self.set_sz(self.active_sz, value=True, key='Edited')
             self.set_sz(self.active_sz, value=t0, key='OriginalStart')
             self.set_sz(self.active_sz, value=t1, key='OriginalStop')
         self.set_sz(self.active_sz, value=new_time, key=event_type)
-        #update other sz features
+        # update other sz features
         if event_type == 'Start':
             t0 = new_time
         elif event_type == 'Stop':
             t1 = new_time
-        self.set_sz(self.active_sz, value=t1-t0, key='Duration(s)')
+        self.set_sz(self.active_sz, value=t1 - t0, key='Duration(s)')
         n_spikes = numpy.count_nonzero(numpy.logical_and(self.spiketimes > t0, self.spiketimes < t1)) + 1
         self.set_sz(self.active_sz, value=n_spikes, key='SpikeCount')
-        self.set_sz(self.active_sz, value=n_spikes/(t1-t0), key='SpkFreq')
+        self.set_sz(self.active_sz, value=n_spikes / (t1 - t0), key='SpkFreq')
         # PostIctalSuppression(s) is computed by plot_sz
-
 
     def plot_sz(self, sz_name, axd):
         self.active_sz = sz_name
@@ -235,18 +235,23 @@ class SzReviewData:
         sz = self.get_sz(sz_name, True)
         span_sec = self.plot_margin  # plot flanking the sz start and stop
         t0, t1 = sz['Start'], sz['Stop']
-
-        s0 = max(0, int((t0 - span_sec) * self.fs))  # sample where plot starts
-        s1 = min(int((t1 + span_sec) * self.fs), len(self.ephys.trace))  # sample where the plot ends
+        # s0 = sample where plot starts
+        if t0 > span_sec:
+            s0 = int((t0 - span_sec) * self.fs)
+            self.plot_delta = span_sec
+        else:
+            s0 = 0
+            self.plot_delta = t0
+        s1 = min(int((t1 + self.plot_delta) * self.fs), len(self.ephys.trace))  # sample where the plot ends
         ds0 = int(t0 * self.fs) - s0  # samples between plot start and sz start
         # ds1 = int((t1 - t0) * self.fs) - ds0  # samples between plot start and sz end
         sx = numpy.arange(s1 - s0)
-        secs = numpy.arange(-span_sec, span_sec + t1 - t0, span_sec, dtype='int')
+        secs = numpy.arange(-span_sec, span_sec + t1 - t0+1, span_sec, dtype='int')
         window_w = int(0.1 * self.fs)
 
         y = self.ephys.trace[s0:s1]
-        first_plot_sample = int(span_sec * self.fs)
-        last_plot_sample = int((span_sec + t1 - t0) * self.fs)
+        first_plot_sample = int(self.plot_delta * self.fs)
+        last_plot_sample = int((self.plot_delta + t1 - t0) * self.fs)
         y_range = numpy.percentile(numpy.absolute(y), 99) * 1.5
         sz_gamma = gaussian_filter(self.gamma_power[s0:s1], self.fs * 1.0)
 
@@ -273,7 +278,7 @@ class SzReviewData:
 
         pisdur = numpy.count_nonzero(gamma_mask) / self.fs
         self.set_sz(sz_name, pisdur, 'PostIctalSuppression(s)')
-        ca.set_xticks((secs + span_sec) * self.fs)
+        ca.set_xticks((secs + self.plot_delta) * self.fs)
         ca.set_xticklabels(secs)
 
         # sz start example
@@ -292,8 +297,11 @@ class SzReviewData:
         ca = axd['lower right']
         strip_ax(ca, False)
         ca.axvline(window_w, color='red', linestyle=':')
-        spike_array = numpy.empty((len(sz_spikes), 2 * window_w))
+        spike_array = numpy.zeros((len(sz_spikes), 2 * window_w))
+
         for si, s in enumerate(sz_spikes):
+            if not (window_w / 2) < s < (len(self.ephys.trace) * window_w / 2):
+                continue
             y = self.ephys.trace[s - window_w:s + window_w]
             ca.plot(y, color='black', linewidth=0.5, alpha=0.2)
             spike_array[si] = y - numpy.mean(y[:int(window_w / 2)])
