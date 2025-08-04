@@ -67,7 +67,7 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
             db['input_format'] = 'bruker'
             db['bruker'] = True
             ops['nchannels'] = 2
-            ops['align_by_chan'] = s.channelnames.index(ref_ch)
+            ops['align_by_chan'] = s.channelnames.index(ref_ch) + 1 #this is 1-indexed in S2p
 
         # run motion correction
         output_ops = suite2p.run_s2p(ops=ops, db=db)
