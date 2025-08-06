@@ -2,13 +2,18 @@ import os.path
 from Proc2P.utils import *
 import json
 import numpy
+import math
+import cv2
 import datetime
 from PlotTools import *
+import re, datetime, os
+import numpy as np
 
 # readers
 from LFP.Pinnacle import ReadEDF
 from Proc2P.Bruker import LoadEphys
 from Proc2P.Bruker.PreProc import SessionInfo
+from Proc2P.Treadmill import rsync
 
 '''
 Manually review automatically detected seizures
@@ -26,8 +31,13 @@ class SzReviewData:
         self.ch = ch
         self.tag = tag
         self.setup = setup
+
+
         self.load_data()
         self.init_output()
+
+
+
 
     def load_data(self):
         self.input_sz = read_excel(self.get_fn('sztime'))
@@ -37,6 +47,8 @@ class SzReviewData:
         self.fs = int(float(self.settings['fs']))
         self.spike_samples = (self.spikes['SpikeTimes(s)'].values * self.fs).astype('int')
         self.read_ephys()
+        self.read_video()
+
 
         # ignore video now. add this after the lfp review features work and can be used in practice
         # get all ttl times from ephys and pass to video class to align all. this should be done once and stored
@@ -78,8 +90,10 @@ class SzReviewData:
     def read_ephys(self):
         if self.setup == 'Pinnacle':
             self.ephys = ReadEDF.EDF(self.path, self.prefix, ch=self.ch)
-            # ttls = self.ephys.get_TTL()
+            ttls = self.ephys.get_TTL()
+            print(ttls)
             startdate = self.ephys.d[-1]['startdate']
+            print(startdate)
             annotations = self.ephys.d[-1]['annotations']
         if self.setup == 'LNCM':
             self.ephys = LoadEphys.Ephys(self.path, self.prefix, channel=int(self.ch))
@@ -130,6 +144,185 @@ class SzReviewData:
         if full:
             return self.output_sz.loc[sz].iloc[0]
         return self.output_sz.loc[sz, 'Included'].values[0]
+
+
+    def read_video(self):
+        # 1) parse the overall segment window from self.prefix
+        m = re.search(
+            r'__(?P<day>\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2})'
+            r'_TS_(?P<start>\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2})',
+            self.prefix
+        )
+        if not m:
+            self.align = None
+            return
+
+        #seg_start = datetime.datetime.strptime(m.group('start'), '%Y-%m-%d_%H_%M_%S')
+        #seg_end   = datetime.datetime.strptime(m.group('end'),   '%Y-%m-%d_%H_%M_%S')
+        seg_start = datetime.datetime.strptime(m.group('start'), '%Y-%m-%d_%H_%M_%S')
+        seg_end = seg_start + datetime.timedelta(hours=1)
+        # 2) get your EEG TTLs as a 1-D float array (seconds from rec start)
+        ttls_eeg = self.ephys.get_TTL(channel='GPIO0')
+        print(ttls_eeg[len(ttls_eeg)-1])
+
+        # 3) collect and offset ALL video TTLs whose clips overlap the window
+        vid_folder = r'Z:\_RawData\EEG\Dreadd\videos'
+        all_video_ttls = []
+
+        self.video_clips = []
+        for fn in sorted(os.listdir(vid_folder)):
+            if not fn.lower().endswith('.avi'):
+                continue
+
+            # extract this clip’s start time from its filename
+            m2 = re.search(r'(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})', fn)
+            if not m2:
+                continue
+            vid_start = datetime.datetime.strptime(m2.group(1), '%Y-%m-%dT%H-%M-%S')
+            vid_end   = vid_start + datetime.timedelta(hours=1)
+
+            # skip clips that lie entirely outside your segment
+            if not (vid_start < seg_end and vid_end > seg_start):
+                continue
+
+            self.video_clips.append([
+                os.path.join(vid_folder, fn),
+                vid_start,
+                vid_end
+            ])
+
+
+
+        for clip in self.video_clips:
+
+            path = clip[0]
+            # load and flatten this clip’s TTL timestamps (relative to clip start)
+            npy_path = path[:-4] + '.npy'
+            raw_vid  = np.load(npy_path, allow_pickle=True)
+
+
+
+            print(raw_vid)
+
+
+            # column 4 is the pulse fra
+            ttls_video = raw_vid[:, 4].astype(float)
+            print(path)
+            print(ttls_video)
+            print(len(ttls_video))
+            print(ttls_video[len(ttls_video) - 1] - ttls_video[0])
+
+            all_video_ttls.append(ttls_video)
+
+        if not all_video_ttls:
+            self.align = None
+            return
+
+        # 4) concatenate and sort every clip’s TTLs
+        ttls_video = np.concatenate(all_video_ttls)
+
+
+
+
+
+
+        # 5) run one single aligner on the full continuous TTL sequence
+        try:
+            self.align = rsync.Rsync_aligner(ttls_eeg, ttls_video)
+            print("alignment works!")
+        except Exception as e:
+            print(f"[SzReviewData] Error: {e}")
+            self.align = None
+            return
+
+        first_ttl = math.ceil(ttls_eeg[0])
+        last_ttl = math.floor(ttls_eeg[-1])
+
+        for clip in self.video_clips:
+            vid_start=clip[1]
+            seconds = int((vid_start - seg_start).total_seconds())
+            print(seg_start)
+            print(vid_start)
+
+
+            print(seconds)
+            if seconds <  first_ttl:
+                start_frame = self.align.A_to_B(first_ttl) + 30 * (seconds - first_ttl)
+            elif seconds >= first_ttl and seconds <= last_ttl:
+                start_frame = self.align.A_to_B(seconds)
+            else: ## seconds > last_ttl
+                start_frame = self.align.A_to_B(last_ttl) + 30 * (seconds - last_ttl)
+
+            print(first_ttl)
+            print(last_ttl)
+            print(start_frame)
+
+            clip.append(start_frame)
+
+
+
+
+            #self.align = rsync.Rsync_aligner(ttls_eeg, ttls_video)
+
+    def get_frames(self, t0, t1):
+        print(t0)
+
+        rec_start = self.rec_info['startdate'] + datetime.timedelta(seconds=t0)
+        print(rec_start)
+        print(self.video_clips)
+        video_path = None
+        shift = None
+
+        for clip in self.video_clips:
+
+            path = clip[0]
+            vid_start=clip[1]
+            vid_end=clip[2]
+            if vid_start <= rec_start < vid_end:
+                video_path = path
+                shift = clip[3]
+                break
+
+        if video_path is None:
+            print("Could not find aligned video!")
+            return
+
+
+
+        cap = cv2.VideoCapture(video_path)
+        print(video_path)
+        if not cap.isOpened():
+            print("Could not open video.")
+            return
+
+        start_frame = self.align.A_to_B(t0) - shift
+        end_frame = self.align.A_to_B(t1) - shift
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        frames = []
+        current_frame = start_frame
+        # current_frame = start_frame
+        print(t0, t1)
+        print(start_frame)
+        print(end_frame)
+        print(frame_count)
+
+        while current_frame <= end_frame:
+            ret, frame = cap.read()
+            print(ret)
+            if not ret:
+                break
+            frames.append(frame)
+            current_frame += 1
+
+        cap.release()
+
+        print(len(frames))
+
+        return video_path, frames
+
 
     # def read_video(self, path, prefix):
     #     #load all ttls so that each sz can be matched to relevant vid
