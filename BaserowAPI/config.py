@@ -24,6 +24,7 @@ config = {
     "session_url": "http://10.18.4.112:5001/api/database/rows/table/490/?user_field_names=true",
     "mice_url": "http://10.18.4.112:5001/api/database/rows/table/492/?user_field_names=true",
     "log_url": "http://10.18.4.112:5001/api/database/rows/table/540/?user_field_names=true",
+    "excl_url": "http://10.18.4.112:5001/api/database/rows/table/545/?user_field_names=true",
     "FieldID": {
         'Task': 4639,
         'Mouse.ID': 4616,
@@ -38,6 +39,10 @@ config = {
         'Message': 4996,
         'Class': 4998,
         'Created on': 4999
+    },
+    "ExclID": {
+        'Name': 5024,
+        'Exclusion': 5028,
     },
     "MouseID": {
         'Mouse.ID': 4570,

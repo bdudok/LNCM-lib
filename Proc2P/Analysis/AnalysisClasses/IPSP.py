@@ -9,8 +9,10 @@ from Proc2P.Analysis.AnalysisClasses import PhotoStim
 from Proc2P.utils import logger, lprint
 
 from collections import namedtuple
+import scipy
 from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter
+from statsmodels.stats.weightstats import DescrStatsW
 
 import pandas
 import numpy
@@ -49,6 +51,7 @@ class IPSP:
             'param': 'rel',  # key of param for ImagingSession to use for traces ('rel')
             'nan': 4,  # frames
         }
+        self.baseline_kernels = {}
         if not os.path.exists(self.wdir):
             os.mkdir(self.wdir)
         self.get_stimtimes()
@@ -245,9 +248,11 @@ class IPSP:
                     ((i not in self.wh_nan[0]) and (not numpy.isnan(self.raw_resps[event_index, c, i])))]
         if not ((len(notna_bl) > 10) and (numpy.count_nonzero(numpy.logical_not(numpy.isnan(Y))) > 10)):
             return Y, notna_bl, None
-        bl = gaussian_filter(self.raw_resps[event_index, c][notna_bl], int(0.025 * self.session.fps))
-        fit = self.fit_response(Y, bl[-1])
-        return Y, bl, fit
+        weights = self.get_baseline_kernel()
+        bl = self.raw_resps[event_index, c][notna_bl]
+        bl_mean = DescrStatsW(bl, weights[notna_bl], ddof=0)
+        fit = self.fit_response(Y, bl_mean.mean)
+        return Y, bl_mean.mean, fit
 
     def fit_response(self, Y, bl):
         '''
@@ -266,22 +271,45 @@ class IPSP:
         popt, pcov = curve_fit(self.ampl_func, x[incl], y[incl], p0=guesses, bounds=bounds)
         return popt
 
+
+    def get_baseline_kernel(self, t=0, s=25):
+        '''
+        get weights to measure baseline: an asymmetric, back-looking gaussian
+        :param t: gaussian center (ms relative to stim)
+        :param s: gaussian sigma (ms)
+        :return: weights to be used by DescrStatsW
+        '''
+        key = f'{int(t)}.{int(s)}'
+        if key not in self.baseline_kernels:
+            fps = self.session.fps
+            indices = numpy.arange(-self.config.pre, 0).astype('int64')
+            weights = scipy.stats.norm.pdf(indices, loc=-t * fps / 1000, scale=s * fps / 1000)
+            self.baseline_kernels[key] = weights
+        return self.baseline_kernels[key]
+
     def pull_ipsps(self):
         '''
         store baseline and amplitude for each stim in each cell
         using the parameter of the fit as amplitude. NB that alternatively, we could add the bias,
          or compute the diff of where the fit curve min is relative to baseline.
-         :return: array of frame, baseline, response for each c, e
+         :return: array of frame, baseline, response, amplitude for each c, e
         '''
-        self.responses = numpy.empty((self.n_cells, self.n_stims, 3))  # frame, baseline, response
+        #response is ampl parameter of the fit, compared to where it returns to
+        #amplitude is the peak value minus baseline value
+        self.responses = numpy.empty((self.n_cells, self.n_stims, 4))  # frame, baseline, response, amplitude
+
         self.responses[:] = numpy.nan
         for ci in range(self.n_cells):
             for ei in range(self.n_stims):
                 Y, bl, fit = self.fit_event(ci, ei)  # bl is in DF/F actual, response (fit[0]) in DF/F change.
                 if fit is None:
-                    self.responses[ci, ei] = self.stimframes[ei], numpy.nan, numpy.nan
+                    self.responses[ci, ei] = self.stimframes[ei], numpy.nan, numpy.nan, numpy.nan
                 else:
-                    self.responses[ci, ei] = self.stimframes[ei], bl[-1], fit[0]
+                    # peak value:
+                    B = self.model[1]
+                    D = self.model[3]
+                    y_at_peak = self.alpha_func(B, fit[0], B, fit[1], D)
+                    self.responses[ci, ei] = self.stimframes[ei], bl, fit[0], bl - y_at_peak
 
         lprint(self, 'Pulled responses for', self.session.tag, 'with ', self.config, 'Model:',
                self.get_modstring(), logger=self.log)

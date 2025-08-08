@@ -156,6 +156,7 @@ def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=F
     # print(traces.shape)
     avgtype = ('simple', 'weighted')[snr_weighted]
     message = f'Pulled {avgtype} average from {int(nframes)} frames ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}'
+    message += '\r\n' + f'Channel order is: {channels}'
     return message
 
 if __name__ == '__main__':

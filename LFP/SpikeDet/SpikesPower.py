@@ -25,11 +25,13 @@ class Detect:
         self.trace = trace
 
         #filter
-        self.HF = butter_bandpass_filter(trace, lo, hi, fs,)
+        self.HF = butter_bandpass_filter(trace, lo, hi, self.fs,)
         self.env = numpy.abs(signal.hilbert(self.HF))
-        self.stdev_env = numpy.std(self.env)
-        self.stdev_trace = numpy.std(self.trace)
-
+        mask = self.env < (self.env.mean() + self.env.std() * 2)
+        self.mean_env = numpy.mean(self.env[mask])
+        self.stdev_env = numpy.std(self.env[mask])
+        self.mean_trace = numpy.mean(self.trace[mask])
+        self.stdev_trace = numpy.std(self.trace[mask])
 
 
     def get_spikes(self, tr1=3, tr2=5, trdiff=2, dur=10, dist=50):
@@ -46,15 +48,15 @@ class Detect:
 
 
         #get additional HF
-        HFO_amp_thresh1 = self.stdev_env * tr1
-        HFO_amp_thresh2 = self.stdev_env * tr2
+        HFO_amp_thresh1 = self.mean_env + self.stdev_env * tr1
+        HFO_amp_thresh2 = self.mean_env + self.stdev_env * tr2
+
 
         HFOpeaks, _ = signal.find_peaks(self.env, height=HFO_amp_thresh2, distance=dist * self.fs / ms)
         # HFOpeaks = HFOpeaks[self.env[HFOpeaks] > HFO_amp_thresh2]
         HFO_duration, _, left_ips, right_ips = signal.peak_widths(numpy.clip(self.env, HFO_amp_thresh1, max(self.env)),
                                                        peaks=HFOpeaks, rel_height=1)
 
-        # return HFO_duration, left_ips, right_ips, self.env
 
         #filter for short peaks
         HFOpeaks = HFOpeaks[HFO_duration / self.fs * ms > dur]
@@ -71,7 +73,8 @@ class Detect:
         d2tr = diff2.mean() + diff2.std() * trdiff
         wh = numpy.where(d2s>d2tr)
         peakdet_trace[wh] = numpy.abs(self.trace[wh])
-        AMPpeaks, _ = signal.find_peaks(peakdet_trace, height=self.stdev_trace*2, distance=dist * self.fs / ms)
+        thr = self.mean_trace + self.stdev_trace * 2
+        AMPpeaks, _ = signal.find_peaks(peakdet_trace, height=thr, distance=dist * self.fs / ms)
 
 
         #filter for overlap:

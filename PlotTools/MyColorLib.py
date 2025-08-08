@@ -80,9 +80,12 @@ def clib(key, skin=None):
         colors = {'speed': '#21409A'}
     elif skin == 'plots':
         colors = {'orange': '#df5a49',
+                  'PV': '#df5a49',
                   'brown': '#4c4747',
                   'navy': '#344d5c',
                   'blue': '#4ab5c1',
+                  'CCK': '#4ab5c1',
+                  'Sncg': '#4ab5c1',
                   'yellow': '#efc94d',
                   'grey': '#808080',
                   'swr': '#003f1b',

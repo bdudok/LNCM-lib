@@ -8,6 +8,7 @@ from scipy import stats
 def lprint(obj, message, *args, logger=None):
     '''Add timestamp and object name to print calls'''
     ts = datetime.datetime.now().isoformat(timespec='seconds')
+    message = str(message)
     for x in args:
         message += ' ' + str(x)
     if obj is None:
@@ -22,17 +23,30 @@ def lprint(obj, message, *args, logger=None):
 
 
 class logger:
-    def __init__(self, filehandle=None):
+    def __init__(self, filehandle=None, defer=0):
         self.fn = filehandle
+        self.defer = defer
+        self.unsaved = 0
+        self.message = ''
 
-    def set_handle(self, procpath, prefix):
+    def set_handle(self, procpath, prefix,):
         self.fn = os.path.join(procpath, prefix + '/', prefix + f'_{get_user()}_AnalysisLog.txt')
 
     def log(self, message):
         if not message.endswith('\n'):
             message += '\n'
-        with open(self.fn, 'a') as f:
-            f.write(message)
+        self.message += message
+        self.unsaved += 1
+        if self.unsaved > self.defer:
+            with open(self.fn, 'a') as f:
+                f.write(self.message)
+                self.unsaved = 0
+                self.message = ''
+
+    def flush(self):
+        if self.unsaved > 0:
+            with open(self.fn, 'a') as f:
+                f.write(self.message)
 
 
 def strip_ax(ca, full=True):
@@ -154,7 +168,7 @@ def read_excel(*args, **kwargs):
     fn = args[0]
     if fn.endswith('csv'):
         return pandas.read_csv(*args, **kwargs)
-    return pandas.read_excel(*args, **kwargs, engine='openpyxl')
+    return pandas.read_excel(*args, **kwargs, engine='openpyxl', index_col=0)
 
 
 def ewma(trace, period=15):

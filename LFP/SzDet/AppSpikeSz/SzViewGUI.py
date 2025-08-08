@@ -26,7 +26,7 @@ import os
 #GUI
 # import sys
 # from PyQt5 import Qt
-# from PyQt5 import QtWidgets, QtGui, QtCore
+from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (QApplication, QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
                                     QGroupBox, QListWidget, QAction, QAbstractItemView, QLineEdit, QCheckBox)
 
@@ -128,6 +128,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.sz_list.currentRowChanged.connect(self.list_clicked)
         vbox.addWidget(self.sz_list)
 
+        groupbox.setFixedWidth(180)
         return groupbox
 
     def make_traces_groupbox(self):
@@ -148,15 +149,20 @@ class GUI_main(QtWidgets.QMainWindow):
         # sp = "\u2423"
         # up = "\u2191"
         # down = "\u2193"
-        button = QPushButton(f'Toggle [T]', )
+        button = QPushButton(f'Toggle [t]', )
         horizontal_layout.addWidget(button)
         button.clicked.connect(self.toggle_callback)
 
+        #interictal button
+        button = QPushButton(f'Interictal [i]', )
+        horizontal_layout.addWidget(button)
+        button.clicked.connect(self.interictal_callback)
+
         #next button
         right = "\u2192"
-        button = QPushButton(f'Next [{right}]', )
-        horizontal_layout.addWidget(button)
-        button.clicked.connect(self.next_callback)
+        self.next_button = QPushButton(f'Next [{right}]', )
+        horizontal_layout.addWidget(self.next_button)
+        self.next_button.clicked.connect(self.next_callback)
 
         #save button
         self.save_button = QPushButton(f'Save', )
@@ -179,13 +185,29 @@ class GUI_main(QtWidgets.QMainWindow):
         self.ToggleAction.triggered.connect(self.toggle_callback)
         self.addAction(self.ToggleAction)
 
+        self.InterictalAction = QAction('Interictal', self)
+        self.InterictalAction.setShortcut('i')
+        self.InterictalAction.triggered.connect(self.interictal_callback)
+        self.addAction(self.InterictalAction)
+
+        #add indicators
+        self.DurationLabel = QLabel('SzDur', )
+        self.FreqLabel = QLabel('SzFreq', )
+        self.PISLabel = QLabel('Suppression', )
+        for label in (self.DurationLabel, self.FreqLabel, self.PISLabel):
+            label.setFixedWidth(60)
+            label.setFixedHeight(20)
+            label.setFont(QFont('Arial', 12))
+            horizontal_layout.addWidget(label)
+
+
         vbox.addLayout(horizontal_layout)
 
         vbox.addWidget(self.separator)
         #later add a middle, thinner row for motion
         self.FigCanvas1 = SubplotsCanvas()
-        toolbar = NavigationToolbar2QT(self.FigCanvas1, self)
-        vbox.addWidget(toolbar)
+        custom_toolbar = SelectorToolbar(self.FigCanvas1, self)
+        vbox.addWidget(custom_toolbar)
         vbox.addWidget(self.FigCanvas1)
 
         return groupbox
@@ -383,26 +405,43 @@ class GUI_main(QtWidgets.QMainWindow):
         self.active_sz = None
 
         #color if already completed:
-        included_sz = self.szdat.output_sz['Included'].eq(True)
-        excluded_sz = self.szdat.output_sz['Included'].eq(False)
+        included_sz = self.szdat.output_sz['Included'].isin((1, 'TRUE', True))
+        excluded_sz = self.szdat.output_sz['Included'].isin((0, 'FALSE', False))
+        interictal_sz = self.szdat.output_sz['Interictal'].isin((1, 'TRUE', True))
         for i, sz in enumerate(self.szdat.szlist):
             if included_sz[i]:
-                self.mark_complete(i, color='true')
-            elif excluded_sz[1]:
+                if interictal_sz[i]:
+                    self.mark_complete(i, color='interictal')
+                else:
+                    self.mark_complete(i, color='true')
+            elif excluded_sz[i]:
                 self.mark_complete(i, color='false')
+        # print(self.szdat.output_sz['Included'])
+        # print(excluded_sz)
+
 
         self.path_label.setText(self.prefix)
         self.reset_video_player()
 
     def mark_complete(self, i, color):
-        if color == 'true':
-            color ='#50a3a4'
-        elif color == 'false':
-            color = '#fcaf38'
+        color = self.color_lut(color)
         self.sz_list.item(i).setForeground(QtGui.QColor(color))
         self.sz_list.item(i).setSelected(False)
 
+    def color_lut(self, color):
+        lut = {
+        'true': '#38fc59',
+        'false': '#fc8638',
+        'interictal': '#38cbfc'
+        }
+        return lut.get(color, 'grey')
+
+
     def next_callback(self):
+        if self.szdat.get_sz(self.active_sz) == '': #if pressed next without marking it not sz, we set it as reviewed
+            self.szdat.set_sz(self.active_sz, True)
+            self.mark_complete(self.current_selected_i, 'true')
+            self.flag_unsaved()
         if self.current_selected_i is None:
             self.current_selected_i = 0
         elif (self.current_selected_i + 1) < len(self.szdat.output_sz):
@@ -422,6 +461,49 @@ class GUI_main(QtWidgets.QMainWindow):
         self.sz_list.setCurrentItem(current_item)
         self.new_plot=True
         self.refresh_data()
+        self.color_next_button()
+
+    def color_next_button(self):
+        sz = self.szdat.get_sz(self.active_sz, full=True)
+        is_sz = sz["Included"] != False #value can be ''
+        is_iis = sz["Interictal"] == True
+        if is_sz and not is_iis:
+            self.next_button.setStyleSheet(f"background-color: {self.color_lut('true')}")
+        elif is_sz and is_iis:
+            self.next_button.setStyleSheet(f"background-color: {self.color_lut('interictal')}")
+        elif not is_sz:
+            self.next_button.setStyleSheet(f"background-color: {self.color_lut('false')}")
+
+
+
+    def update_indicators(self):
+        self.curation_checks = {}
+        sz = self.szdat.get_sz(self.active_sz, full=True)
+        dur = sz["Duration(s)"]
+        if dur > self.szdat.settings["Curation.MinDur"]:
+            self.DurationLabel.setStyleSheet("background-color: green")
+            self.curation_checks["Duration"] = True
+        else:
+            self.DurationLabel.setStyleSheet("background-color: red")
+            self.curation_checks["Duration"] = False
+        self.DurationLabel.setText(f'{dur:.1f} s')
+        szfreq = sz["SpkFreq"]
+        if szfreq > self.szdat.settings["Curation.MinFreq"]:
+            self.FreqLabel.setStyleSheet("background-color: green")
+            self.curation_checks["Frequency"] = True
+        else:
+            self.FreqLabel.setStyleSheet("background-color: red")
+            self.curation_checks["Frequency"] = False
+        self.FreqLabel.setText(f'{szfreq:.1f} Hz')
+        PISdur = sz["PostIctalSuppression(s)"]
+        if PISdur > self.szdat.settings["Curation.PISDur"]:
+            self.PISLabel.setStyleSheet("background-color: green")
+            self.curation_checks["PIS"] = True
+        else:
+            self.PISLabel.setStyleSheet("background-color: red")
+            self.curation_checks["PIS"] = False
+        self.PISLabel.setText(f'{PISdur:.1f} s')
+
 
     def list_clicked(self):
         self.current_selected_i = self.sz_list.currentRow()
@@ -429,22 +511,23 @@ class GUI_main(QtWidgets.QMainWindow):
         self.reset_video_player()
 
     def previous_callback(self):
-        print('Prev cb')
         if self.current_selected_i is None:
             self.current_selected_i = 0
         elif self.current_selected_i > 0:
             self.current_selected_i -= 1
         self.select_sz()
 
-    def toggle_callback(self):
-        if self.active_sz is None:
-            self.next_callback()
-
+    def flag_unsaved(self):
         if not self.unsaved_changes:
             self.save_button.setStyleSheet("background-color: red")
         self.unsaved_changes += 1
         self.save_button.setText(f'Save ({self.unsaved_changes})')
 
+
+    def toggle_callback(self):
+        if self.active_sz is None:
+            self.next_callback()
+        self.flag_unsaved()
         curr = self.szdat.get_sz(self.active_sz)
         if curr == '' or curr:
             self.szdat.set_sz(self.active_sz, False)
@@ -452,13 +535,43 @@ class GUI_main(QtWidgets.QMainWindow):
         elif curr == False:
             self.szdat.set_sz(self.active_sz, True)
             self.mark_complete(self.current_selected_i, 'true')
+        self.color_next_button()
+
+    def interictal_callback(self):
+        if self.active_sz is None:
+            self.next_callback()
+
+        self.flag_unsaved()
+        sz = self.szdat.get_sz(self.active_sz, full=True)
+        is_sz = sz["Included"] != False #value can be ''
+        if is_sz and sz["Included"] == '': #set to reviewed
+            self.szdat.set_sz(self.active_sz, value=True)
+        is_iis = sz["Interictal"] == True
+        if is_sz and not is_iis: #toggle ii
+            self.szdat.set_sz(self.active_sz, value=True, key='Interictal')
+            self.mark_complete(self.current_selected_i, 'interictal')
+        elif is_sz and is_iis: #toggle ii
+            self.szdat.set_sz(self.active_sz, value=False, key='Interictal')
+            self.mark_complete(self.current_selected_i, 'true')
+        elif not is_sz: #set to sz and ii
+            self.szdat.set_sz(self.active_sz, True)
+            self.szdat.set_sz(self.active_sz, value=True, key='Interictal')
+            self.mark_complete(self.current_selected_i, 'interictal')
+        self.color_next_button()
+
+    def edit_sz_callback(self, event_type, xcoord):
+        self.szdat.edit_sz_from_gui(event_type, xcoord)
+        self.flag_unsaved()
+        self.refresh_data()
+
 
 
 
     def refresh_data(self):
         self.szdat.plot_sz(self.active_sz, self.FigCanvas1.axd)
+        self.update_indicators()
         self.FigCanvas1.draw()
-        if self.unsaved_changes > 9:
+        if self.unsaved_changes > 5:
             self.save_callback()
 
 class SubplotsCanvas(FigureCanvasQTAgg):
@@ -469,6 +582,32 @@ class SubplotsCanvas(FigureCanvasQTAgg):
                                       gridspec_kw={'width_ratios': [1, 0.3, ]},
                                       figsize=(12, 6), layout="constrained")
         super(SubplotsCanvas, self).__init__(self.fig)
+
+class SelectorToolbar(NavigationToolbar2QT):
+    def __init__(self, canvas, parent=None):
+        super().__init__(canvas, parent)
+        self.main_gui = parent
+        # Add a custom button to the toolbar
+        self.addSeparator()
+        self.start_button = QPushButton("Edit start")
+        self.start_button.clicked.connect(self.start_action)
+        self.addWidget(self.start_button)
+        self.stop_button = QPushButton("Edit end")
+        self.stop_button.clicked.connect(self.stop_action)
+        self.addWidget(self.stop_button)
+
+
+    def start_action(self, event):
+        self.event_type = 'Start'
+        self.cid = self.canvas.mpl_connect('button_press_event', self.on_click)
+
+    def stop_action(self):
+        self.event_type = 'Stop'
+        self.cid = self.canvas.mpl_connect('button_press_event', self.on_click)
+
+    def on_click(self, event):
+        if event.inaxes:
+            self.main_gui.edit_sz_callback(self.event_type, event.xdata)
 
 def launch_GUI(*args, **kwargs):
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
