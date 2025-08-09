@@ -181,6 +181,8 @@ class SzReviewData:
             for szname in sznames:
                 curated_sz = saved.loc[szname]
                 for fieldname in ('Included', 'Interictal'):
+                    if fieldname not in saved.columns:
+                        continue
                     x = curated_sz[fieldname]
                     if x in (1, 'TRUE', True):
                         x = True
