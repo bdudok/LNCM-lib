@@ -319,10 +319,10 @@ class Worker(Process):
                         if len(sneg) > 1:
                             nsmw = numpy.copy(smw)
                             for t in sneg:
-                                start, stop = max(0, t - 100), min(frames, t + 100)
+                                start, stop = int(max(0, t - (5*fps))), int(min(frames, t + 5*fps))
                                 tc1, tc2 = numpy.nanargmax(smw[start:t]) + start, numpy.nanargmax(smw[t:stop]) + t
-                                inds = list(numpy.arange(start, max(tc1, start + 15)))
-                                inds.extend(numpy.arange(min(tc2, stop - 15), stop))
+                                inds = list(numpy.arange(start, max(tc1, start + 0.5*self.fps)))
+                                inds.extend(numpy.arange(min(tc2, stop - 0.5*fps), stop))
                                 nsmw[tc1:tc2] = numpy.nanmean(smw[inds])
                             smw = nsmw
                         else:
@@ -370,7 +370,7 @@ class Worker(Process):
                 # additional iteration for more accurate noise levels
                 ntr = numpy.nan_to_num(rel / numpy.nanstd(rel[numpy.where(ntr < 2)]))
                 # ewma
-                smtr = numpy.array(pandas.DataFrame(ntr).ewm(span=CF.fps).mean()[0])
+                smtr = numpy.array(pandas.DataFrame(ntr).ewm(int(fps)).mean()[0])
                 ntr[nan_samples] = numpy.nan
 
             result = {'trace': data, 'bsl': bsl, 'rel': rel, 'ntr': ntr, 'smtr': smtr}

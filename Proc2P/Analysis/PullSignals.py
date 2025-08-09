@@ -33,7 +33,7 @@ class Worker(Process):
             else:
                 tag = roi
             self.log.set_handle(path, prefix)
-            retval = pull_signals(path, prefix, tag=tag, ch=ch, sz_mode=szmode, snr_weighted=snrw)
+            retval = pull_signals(path, prefix, tag=tag, ch=ch, snr_weighted=snrw)
             if retval:
                 lprint(self, retval, logger=self.log)
 
