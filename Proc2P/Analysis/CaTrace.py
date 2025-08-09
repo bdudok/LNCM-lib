@@ -11,13 +11,25 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from Proc2P.Bruker.ConfigVars import CF
 from matplotlib import pyplot as plt
+from Proc2P.Bruker.PreProc import SessionInfo
 from _Dependencies.S2P.dcnv import oasis
 
 
 class CaTrace(object):
     __name__ = 'CaTrace'
     def __init__(self, path, prefix, verbose=False, bsltype='poly', exclude=(0, 0), peakdet=False, ch=0, invert=False,
-                 tag=None, last_bg=None):
+                 tag=None, last_bg=None, ignore_saturation=True):
+        '''
+        :param bsltype: 'poly' for a 3-order polynom fit. 'original': sliding window minimum,
+         'MonotonicMin': past minimum. Sz_mode switches to MonotonicMin
+        :param exclude: start and stop of a frame range which will be excluded from baseline fitting
+        :param peakdet: not used
+        :param ch: index of channel
+        :param invert: used for flipping sign for GEVI imaging. replaces the input F with Fmax-F
+        :param tag: roi tag
+        :param last_bg: if True, the last ROI's trace is subtracted from other ROIs' traces.
+        :param ignore_saturation: sz_mode. does not exclude outlier frames.
+        '''
         if verbose:
             print(f'Firing called with ch={ch}, tag={tag}')
         self.peakdet = peakdet  # removed peakdet from old Firing class, this doesn't do anything.
@@ -45,9 +57,12 @@ class CaTrace(object):
         self.sync = Sync(path, prefix)
         self.keys = ['bsl', 'rel', 'ntr', 'trace', 'smtr',]
         self.verbose = verbose
+        if ignore_saturation:
+            bsltype = 'MonotonicMin'
         self.bsltype = bsltype
         self.exclude = exclude
         self.invert = invert
+        self.ignore_saturation = ignore_saturation
         if verbose:
             print(prefix, 'firing init')
         self.version_info = {}  # should contain only single strings as values
@@ -102,7 +117,11 @@ class CaTrace(object):
         if bad_frames is not None:
             lprint(self, f'{len(bad_frames)} opto frames excluded from baseline fit', logger=self.log)
             self.ol_index.extend(bad_frames)
-        self.ol_index.extend(outlier_indices(numpy.nanmean(self.trace, axis=0), thresh=12))
+        if not self.ignore_saturation:
+            # remove outliers
+            self.ol_index.extend(outlier_indices(numpy.nanmean(self.trace, axis=0), thresh=12))
+        self.session_info = SessionInfo(self.opPath, self.prefix)
+        self.fps = self.session_info.load()['framerate']
 
     def pack_data(self, c):
         if self.last_bg is not None:
@@ -114,7 +133,7 @@ class CaTrace(object):
                 raise ValueError(f'{self.last_bg} not implemented for bg correction')
         else:
             tr = self.trace[c]
-        return c, tr, self.bsltype, self.movement, self.exclude, self.peakdet, self.ol_index
+        return c, tr, self.fps, self.bsltype, self.movement, self.exclude, self.peakdet, self.ol_index, self.ignore_saturation
 
     def unpack_data(self, data):
         channel = 0
@@ -141,12 +160,13 @@ class CaTrace(object):
         os.mkdir(self.pf)
         for key in self.keys:
             numpy.save(self.pf + '//' + key, self.__getattribute__(key))
-        self.version_info = {'v': '12', 'bsltype': self.bsltype,
+        self.version_info = {'v': '13', 'bsltype': self.bsltype, 'sz_mode': str(self.ignore_saturation),
                              'channel': str(self.ch),
-                             'fps': str(CF.fps),
+                             'fps': f'{round(self.fps, 1)}',
                              'bg_corr':str(self.last_bg)}  # should contain only single strings as values
         numpy.save(self.pf + '//' + 'info', self.version_info)
-        lprint(self, self.prefix, self.cells, 'cells saved.', f'Tag: {self.tag}, Ch: {self.ch}', logger=self.log)
+        message = f'Tag: {self.tag}, Ch: {self.ch}, sz_mode: {self.ignore_saturation}, baseline: {self.bsltype}'
+        lprint(self, self.prefix, self.cells, 'cells saved.', message, logger=self.log)
 
 
     #these functions are used to save additional time series shaped (c, f) in the traces folder.
@@ -250,10 +270,10 @@ class Worker(Process):
 
     def run(self):
         for data in iter(self.queue.get, None):
-            c, data, bsltype, movement, exclude, peakdet, ol_index = data
+            c, data, fps, bsltype, movement, exclude, peakdet, ol_index, ignore_saturation = data
             if self.verbose:
                 lprint(self, 'Starting cell ' + str(c))
-            t1, t2, frames = 50, 500, len(data)
+            t1, t2, frames = int(2.5*fps), int(25*fps), len(data)
             if movement is None:
                 movement = numpy.zeros(frames, dtype='bool')
             smw = numpy.empty(frames)
@@ -276,12 +296,15 @@ class Worker(Process):
             for t in range(frames):
                 ti0 = max(0, int(t - t1 * 0.5))
                 ti1 = min(frames, int(t + t1 * 0.5) + 1)
-                smw[t] = numpy.nanmean(data[ti0:ti1])
+                if ti1>ti0:
+                    smw[t] = numpy.nanmean(data[ti0:ti1])
+                else:
+                    smw[t] = smw[t-1]
             if numpy.count_nonzero(numpy.isnan(smw)) > len(nan_samples):
                 this_is_nancell = True
             if numpy.nanmax(smw) == 0:
                 this_is_nancell = True
-            if this_is_nancell:
+            if this_is_nancell and not ignore_saturation:
                 ntr[:] = numpy.nan
             else:
                 if bsltype == 'poly':
@@ -318,24 +341,37 @@ class Worker(Process):
                     if numpy.any(bsl < 0):
                         lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline',)
                         bsltype = 'original'
-                if bsltype in ['original', 'both']:  # both not implemented
-                    for t in range(frames):
+                elif bsltype in ['original', 'both']:  # both not implemented
+                    # the F0 method described in Jia Nat Prot 2011 paper
+                    for t in range(1, frames):
                         ti0, ti1 = max(0, t - t2), min(t, frames)
-                        if ti0 < ti1:
-                            minv = numpy.nanmin(smw[ti0:ti1])
-                        else:
-                            minv = numpy.nan_to_num(smw[ti0])
+                        minv = numpy.nanmin(smw[ti0:ti1])
                         bsl[t] = minv
                     bsl[0] = bsl[1]
+                elif bsltype == 'MonotonicMin':
+                    # baseline is the minimum past value of the smoothed raw trace
+                    minv = numpy.nan
+                    t = 1
+                    while not minv > 0:
+                        if not exclude[0] < t <= exclude[1]:
+                            if smw[t] > 0:
+                                minv = smw[t]
+                                bsl[:t+1] = minv
+                        t += 1
+                    while t < frames:
+                        if not exclude[0] < t <= exclude[1]:
+                            if not numpy.isnan(smw[t]):
+                                minv = min(minv, smw[t])
+                            bsl[t] = minv
+                        t += 1
                 rel = (data - bsl) / bsl
+                rel[nan_samples] = numpy.nan
                 ntr = rel / numpy.nanstd(rel)
                 # additional iteration for more accurate noise levels
                 ntr = numpy.nan_to_num(rel / numpy.nanstd(rel[numpy.where(ntr < 2)]))
-                ontr = numpy.copy(ntr)
                 # ewma
                 smtr = numpy.array(pandas.DataFrame(ntr).ewm(span=CF.fps).mean()[0])
-                # deconvolution
-                # nnd = oasis(ntr-numpy.nanmin(ntr, axis=0), batch_size=1000, tau=0.75, fs=fps)
+                ntr[nan_samples] = numpy.nan
 
             result = {'trace': data, 'bsl': bsl, 'rel': rel, 'ntr': ntr, 'smtr': smtr}
             self.res_queue.put((c, result))

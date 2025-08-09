@@ -38,7 +38,7 @@ class Worker(Process):
                 lprint(self, retval, logger=self.log)
 
 
-def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=False, enable_alt_path=True,
+def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_alt_path=True,
                  overwrite=False):
     #get binary mask
     opPath = os.path.join(path, prefix + '/')

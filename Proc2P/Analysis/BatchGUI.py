@@ -456,9 +456,9 @@ class Traces:
 
         Label(self.frame, text='Process traces').grid(row=self.row(), pady=10)
         # Button(self.frame, text="Auto select", command=self.autosel_callback).grid(row=self.row(), sticky=N)
-        # self.version = IntVar()
-        # Checkbutton(self.frame, text='Old baseline', variable=self.version).grid(row=self.row(), sticky=N)
-        # self.version.set(0)
+        self.version = IntVar()
+        Checkbutton(self.frame, text='Polynom baseline', variable=self.version).grid(row=self.row(), sticky=N)
+        self.version.set(1)
 
         # self.peakdet = IntVar()
         # Checkbutton(self.frame, text='Detect peaks', variable=self.peakdet).grid(row=self.row(), sticky='N')
@@ -475,17 +475,21 @@ class Traces:
             self.config[text].set(str(defs[ti]))
 
         self.specify = IntVar()
-        Checkbutton(self.frame, text='Use ROI ID', variable=self.specify).grid(row=self.row(), sticky=N)
+        # Checkbutton(self.frame, text='Use ROI ID', variable=self.specify).grid(row=self.row(), sticky=N)
         self.specify.set(1)
 
         self.detect_signals = IntVar()
-        Checkbutton(self.frame, text='Detect all ROIs', variable=self.detect_signals).grid(row=self.row(), sticky=N)
+        # Checkbutton(self.frame, text='Detect all ROIs', variable=self.detect_signals).grid(row=self.row(), sticky=N)
         self.detect_signals.set(0)
 
         Label(self.frame, text='Last ROI is background').grid(row=self.row())
         self.last_bg = IntVar()
         Checkbutton(self.frame, text='True', variable=self.last_bg).grid(row=self.row(), sticky=N)
         self.last_bg.set(0)
+        Label(self.frame, text='Seizure mode').grid(row=self.row())
+        self.sz_mode = IntVar()
+        Checkbutton(self.frame, text='True', variable=self.sz_mode).grid(row=self.row(), sticky=N)
+        self.sz_mode.set(0)
 
         Label(self.frame, text='Invert (negative sensor)').grid(row=self.row())
         self.invert_channels = [IntVar(value=0), IntVar(value=0)]
@@ -546,10 +550,10 @@ class Traces:
 
     def execute_callback(self):
         for prefix in self.parent.filelist.get_active()[1]:
-            # if self.version.get():
-            #     bsltype = 'original'
-            # else:
-            bsltype = 'poly'
+            if self.version.get():
+                bsltype = 'poly'
+            else:
+                bsltype = 'original'
             tags = [None]
             if self.specify.get():
                 tags = [self.parent.roiconvert.config['roi_name'].get()]
@@ -563,7 +567,7 @@ class Traces:
             last_bg = bool(self.last_bg.get())
             invert = [x.get() for x in self.invert_channels]
             excl = (int(self.config[self.tracefields[0]].get()), int(self.config[self.tracefields[1]].get()))
-            sz_mode = False#self.parent.mc.ignore_sat.get()
+            sz_mode = self.sz_mode.get()
             for tag in tags:
                 print(f'{prefix}: tag {tag} queued for processing traces.')
                 self.parent.request_queue.put(('firing',
@@ -1662,7 +1666,7 @@ if __name__ == '__main__':
             run = False
             for ch in (0, 1):
                 a = CaTrace(path, prefix, bsltype=bsltype, exclude=exclude, peakdet=peakdet, ch=ch, tag=tag,
-                            invert=invert[ch], last_bg=last_bg)
+                            invert=invert[ch], last_bg=last_bg, ignore_saturation=sz_mode)
                 if a.open_raw() == -1:
                     continue
                 if os.path.exists(a.pf):
