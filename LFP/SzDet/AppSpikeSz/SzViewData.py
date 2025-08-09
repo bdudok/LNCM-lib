@@ -53,6 +53,7 @@ class SzReviewData:
         self.read_ephys()
         if not skip_gamma:
             self.get_session_gamma()
+        self.read_video()
 
         # ignore video now. add this after the lfp review features work and can be used in practice
         # get all ttl times from ephys and pass to video class to align all. this should be done once and stored
@@ -187,6 +188,8 @@ class SzReviewData:
             for szname in sznames:
                 curated_sz = saved.loc[szname]
                 for fieldname in ('Included', 'Interictal'):
+                    if fieldname not in saved.columns:
+                        continue
                     x = curated_sz[fieldname]
                     if x in (1, 'TRUE', True):
                         x = True
@@ -443,6 +446,7 @@ class SzReviewData:
         gamma_mask = sz_gamma < (sz_gamma.max() / self.settings["Curation.PISMultiplier"])
         gamma_mask[:last_plot_sample] = False
 
+
         # full sz trace
         ca = axd['top']
         strip_ax(ca, False)
@@ -465,6 +469,9 @@ class SzReviewData:
         self.set_sz(sz_name, pisdur, 'PostIctalSuppression(s)')
         ca.set_xticks((secs + self.plot_delta) * self.fs)
         ca.set_xticklabels(secs)
+
+        marker_x = (0 + self.plot_delta) * self.fs
+        self.marker_line = ca.axvline(marker_x, color='blue', linestyle='--', zorder=100)
 
         # sz start example
         ca = axd['lower left']

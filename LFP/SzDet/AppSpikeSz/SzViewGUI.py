@@ -293,6 +293,9 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.show_frame(self.frames[self.frame_index])
         self.positionSlider.setValue(self.frame_index)
+        marker_x = (self.frame_index/30 + self.szdat.plot_delta) * self.szdat.fs
+        self.szdat.marker_line.set_xdata([marker_x,marker_x])
+        self.FigCanvas1.draw()
         self.frame_index += 1
 
 
