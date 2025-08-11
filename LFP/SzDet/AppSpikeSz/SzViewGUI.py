@@ -219,36 +219,33 @@ class GUI_main(QtWidgets.QMainWindow):
         groupbox.setLayout(vbox)
         # horizontal layout for buttons
         horizontal_layout = QHBoxLayout()
+
         # video button
         button = QPushButton(f'Show [M]', )
         horizontal_layout.addWidget(button)
         button.clicked.connect(self.video_callback)
         vbox.addLayout(horizontal_layout)
 
+        # information on video
         self.video_info = QLabel("")
         self.video_info.setMinimumSize(240, 150)
         self.video_info.setAlignment(Qt.AlignCenter)
         self.video_info.setWordWrap(True)
         vbox.addWidget(self.video_info)
-
-
         vbox.addWidget(self.separator)
+
         self.frame_index = 0
         self.frames = []  # will be filled in video_callback
         self.frameTimer = QtCore.QTimer()
         self.frameTimer.timeout.connect(self.display_next_frame)
 
+        ## video
         self.videoLabel = QLabel()
         self.videoLabel.setMinimumSize(240, 150)
         self.videoLabel.setAlignment(Qt.AlignCenter)
         vbox.addWidget(self.videoLabel)
 
-
-
-
-
-
-        # — Controls row: Play/Pause + Slider —
+        # Control row: Play/Pause + Slider
         controlLayout = QHBoxLayout()
         controlLayout.setContentsMargins(0, 0, 0, 0)
 
@@ -272,6 +269,7 @@ class GUI_main(QtWidgets.QMainWindow):
         return groupbox
 
     def show_frame(self, frame):
+        # displaying specific frame (when frame is an opencv frame)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = frame_rgb.shape
         bytes_per_line = ch * w
@@ -286,16 +284,21 @@ class GUI_main(QtWidgets.QMainWindow):
         self.videoLabel.setPixmap(QtGui.QPixmap.fromImage(qimg_resized))
 
     def display_next_frame(self):
+        # displays a new frame every 1/30 second
         if self.frame_index >= len(self.frames):
             self.frameTimer.stop()
             self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
             return
 
+        # showing frame and updating position in slider
         self.show_frame(self.frames[self.frame_index])
         self.positionSlider.setValue(self.frame_index)
+
+        # updating position of video marker and adding to main plot
         marker_x = (self.frame_index/30 + self.szdat.plot_delta) * self.szdat.fs
         self.szdat.marker_line.set_xdata([marker_x,marker_x])
         self.FigCanvas1.draw()
+
         self.frame_index += 1
 
 
@@ -312,6 +315,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
 
     def mediaStateChanged(self, state):
+        # changes icon when play/pause button are pressed
         if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
             self.playButton.setIcon(
                     self.style().standardIcon(QStyle.SP_MediaPause))
@@ -320,12 +324,14 @@ class GUI_main(QtWidgets.QMainWindow):
                     self.style().standardIcon(QStyle.SP_MediaPlay))
 
     def positionChanged(self, position):
+        # changes position in slider
         self.positionSlider.setValue(position)
 
     def durationChanged(self, duration):
         self.positionSlider.setRange(0, duration)
 
     def setPosition(self, position):
+        # moving to specific position in video and showing that frame
         self.frame_index = position
         self.show_frame(self.frames[self.frame_index])
 
@@ -342,48 +348,40 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def video_callback(self):
 
+        # considering the case that alignment did not work or
+        # user has not yet picked a specific seizure
         if self.szdat.align is None or self.active_sz is None:
             self.video_info.setText("No alignment available.")
             QApplication.processEvents()
             return
 
-
         self.video_info.setText("Loading video ... Please wait.")
         QApplication.processEvents()
-            # 1) Get seizure start & end datetimes
+
+        # GETTING SEIZURE START AND END TIMES
         sz = self.szdat.get_sz(self.active_sz, full=True)
         t0, t1 = sz['Start'], sz['Stop']
-        print(t0)
-        print(t1)
 
+
+        ## GETTING THE VIDEO PATH AND SPECIFIC OPENCV FRAMES BASED ON THE START AND END TIMES
         video_path, self.frames = self.szdat.get_frames(t0, t1)
+        # considering the case that the method fails
         if self.frames is None:
             self.video_info.setText("No frames found.")
             QApplication.processEvents()
             return
 
+        # letting the user know what specific video is playing
         self.video_info.setText("Playing video: " + video_path)
         QApplication.processEvents()
+
+        ## updating slider, play button, frame_index and showing the first frame in the video
         self.positionSlider.setRange(0, len(self.frames) - 1)
         self.playButton.setEnabled(True)
         self.frame_index = 0
         self.show_frame(self.frames[0])
 
-        '''
-        fileName = R"Z:\_RawData\EEG\Dreadd\videos\Sncg111_2025-02-10_-2025-02-10T17-33-26.avi"
-        self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(fileName)))
 
-        self.playButton.setEnabled(True)
-        self.mediaPlayer.play()
-
-
-
-        self.mediaPlayer.error.connect(
-            lambda err: print("MediaPlayer error (code={}): {}".format(
-                err, self.mediaPlayer.errorString()
-            ))
-        )
-        '''
 
     def select_rec_callback(self):
         # open a recording: display filedioalog, call SzReviewData, update listbox.

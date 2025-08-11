@@ -213,7 +213,7 @@ class SzReviewData:
 
 
     def read_video(self):
-        # 1) parse the overall segment window from self.prefix
+        ## PARSING OVERALL SEGMENT WINDOW FROM SEIZURE FILE NAME
         m = re.search(
             r'__(?P<day>\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2})'
             r'_TS_(?P<start>\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2})',
@@ -223,15 +223,15 @@ class SzReviewData:
             self.align = None
             return
 
-        #seg_start = datetime.datetime.strptime(m.group('start'), '%Y-%m-%d_%H_%M_%S')
-        #seg_end   = datetime.datetime.strptime(m.group('end'),   '%Y-%m-%d_%H_%M_%S')
+        ## FINDING START AND END TIME USING SEIZURE FILE NAME
         seg_start = datetime.datetime.strptime(m.group('start'), '%Y-%m-%d_%H_%M_%S')
-        seg_end = seg_start + datetime.timedelta(hours=1)
-        # 2) get your EEG TTLs as a 1-D float array (seconds from rec start)
+        seg_end = seg_start + datetime.timedelta(hours=1) # seizures are typically one hour long
+
+        # GETTING EEG TTLS AS A 1-D FLOAT ARRAY (SECS FROM REC START)
         ttls_eeg = self.ephys.get_TTL(channel='GPIO0')
         print(ttls_eeg[len(ttls_eeg)-1])
 
-        # 3) collect and offset ALL video TTLs whose clips overlap the window
+        ## COLLECTING ALL VIDEO TTLS WHOSE CLIPS OVERLAP THE WINDOW
         vid_folder = r'Z:\_RawData\EEG\Dreadd\videos'
         all_video_ttls = []
 
@@ -240,17 +240,18 @@ class SzReviewData:
             if not fn.lower().endswith('.avi'):
                 continue
 
-            # extract this clip’s start time from its filename
+            # EXTRACTING THE VIDEO CLIP'S START AND END TIME BASED ON ITS PATH
             m2 = re.search(r'(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})', fn)
             if not m2:
                 continue
             vid_start = datetime.datetime.strptime(m2.group(1), '%Y-%m-%dT%H-%M-%S')
-            vid_end   = vid_start + datetime.timedelta(hours=1)
+            vid_end   = vid_start + datetime.timedelta(hours=1) ## videos are typically one hour long
 
-            # skip clips that lie entirely outside your segment
+            # skip clips that lie entirely outside specified window
             if not (vid_start < seg_end and vid_end > seg_start):
                 continue
 
+            # adding video to video clips
             self.video_clips.append([
                 os.path.join(vid_folder, fn),
                 vid_start,
@@ -260,31 +261,23 @@ class SzReviewData:
 
 
         for clip in self.video_clips:
-
+            ## LOADING THIS CLIPS TTL TIMESTAMPS
             path = clip[0]
-            # load and flatten this clip’s TTL timestamps (relative to clip start)
             npy_path = path[:-4] + '.npy'
             raw_vid  = np.load(npy_path, allow_pickle=True)
 
-
-
-            print(raw_vid)
-
-
-            # column 4 is the pulse fra
+            # COLUMN 4 IS THE TTLS
             ttls_video = raw_vid[:, 4].astype(float)
-            print(path)
-            print(ttls_video)
-            print(len(ttls_video))
-            print(ttls_video[len(ttls_video) - 1] - ttls_video[0])
 
+            ## adding this video ttls to all ttls
             all_video_ttls.append(ttls_video)
 
+        # considering the case that there are no video ttls
         if not all_video_ttls:
             self.align = None
             return
 
-        # 4) concatenate and sort every clip’s TTLs
+        ## CONCATENATING ALL VIDEO TTLS INTO ONE TTL SEQUENCE
         ttls_video = np.concatenate(all_video_ttls)
 
 
@@ -292,26 +285,31 @@ class SzReviewData:
 
 
 
-        # 5) run one single aligner on the full continuous TTL sequence
+        ## RUNNING ONE SINGLE ALIGNER ON THE FULL CONTINUOUS TTL SEQUENCE
         try:
             self.align = rsync.Rsync_aligner(ttls_eeg, ttls_video)
-            print("alignment works!")
         except Exception as e:
             print(f"[SzReviewData] Error: {e}")
             self.align = None
             return
 
+        ## getting value of first and last ttl in the eeg
         first_ttl = math.ceil(ttls_eeg[0])
         last_ttl = math.floor(ttls_eeg[-1])
 
+
+        ## FINDING THE VALUE OF START FRAME FOR EACH VIDEO CLIP
         for clip in self.video_clips:
+            ## getting how many seconds after the eeg start, the video starts
             vid_start=clip[1]
             seconds = int((vid_start - seg_start).total_seconds())
-            print(seg_start)
-            print(vid_start)
 
+            ## because A_to_B method returns NaN for values outside the first and
+            ## last ttl in the eeg, we need to consider (3) cases
+            ## case 1: the start of the video clip is before the first eeg ttl
+            ## case 2: the start of the video clip is in between the first and last eeg ttl
+            ## case 3: the start of the video clip is after the last ttl
 
-            print(seconds)
             if seconds <  first_ttl:
                 start_frame = self.align.A_to_B(first_ttl) + 30 * (seconds - first_ttl)
             elif seconds >= first_ttl and seconds <= last_ttl:
@@ -319,31 +317,24 @@ class SzReviewData:
             else: ## seconds > last_ttl
                 start_frame = self.align.A_to_B(last_ttl) + 30 * (seconds - last_ttl)
 
-            print(first_ttl)
-            print(last_ttl)
-            print(start_frame)
-
             clip.append(start_frame)
 
 
 
-
-            #self.align = rsync.Rsync_aligner(ttls_eeg, ttls_video)
-
     def get_frames(self, t0, t1):
-        print(t0)
+        ## t0 and t1 are the start and end times (in seconds) of the specific seizure
 
+        ## the start time (datetime) of the specific seizure
         rec_start = self.rec_info['startdate'] + datetime.timedelta(seconds=t0)
-        print(rec_start)
-        print(self.video_clips)
         video_path = None
         shift = None
 
+        ## FINDING THE PATH OF THE VIDEO THAT CONTAINS THE SPECIFIC EEG
         for clip in self.video_clips:
-
             path = clip[0]
             vid_start=clip[1]
             vid_end=clip[2]
+
             if vid_start <= rec_start < vid_end:
                 video_path = path
                 shift = clip[3]
@@ -354,27 +345,29 @@ class SzReviewData:
             return
 
 
-
+        ## opening the video using its path and opencv
         cap = cv2.VideoCapture(video_path)
-        print(video_path)
         if not cap.isOpened():
             print("Could not open video.")
             return
 
+        ## the number of the start and end frame of the video
+        ## because the frames in ttl do not start at 0,
+        ## we need to shift the number of the frames
+        ## so that start_frame is at 0
         start_frame = self.align.A_to_B(t0) - shift
         end_frame = self.align.A_to_B(t1) - shift
+
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+        ## starting at start_frame
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
         frames = []
         current_frame = start_frame
-        # current_frame = start_frame
-        print(t0, t1)
-        print(start_frame)
-        print(end_frame)
-        print(frame_count)
 
+        ## GRABBING ALL FRAMES BETWEEN START AND END FRAME IN THE VIDEO AND APPEDNING TO FRAMES
         while current_frame <= end_frame:
             ret, frame = cap.read()
             print(ret)
@@ -385,7 +378,6 @@ class SzReviewData:
 
         cap.release()
 
-        print(len(frames))
 
         return video_path, frames
 
@@ -470,6 +462,7 @@ class SzReviewData:
         ca.set_xticks((secs + self.plot_delta) * self.fs)
         ca.set_xticklabels(secs)
 
+        ## adding a video marker to main plot
         marker_x = (0 + self.plot_delta) * self.fs
         self.marker_line = ca.axvline(marker_x, color='blue', linestyle='--', zorder=100)
 
