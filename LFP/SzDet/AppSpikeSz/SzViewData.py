@@ -198,7 +198,7 @@ class SzReviewData:
                     self.output_sz.loc[szname, fieldname] = x
                 if 'Edited' in saved.columns and curated_sz['Edited']:
                     for fieldname in (
-                    'Start', 'Stop', 'Duration(s)', 'SpikeCount', 'SpkFreq', 'PostIctalSuppression(s)'):
+                            'Start', 'Stop', 'Duration(s)', 'SpikeCount', 'SpkFreq', 'PostIctalSuppression(s)'):
                         self.output_sz.loc[szname, fieldname] = curated_sz[fieldname]
 
         self.szlist = sznames
@@ -210,7 +210,6 @@ class SzReviewData:
         if full:
             return self.output_sz.loc[sz].iloc[0]
         return self.output_sz.loc[sz, 'Included'].values[0]
-
 
     def read_video(self):
         ## PARSING OVERALL SEGMENT WINDOW FROM SEIZURE FILE NAME
@@ -225,14 +224,14 @@ class SzReviewData:
 
         ## FINDING START AND END TIME USING SEIZURE FILE NAME
         seg_start = datetime.datetime.strptime(m.group('start'), '%Y-%m-%d_%H_%M_%S')
-        seg_end = seg_start + datetime.timedelta(hours=1) # seizures are typically one hour long
+        seg_end = seg_start + datetime.timedelta(hours=1)  # seizures are typically one hour long
 
         # GETTING EEG TTLS AS A 1-D FLOAT ARRAY (SECS FROM REC START)
         ttls_eeg = self.ephys.get_TTL(channel='GPIO0')
-        print(ttls_eeg[len(ttls_eeg)-1])
+        print(ttls_eeg[len(ttls_eeg) - 1])
 
         ## COLLECTING ALL VIDEO TTLS WHOSE CLIPS OVERLAP THE WINDOW
-        vid_folder = r'Z:\_RawData\EEG\Dreadd\videos'
+        vid_folder = self.path# r'Z:\_RawData\EEG\Dreadd\videos'
         all_video_ttls = []
 
         self.video_clips = []
@@ -245,7 +244,7 @@ class SzReviewData:
             if not m2:
                 continue
             vid_start = datetime.datetime.strptime(m2.group(1), '%Y-%m-%dT%H-%M-%S')
-            vid_end   = vid_start + datetime.timedelta(hours=1) ## videos are typically one hour long
+            vid_end = vid_start + datetime.timedelta(hours=1)  ## videos are typically one hour long
 
             # skip clips that lie entirely outside specified window
             if not (vid_start < seg_end and vid_end > seg_start):
@@ -258,13 +257,11 @@ class SzReviewData:
                 vid_end
             ])
 
-
-
         for clip in self.video_clips:
             ## LOADING THIS CLIPS TTL TIMESTAMPS
             path = clip[0]
             npy_path = path[:-4] + '.npy'
-            raw_vid  = np.load(npy_path, allow_pickle=True)
+            raw_vid = np.load(npy_path, allow_pickle=True)
 
             # COLUMN 4 IS THE TTLS
             ttls_video = raw_vid[:, 4].astype(float)
@@ -280,11 +277,6 @@ class SzReviewData:
         ## CONCATENATING ALL VIDEO TTLS INTO ONE TTL SEQUENCE
         ttls_video = np.concatenate(all_video_ttls)
 
-
-
-
-
-
         ## RUNNING ONE SINGLE ALIGNER ON THE FULL CONTINUOUS TTL SEQUENCE
         try:
             self.align = rsync.Rsync_aligner(ttls_eeg, ttls_video)
@@ -297,11 +289,10 @@ class SzReviewData:
         first_ttl = math.ceil(ttls_eeg[0])
         last_ttl = math.floor(ttls_eeg[-1])
 
-
         ## FINDING THE VALUE OF START FRAME FOR EACH VIDEO CLIP
         for clip in self.video_clips:
             ## getting how many seconds after the eeg start, the video starts
-            vid_start=clip[1]
+            vid_start = clip[1]
             seconds = int((vid_start - seg_start).total_seconds())
 
             ## because A_to_B method returns NaN for values outside the first and
@@ -310,16 +301,14 @@ class SzReviewData:
             ## case 2: the start of the video clip is in between the first and last eeg ttl
             ## case 3: the start of the video clip is after the last ttl
 
-            if seconds <  first_ttl:
+            if seconds < first_ttl:
                 start_frame = self.align.A_to_B(first_ttl) + 30 * (seconds - first_ttl)
             elif seconds >= first_ttl and seconds <= last_ttl:
                 start_frame = self.align.A_to_B(seconds)
-            else: ## seconds > last_ttl
+            else:  ## seconds > last_ttl
                 start_frame = self.align.A_to_B(last_ttl) + 30 * (seconds - last_ttl)
 
             clip.append(start_frame)
-
-
 
     def get_frames(self, t0, t1):
         ## t0 and t1 are the start and end times (in seconds) of the specific seizure
@@ -332,8 +321,8 @@ class SzReviewData:
         ## FINDING THE PATH OF THE VIDEO THAT CONTAINS THE SPECIFIC EEG
         for clip in self.video_clips:
             path = clip[0]
-            vid_start=clip[1]
-            vid_end=clip[2]
+            vid_start = clip[1]
+            vid_end = clip[2]
 
             if vid_start <= rec_start < vid_end:
                 video_path = path
@@ -343,7 +332,6 @@ class SzReviewData:
         if video_path is None:
             print("Could not find aligned video!")
             return
-
 
         ## opening the video using its path and opencv
         cap = cv2.VideoCapture(video_path)
@@ -378,9 +366,7 @@ class SzReviewData:
 
         cap.release()
 
-
         return video_path, frames
-
 
     # def read_video(self, path, prefix):
     #     #load all ttls so that each sz can be matched to relevant vid
@@ -391,7 +377,7 @@ class SzReviewData:
     def edit_sz_from_gui(self, event_type, xcoord):
         sz = self.get_sz(self.active_sz, True)
         t0, t1 = sz['Start'], sz['Stop']
-        new_time = t0+xcoord/self.fs - self.plot_delta
+        new_time = t0 + xcoord / self.fs - self.plot_delta
         if not sz['Edited']:
             self.set_sz(self.active_sz, value=True, key='Edited')
             self.set_sz(self.active_sz, value=t0, key='OriginalStart')
@@ -426,7 +412,7 @@ class SzReviewData:
         ds0 = int(t0 * self.fs) - s0  # samples between plot start and sz start
         # ds1 = int((t1 - t0) * self.fs) - ds0  # samples between plot start and sz end
         sx = numpy.arange(s1 - s0)
-        secs = numpy.arange(-span_sec, span_sec + t1 - t0+1, span_sec, dtype='int')
+        secs = numpy.arange(-span_sec, span_sec + t1 - t0 + 1, span_sec, dtype='int')
         window_w = int(0.1 * self.fs)
 
         y = self.ephys.trace[s0:s1]
@@ -437,7 +423,6 @@ class SzReviewData:
 
         gamma_mask = sz_gamma < (sz_gamma.max() / self.settings["Curation.PISMultiplier"])
         gamma_mask[:last_plot_sample] = False
-
 
         # full sz trace
         ca = axd['top']
