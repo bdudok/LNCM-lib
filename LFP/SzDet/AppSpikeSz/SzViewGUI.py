@@ -2,10 +2,26 @@ import sys, os
 import re
 from PyQt5 import QtGui, QtWidgets, QtCore
 import os.path
+import cv2
 import datetime
+
+from PyQt5.QtMultimedia import QMediaPlayer
+from PyQt5.QtMultimediaWidgets import QVideoWidget
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib import pyplot as plt
 from LFP.SzDet.AppSpikeSz.SzViewData import SzReviewData
+
+from PyQt5.QtCore import QDir, Qt, QUrl
+from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
+from PyQt5.QtMultimediaWidgets import QVideoWidget
+from PyQt5.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel,
+        QPushButton, QSizePolicy, QSlider, QStyle, QVBoxLayout, QWidget)
+from PyQt5.QtWidgets import QMainWindow,QWidget, QPushButton, QAction
+from PyQt5.QtGui import QIcon
+import sys
+from Proc2P.Treadmill import rsync
+import os
+
 
 #GUI
 # import sys
@@ -197,23 +213,175 @@ class GUI_main(QtWidgets.QMainWindow):
         return groupbox
 
     def make_video_groupbox(self):
-        groupbox = QGroupBox('Video')
-        vbox = QtWidgets.QVBoxLayout()
-        groupbox.setLayout(vbox)
 
-        #horizontal layout for buttons
+        groupbox = QGroupBox('Video')
+        vbox = QVBoxLayout()
+        groupbox.setLayout(vbox)
+        # horizontal layout for buttons
         horizontal_layout = QHBoxLayout()
 
-        #prev button
+        # video button
         button = QPushButton(f'Show [M]', )
         horizontal_layout.addWidget(button)
-
+        button.clicked.connect(self.video_callback)
         vbox.addLayout(horizontal_layout)
 
+        # information on video
+        self.video_info = QLabel("")
+        self.video_info.setMinimumSize(240, 150)
+        self.video_info.setAlignment(Qt.AlignCenter)
+        self.video_info.setWordWrap(True)
+        vbox.addWidget(self.video_info)
         vbox.addWidget(self.separator)
-        #later add motion triggered average and live movie canvases
+
+        self.frame_index = 0
+        self.frames = []  # will be filled in video_callback
+        self.frameTimer = QtCore.QTimer()
+        self.frameTimer.timeout.connect(self.display_next_frame)
+
+        ## video
+        self.videoLabel = QLabel()
+        self.videoLabel.setMinimumSize(240, 150)
+        self.videoLabel.setAlignment(Qt.AlignCenter)
+        vbox.addWidget(self.videoLabel)
+
+        # Control row: Play/Pause + Slider
+        controlLayout = QHBoxLayout()
+        controlLayout.setContentsMargins(0, 0, 0, 0)
+
+        # Play/Pause button
+        self.playButton = QPushButton()
+        self.playButton.setEnabled(False)
+        self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self.playButton.clicked.connect(self.play)
+        controlLayout.addWidget(self.playButton)
+
+        # Position slider
+        self.positionSlider = QSlider(Qt.Horizontal)
+        self.positionSlider.setRange(0, 0)
+        self.positionSlider.sliderMoved.connect(self.setPosition)
+        controlLayout.addWidget(self.positionSlider)
+
+        vbox.addLayout(controlLayout)
+
+
 
         return groupbox
+
+    def show_frame(self, frame):
+        # displaying specific frame (when frame is an opencv frame)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = frame_rgb.shape
+        bytes_per_line = ch * w
+        qimg = QtGui.QImage(frame_rgb.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
+
+        # Resize while preserving aspect ratio to fit QLabel width
+        target_width = self.videoLabel.width()
+        aspect_ratio = h / w
+        target_height = int(target_width * aspect_ratio)
+
+        qimg_resized = qimg.scaled(target_width, target_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.videoLabel.setPixmap(QtGui.QPixmap.fromImage(qimg_resized))
+
+    def display_next_frame(self):
+        # displays a new frame every 1/30 second
+        if self.frame_index >= len(self.frames):
+            self.frameTimer.stop()
+            self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+            return
+
+        # showing frame and updating position in slider
+        self.show_frame(self.frames[self.frame_index])
+        self.positionSlider.setValue(self.frame_index)
+
+        # updating position of video marker and adding to main plot
+        marker_x = (self.frame_index/30 + self.szdat.plot_delta) * self.szdat.fs
+        self.szdat.marker_line.set_xdata([marker_x,marker_x])
+        self.FigCanvas1.draw()
+
+        self.frame_index += 1
+
+
+    def play(self):
+        if self.frameTimer.isActive():
+            self.frameTimer.stop()
+            self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        else:
+            self.frameTimer.start(int(1000 / 30))  # Assuming 30 FPS
+            self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
+
+    def exitCall(self):
+        sys.exit(app.exec_())
+
+
+    def mediaStateChanged(self, state):
+        # changes icon when play/pause button are pressed
+        if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
+            self.playButton.setIcon(
+                    self.style().standardIcon(QStyle.SP_MediaPause))
+        else:
+            self.playButton.setIcon(
+                    self.style().standardIcon(QStyle.SP_MediaPlay))
+
+    def positionChanged(self, position):
+        # changes position in slider
+        self.positionSlider.setValue(position)
+
+    def durationChanged(self, duration):
+        self.positionSlider.setRange(0, duration)
+
+    def setPosition(self, position):
+        # moving to specific position in video and showing that frame
+        self.frame_index = position
+        self.show_frame(self.frames[self.frame_index])
+
+
+    def reset_video_player(self):
+        self.frameTimer.stop()
+        self.frames = []
+        self.frame_index = 0
+        self.videoLabel.clear()
+        self.video_info.clear()
+        self.positionSlider.setRange(0, 0)
+        self.playButton.setEnabled(False)
+        self.playButton.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+
+    def video_callback(self):
+
+        # considering the case that alignment did not work or
+        # user has not yet picked a specific seizure
+        if self.szdat.align is None or self.active_sz is None:
+            self.video_info.setText("No alignment available.")
+            QApplication.processEvents()
+            return
+
+        self.video_info.setText("Loading video ... Please wait.")
+        QApplication.processEvents()
+
+        # GETTING SEIZURE START AND END TIMES
+        sz = self.szdat.get_sz(self.active_sz, full=True)
+        t0, t1 = sz['Start'], sz['Stop']
+
+
+        ## GETTING THE VIDEO PATH AND SPECIFIC OPENCV FRAMES BASED ON THE START AND END TIMES
+        video_path, self.frames = self.szdat.get_frames(t0, t1)
+        # considering the case that the method fails
+        if self.frames is None:
+            self.video_info.setText("No frames found.")
+            QApplication.processEvents()
+            return
+
+        # letting the user know what specific video is playing
+        self.video_info.setText("Playing video: " + video_path)
+        QApplication.processEvents()
+
+        ## updating slider, play button, frame_index and showing the first frame in the video
+        self.positionSlider.setRange(0, len(self.frames) - 1)
+        self.playButton.setEnabled(True)
+        self.frame_index = 0
+        self.show_frame(self.frames[0])
+
+
 
     def select_rec_callback(self):
         # open a recording: display filedioalog, call SzReviewData, update listbox.
@@ -254,6 +422,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
 
         self.path_label.setText(self.prefix)
+        self.reset_video_player()
 
     def mark_complete(self, i, color):
         color = self.color_lut(color)
@@ -340,6 +509,7 @@ class GUI_main(QtWidgets.QMainWindow):
     def list_clicked(self):
         self.current_selected_i = self.sz_list.currentRow()
         self.select_sz()
+        self.reset_video_player()
 
     def previous_callback(self):
         if self.current_selected_i is None:
@@ -394,6 +564,8 @@ class GUI_main(QtWidgets.QMainWindow):
         self.szdat.edit_sz_from_gui(event_type, xcoord)
         self.flag_unsaved()
         self.refresh_data()
+
+
 
 
     def refresh_data(self):

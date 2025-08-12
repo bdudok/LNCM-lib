@@ -5,13 +5,18 @@ import matplotlib.pyplot as plt
 from Proc2P.utils import *
 import json
 import numpy
+import math
+import cv2
 import datetime
 from PlotTools import *
+import re, datetime, os
+import numpy as np
 
 # readers
 from LFP.Pinnacle import ReadEDF
 from Proc2P.Bruker import LoadEphys
 from Proc2P.Bruker.PreProc import SessionInfo
+from Proc2P.Treadmill import rsync
 
 # analysis for sz curation
 from scipy import signal
@@ -48,6 +53,7 @@ class SzReviewData:
         self.read_ephys()
         if not skip_gamma:
             self.get_session_gamma()
+        self.read_video()
 
         # ignore video now. add this after the lfp review features work and can be used in practice
         # get all ttl times from ephys and pass to video class to align all. this should be done once and stored
@@ -99,6 +105,7 @@ class SzReviewData:
             self.ephys = ReadEDF.EDF(self.path, self.prefix, ch=int(self.ch) - 1)
             # ttls = self.ephys.get_TTL()
             startdate = self.ephys.d[-1]['startdate']
+            print(startdate)
             annotations = self.ephys.d[-1]['annotations']
         if self.setup == 'LNCM':
             self.ephys = LoadEphys.Ephys(self.path, self.prefix, channel=int(self.ch))
@@ -204,6 +211,177 @@ class SzReviewData:
             return self.output_sz.loc[sz].iloc[0]
         return self.output_sz.loc[sz, 'Included'].values[0]
 
+
+    def read_video(self):
+        ## PARSING OVERALL SEGMENT WINDOW FROM SEIZURE FILE NAME
+        m = re.search(
+            r'__(?P<day>\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2})'
+            r'_TS_(?P<start>\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2})',
+            self.prefix
+        )
+        if not m:
+            self.align = None
+            return
+
+        ## FINDING START AND END TIME USING SEIZURE FILE NAME
+        seg_start = datetime.datetime.strptime(m.group('start'), '%Y-%m-%d_%H_%M_%S')
+        seg_end = seg_start + datetime.timedelta(hours=1) # seizures are typically one hour long
+
+        # GETTING EEG TTLS AS A 1-D FLOAT ARRAY (SECS FROM REC START)
+        ttls_eeg = self.ephys.get_TTL(channel='GPIO0')
+        print(ttls_eeg[len(ttls_eeg)-1])
+
+        ## COLLECTING ALL VIDEO TTLS WHOSE CLIPS OVERLAP THE WINDOW
+        vid_folder = r'Z:\_RawData\EEG\Dreadd\videos'
+        all_video_ttls = []
+
+        self.video_clips = []
+        for fn in sorted(os.listdir(vid_folder)):
+            if not fn.lower().endswith('.avi'):
+                continue
+
+            # EXTRACTING THE VIDEO CLIP'S START AND END TIME BASED ON ITS PATH
+            m2 = re.search(r'(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})', fn)
+            if not m2:
+                continue
+            vid_start = datetime.datetime.strptime(m2.group(1), '%Y-%m-%dT%H-%M-%S')
+            vid_end   = vid_start + datetime.timedelta(hours=1) ## videos are typically one hour long
+
+            # skip clips that lie entirely outside specified window
+            if not (vid_start < seg_end and vid_end > seg_start):
+                continue
+
+            # adding video to video clips
+            self.video_clips.append([
+                os.path.join(vid_folder, fn),
+                vid_start,
+                vid_end
+            ])
+
+
+
+        for clip in self.video_clips:
+            ## LOADING THIS CLIPS TTL TIMESTAMPS
+            path = clip[0]
+            npy_path = path[:-4] + '.npy'
+            raw_vid  = np.load(npy_path, allow_pickle=True)
+
+            # COLUMN 4 IS THE TTLS
+            ttls_video = raw_vid[:, 4].astype(float)
+
+            ## adding this video ttls to all ttls
+            all_video_ttls.append(ttls_video)
+
+        # considering the case that there are no video ttls
+        if not all_video_ttls:
+            self.align = None
+            return
+
+        ## CONCATENATING ALL VIDEO TTLS INTO ONE TTL SEQUENCE
+        ttls_video = np.concatenate(all_video_ttls)
+
+
+
+
+
+
+        ## RUNNING ONE SINGLE ALIGNER ON THE FULL CONTINUOUS TTL SEQUENCE
+        try:
+            self.align = rsync.Rsync_aligner(ttls_eeg, ttls_video)
+        except Exception as e:
+            print(f"[SzReviewData] Error: {e}")
+            self.align = None
+            return
+
+        ## getting value of first and last ttl in the eeg
+        first_ttl = math.ceil(ttls_eeg[0])
+        last_ttl = math.floor(ttls_eeg[-1])
+
+
+        ## FINDING THE VALUE OF START FRAME FOR EACH VIDEO CLIP
+        for clip in self.video_clips:
+            ## getting how many seconds after the eeg start, the video starts
+            vid_start=clip[1]
+            seconds = int((vid_start - seg_start).total_seconds())
+
+            ## because A_to_B method returns NaN for values outside the first and
+            ## last ttl in the eeg, we need to consider (3) cases
+            ## case 1: the start of the video clip is before the first eeg ttl
+            ## case 2: the start of the video clip is in between the first and last eeg ttl
+            ## case 3: the start of the video clip is after the last ttl
+
+            if seconds <  first_ttl:
+                start_frame = self.align.A_to_B(first_ttl) + 30 * (seconds - first_ttl)
+            elif seconds >= first_ttl and seconds <= last_ttl:
+                start_frame = self.align.A_to_B(seconds)
+            else: ## seconds > last_ttl
+                start_frame = self.align.A_to_B(last_ttl) + 30 * (seconds - last_ttl)
+
+            clip.append(start_frame)
+
+
+
+    def get_frames(self, t0, t1):
+        ## t0 and t1 are the start and end times (in seconds) of the specific seizure
+
+        ## the start time (datetime) of the specific seizure
+        rec_start = self.rec_info['startdate'] + datetime.timedelta(seconds=t0)
+        video_path = None
+        shift = None
+
+        ## FINDING THE PATH OF THE VIDEO THAT CONTAINS THE SPECIFIC EEG
+        for clip in self.video_clips:
+            path = clip[0]
+            vid_start=clip[1]
+            vid_end=clip[2]
+
+            if vid_start <= rec_start < vid_end:
+                video_path = path
+                shift = clip[3]
+                break
+
+        if video_path is None:
+            print("Could not find aligned video!")
+            return
+
+
+        ## opening the video using its path and opencv
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print("Could not open video.")
+            return
+
+        ## the number of the start and end frame of the video
+        ## because the frames in ttl do not start at 0,
+        ## we need to shift the number of the frames
+        ## so that start_frame is at 0
+        start_frame = self.align.A_to_B(t0) - shift
+        end_frame = self.align.A_to_B(t1) - shift
+
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        ## starting at start_frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
+        frames = []
+        current_frame = start_frame
+
+        ## GRABBING ALL FRAMES BETWEEN START AND END FRAME IN THE VIDEO AND APPEDNING TO FRAMES
+        while current_frame <= end_frame:
+            ret, frame = cap.read()
+            print(ret)
+            if not ret:
+                break
+            frames.append(frame)
+            current_frame += 1
+
+        cap.release()
+
+
+        return video_path, frames
+
+
     # def read_video(self, path, prefix):
     #     #load all ttls so that each sz can be matched to relevant vid
     #     #pull motion energy of the vids
@@ -260,6 +438,7 @@ class SzReviewData:
         gamma_mask = sz_gamma < (sz_gamma.max() / self.settings["Curation.PISMultiplier"])
         gamma_mask[:last_plot_sample] = False
 
+
         # full sz trace
         ca = axd['top']
         strip_ax(ca, False)
@@ -282,6 +461,10 @@ class SzReviewData:
         self.set_sz(sz_name, pisdur, 'PostIctalSuppression(s)')
         ca.set_xticks((secs + self.plot_delta) * self.fs)
         ca.set_xticklabels(secs)
+
+        ## adding a video marker to main plot
+        marker_x = (0 + self.plot_delta) * self.fs
+        self.marker_line = ca.axvline(marker_x, color='blue', linestyle='--', zorder=100)
 
         # sz start example
         ca = axd['lower left']
