@@ -16,12 +16,14 @@ class Detect:
         '''
 
     #resample if too high rate
-        max_fs = 2 * ms
-        if fs > max_fs*1.5:
-            trace = signal.resample(trace, int(len(trace)/fs*max_fs))
-            self.fs = max_fs
-        else:
-            self.fs = fs
+        #this broke some functionality when plotting in GUI. if implemented, make sure to
+        #separately track detector's and gui's fs
+        # max_fs = 2 * ms
+        # if fs > max_fs*1.5:
+        #     trace = signal.resample(trace, int(len(trace)/fs*max_fs))
+        #     self.fs = max_fs
+        # else:
+        self.fs = fs
         self.trace = trace
 
         #filter

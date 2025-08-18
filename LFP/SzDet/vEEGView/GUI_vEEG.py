@@ -111,7 +111,7 @@ class GUI_main(QtWidgets.QMainWindow):
             self.param['SzDet.Framesize'] = 64
         elif self.setup == 'LNCM':
             self.param['SzDet.Framesize'] = 50
-            self.param['fs'] = 2000
+            self.param['fs'] = 5000
         if self.setup == 'Pinnacle':
             self.param['Channel'] = 1
             self.param_keys_sorted = (*self.param_keys_sorted, 'Channel',
