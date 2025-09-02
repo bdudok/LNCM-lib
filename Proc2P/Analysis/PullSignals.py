@@ -1,5 +1,7 @@
 import numpy
 from Proc2P.Analysis.LoadPolys import LoadImage, load_roi_file
+from Proc2P.Bruker.LoadMovie import LoadMovie, get_raw_movies
+from Proc2P.Bruker.PreProc import SessionInfo
 import matplotlib.path as mplpath
 from statsmodels.stats.weightstats import DescrStatsW
 import os
@@ -18,7 +20,7 @@ class Worker(Process):
 
     def run(self):
         for job in iter(self.queue.get, None):
-            path, prefix, roi, ch, szmode, snrw = job
+            path, prefix, roi, ch, szmode, snrw, useraw = job
             if roi == 'Auto':
                 #locate last saved roi file
                 exs = [1]
@@ -33,13 +35,29 @@ class Worker(Process):
             else:
                 tag = roi
             self.log.set_handle(path, prefix)
-            retval = pull_signals(path, prefix, tag=tag, ch=ch, sz_mode=szmode, snr_weighted=snrw)
+            retval = pull_signals(path, prefix, tag=tag, ch=ch, snr_weighted=snrw, use_raw_movie=useraw)
             if retval:
                 lprint(self, retval, logger=self.log)
 
 
-def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=False, enable_alt_path=True,
-                 overwrite=False):
+def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_alt_path=True,
+                 overwrite=False, use_raw_movie=False):
+    '''
+    Compute average pixel intensity in each ROI and each frame of a movie
+    :param path: the processed folder
+    :param prefix: of the session
+    :param tag: name of the ROI set (saved by the ROI editor)
+    :param ch: which channel to pull ('Ch1', 'Ch2', 'All').
+    If All, output order will be ['Ch2', 'Ch1] (green, red detector with Bruker)
+    :param snr_weighted: if True, estimates the SNR of each pixel and uses it in a weighted average
+    If False, simple average f all pixels in the ROI
+    :param enable_alt_path: If the registered movie not found, looks in the backup folders specified in config.
+    This is used because we delete the registered movies from the server after 6 months.
+    :param overwrite: if False, checks if output exists and doesn't pull if yes
+    :param use_raw_movie: if True, uses the raw movie instead of the registered one.
+    Looks up path in the session info file.
+    :return: saves the output traces to a file. Only returns report string (also saved in the log).
+    '''
     #get binary mask
     opPath = os.path.join(path, prefix + '/')
     roi_name = opPath + f'{prefix}_saved_roi_{tag}.npy'
@@ -51,14 +69,24 @@ def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=F
         print(prefix, f': Trace file for {tag} exists, skipping...')
         return -1
 
-    im = LoadImage(path, prefix)
-    if enable_alt_path: #check if the raw data exists. this can be moved if the session is archived
-        if not len(im.imdat.input_files):
-            im.imdat.find_alt_path()
+    if use_raw_movie:
+        si = SessionInfo(opPath, prefix)
+        info = si.load()
+        movies = get_raw_movies(info)
+        channelnames = si.info["channelnames"]
+        nframes, height, width = movies[channelnames[0]].shape
+    else:
+        im = LoadImage(path, prefix)
+        if enable_alt_path: #check if the raw data exists. this can be moved if the session is archived
+            if not len(im.imdat.input_files):
+                im.imdat.find_alt_path()
+        channelnames = im.channels
+        nframes = im.nframes
+        height, width = im.info['sz']
+
 
     data = load_roi_file(roi_name)
     #calculate binary mask
-    height, width = im.info['sz']
     binmask = numpy.zeros((len(data), width, height), dtype='bool')
     print(f'Computing masks from {len(data)} rois...')
     for nroi, pr in enumerate(data):
@@ -75,16 +103,15 @@ def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=F
                     binmask[nroi, x, y] = True
     #figure out channels to pull MODES = ['All', 'Green', 'Red']
     if ch == 'All':
-        if 'Ch1' in im.channels and 'Ch2' in im.channels:
+        if 'Ch1' in channelnames and 'Ch2' in channelnames:
             channels = ['Ch2', 'Ch1'] #I want to keep green=0; red=1 throughout the pipeline, this step establishes that
             #and later steps inherit.
         else:
-            channels = im.channels
+            channels = channelnames
     else:
         channels = [ch]
 
     #init empty array
-    nframes = im.nframes
     ncells = len(binmask)
     nchannels = len(channels)
     traces = numpy.empty((ncells, nframes, nchannels))
@@ -120,7 +147,10 @@ def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=F
                 print(f'Pulling {prefix}:{int(next_report*100/len(channels)+50*chi):2d}% ({speed/1000:.1f} ms/frame)')
                 next_report += rep_size
             stop = int(min(nframes, start + chunk_len))
-            inmem_data = numpy.array(im.imdat.get_channel(ch)[start:stop])
+            if use_raw_movie:
+                inmem_data = movies[ch][start:stop]
+            else:
+                inmem_data = numpy.array(im.imdat.get_channel(ch)[start:stop])
             if snr_weighted:
                 if weights is None:
                     #get the weights of each pixel within ROI for each cell based on snr in first chunk
@@ -157,13 +187,23 @@ def pull_signals(path, prefix, tag=None, ch='All', sz_mode=False, snr_weighted=F
     avgtype = ('simple', 'weighted')[snr_weighted]
     message = f'Pulled {avgtype} average from {int(nframes)} frames ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}'
     message += '\r\n' + f'Channel order is: {channels}'
+    if use_raw_movie:
+        message += '\r\n' + f'Raw movie was used (no registration).'
     return message
 
 if __name__ == '__main__':
-    path = r'D:\Shares\Data\_Processed\2P\JEDI-SWR/'
-    prefix = 'JediPVCre50_2024-11-13_fast_487'
-    tag = 'PVweighted'
+    path = r'D:\Shares\Data\_Processed\2P\eCB-GRAB/'
+    prefix = 'BL6-31_2025-08-07_e-stimdrug_201'
+    tag = 'rtest'
 
-    retval = pull_signals(path, prefix, tag=tag, ch=0, snr_weighted=True)
+    # opPath = os.path.join(path, prefix + '/')
+    # si = SessionInfo(opPath, prefix)
+    # info = si.load()
+    # movies = get_raw_movies(info)
+    # channelnames = si.info["channelnames"]
+    # chn = channelnames[0]
+
+
+    retval = pull_signals(path, prefix, tag=tag, ch='All', snr_weighted=False, use_raw_movie=True)
     print(retval)
 

@@ -81,17 +81,15 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
             imgshape.append(3)
         preview = numpy.zeros(imgshape, dtype='uint8')
 
+        if s.channelnames[0] == 'Ch1':
+            preview_channels['R'] = mean1
+        else:
+            preview_channels['G'] = mean1
+
         if dual_channel:
             mean2 = output_ops['meanImg_chan2'] / output_ops['meanImg_chan2'].max() * 255
-
-        if ref_ch == 'Ch2':
-            preview_channels['G'] = mean1
-            if dual_channel:
-                preview_channels['R'] = mean2
-        else:
             preview_channels['R'] = mean1
-            if dual_channel:
-                preview_channels['G'] = mean2
+            preview_channels['G'] = mean2
 
         for chi, chn in enumerate('RGB'):
             x = preview_channels[chn]

@@ -106,7 +106,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.param['Sz.MinDur'] = 2
         self.param['Sz.Gap'] = 2
         self.param['SzDet.Framesize'] = 50
-        self.param['fs'] = 2000
+        self.param['fs'] = 5000
         self.param['PlotDur'] = 10
         self.param['Channel'] = 1
         if self.setup == 'Soltesz':
@@ -114,7 +114,7 @@ class GUI_main(QtWidgets.QMainWindow):
             self.param['SzDet.Framesize'] = 64
         elif self.setup == 'LNCM':
             self.param['SzDet.Framesize'] = 50
-            self.param['fs'] = 2000
+            self.param['fs'] = 5000
         if self.setup == 'Pinnacle':
             self.param_keys_sorted = (*self.param_keys_sorted,
                                       'rejection_value', 'rejection_step', 'rejection_tail', 'rejection_factor')
@@ -345,11 +345,11 @@ class GUI_main(QtWidgets.QMainWindow):
             ca.cla()
 
         #get data
-        fs = self.fs
+        self.fs = int(self.param['fs'])
         lo = int(float(self.get_field('LoCut')))
         hi = int(float(self.get_field('HiCut')))
         if (lo != self.previous_lo) or (hi != self.previous_hi):
-            self.spikedet = SpikesPower.Detect(self.trace, fs=fs, lo=lo, hi=hi)
+            self.spikedet = SpikesPower.Detect(self.trace, fs=self.fs, lo=lo, hi=hi)
             self.previous_lo = lo
             self.previous_hi = hi
         t = self.spikedet.get_spikes(tr1=float(self.get_field('Tr1')), tr2=float(self.get_field('Tr2')),
@@ -361,10 +361,10 @@ class GUI_main(QtWidgets.QMainWindow):
                                                   cleanup=float(self.get_field('Sz.MinDur')),
                                                   gap=float(self.get_field('Sz.Gap')))
         sz_times = sz_times_raw.astype('int32')
-        tx = (t*fs).astype('int64')
+        tx = (t*self.fs).astype('int64')
         Xrate = framesize/1000
         X = numpy.arange(0, len(sz_burden)) * Xrate
-        time_xvals = numpy.arange(0, len(self.spikedet.trace)) / fs
+        time_xvals = numpy.arange(0, len(self.spikedet.trace)) / self.fs
 
         #plot data
         if self.raw_trace is not None:
@@ -504,6 +504,7 @@ class GUI_main(QtWidgets.QMainWindow):
             self.param['channel_index'] = chi
             r = LoadEphys.Ephys(self.savepath, self.active_prefix, channel=chi)
             self.ephys = r
+            trace = self.ephys.trace
         elif self.setup == 'Pinnacle':
             if ch.isdigit():
                 ch = int(ch)-1
@@ -514,16 +515,17 @@ class GUI_main(QtWidgets.QMainWindow):
             chstr = f'{r.active_channel}; {r.chi+1}/{len(r.channels)}'
             self.channel_name_label.setText(chstr + ' (Use Open to change channels)')
             self.edf = r
+            trace = r.trace
         #get example trace
-        fs = int(self.get_field('fs'))
+        self.fs = int(self.param['fs'])
         plotdur = self.get_field('PlotDur')
-        trace = r.trace
+
         if hasattr(r, 'raw_trace'):
             raw_trace = r.raw_trace
         else:
             raw_trace = trace
         if plotdur != 'all':
-            t_want = int(fs * 60 * float(plotdur)) #10 minutes
+            t_want = int(self.fs * 60 * float(plotdur)) #10 minutes
             print(t_want)
             if len(trace) > t_want:
                 want_slice = slice(int(len(trace)/2 - t_want/2), int(len(trace)/2 + t_want/2))
@@ -531,7 +533,6 @@ class GUI_main(QtWidgets.QMainWindow):
                 raw_trace = raw_trace[want_slice]
         self.raw_trace = raw_trace
         self.trace = trace
-        self.fs = fs
         self.set_result('Prefix', self.active_prefix)
         self.previous_lo = 0
         self.previous_hi = 0

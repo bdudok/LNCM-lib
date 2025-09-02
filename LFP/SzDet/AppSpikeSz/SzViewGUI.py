@@ -15,20 +15,19 @@ from PyQt5.QtCore import QDir, Qt, QUrl
 from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel,
-        QPushButton, QSizePolicy, QSlider, QStyle, QVBoxLayout, QWidget)
-from PyQt5.QtWidgets import QMainWindow,QWidget, QPushButton, QAction
+                             QPushButton, QSizePolicy, QSlider, QStyle, QVBoxLayout, QWidget)
+from PyQt5.QtWidgets import QMainWindow, QWidget, QPushButton, QAction
 from PyQt5.QtGui import QIcon
 import sys
 from Proc2P.Treadmill import rsync
 import os
 
-
-#GUI
+# GUI
 # import sys
 # from PyQt5 import Qt
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (QApplication, QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-                                    QGroupBox, QListWidget, QAction, QAbstractItemView, QLineEdit, QCheckBox)
+                             QGroupBox, QListWidget, QAction, QAbstractItemView, QLineEdit, QCheckBox)
 
 from Proc2P.utils import *
 
@@ -36,25 +35,26 @@ from Proc2P.utils import *
 Manually review automatically detected seizures
 '''
 
+
 class GUI_main(QtWidgets.QMainWindow):
     def __init__(self, app, setupID='Pinnacle', defaults=None):
         super().__init__()
 
         self.setWindowTitle(f'Curate seizures')
-        self.setGeometry(30, 60, 3200, 1600) # Left, top, width, height.
+        self.setGeometry(30, 60, 3200, 1600)  # Left, top, width, height.
         self.app = app
         self.user_defaults = defaults
 
-        #peristent settings
-        self.setup = setupID #'LNCM' or 'Pinnacle'
+        # peristent settings
+        self.setup = setupID  # 'LNCM' or 'Pinnacle'
         self.set_defaults()
 
-        #main groupbox (horizonal)
+        # main groupbox (horizonal)
         self.szlist_groupbox = self.make_szlist_groupbox()
         self.display_traces_groupbox = self.make_traces_groupbox()
         self.video_groupbox = self.make_video_groupbox()
 
-        #central widget
+        # central widget
         centralwidget = QWidget(self)
         horizontal_layout = QHBoxLayout()
 
@@ -88,11 +88,11 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.setup == 'Pinnacle':
             s1 = '.edf_Ch'
             if s1 in ps:
-                #if saved with no tag
+                # if saved with no tag
                 f1 = ps.find(s1)
                 return ps[:f1], ps[f1 + len(s1):][0], None
             else:
-                #saved with tag, use regex to find tag and channel
+                # saved with tag, use regex to find tag and channel
                 s1 = '.edf_'
                 f1 = ps.find(s1)
                 prefix = ps[:f1]
@@ -104,25 +104,25 @@ class GUI_main(QtWidgets.QMainWindow):
         elif self.setup == 'LNCM':
             s1 = '_Ch'
             f1 = ps.find(s1)
-            return ps[:f1], ps[f1+len(s1):][0], None
+            return ps[:f1], ps[f1 + len(s1):][0], None
 
     def make_szlist_groupbox(self):
         groupbox = QGroupBox('File list')
         vbox = QtWidgets.QVBoxLayout()
         groupbox.setLayout(vbox)
 
-        #select button
+        # select button
         select_path_button = QPushButton('Select recording', )
         vbox.addWidget(select_path_button)
         select_path_button.clicked.connect(self.select_rec_callback)
         vbox.addWidget(self.separator)
 
-        #label
+        # label
         self.path_label = QLabel('...', )
         self.path_label.setWordWrap(True)
         vbox.addWidget(self.path_label)
 
-        #list
+        # list
         self.sz_list = QListWidget(self)
         self.sz_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.sz_list.currentRowChanged.connect(self.list_clicked)
@@ -136,16 +136,16 @@ class GUI_main(QtWidgets.QMainWindow):
         vbox = QtWidgets.QVBoxLayout()
         groupbox.setLayout(vbox)
 
-        #horizontal layout for buttons
+        # horizontal layout for buttons
         horizontal_layout = QHBoxLayout()
 
-        #prev button
+        # prev button
         left = "\u2190"
         button = QPushButton(f'Previous [{left}]', )
         horizontal_layout.addWidget(button)
         button.clicked.connect(self.previous_callback)
 
-        #toggle button
+        # toggle button
         # sp = "\u2423"
         # up = "\u2191"
         # down = "\u2193"
@@ -153,23 +153,23 @@ class GUI_main(QtWidgets.QMainWindow):
         horizontal_layout.addWidget(button)
         button.clicked.connect(self.toggle_callback)
 
-        #interictal button
+        # interictal button
         button = QPushButton(f'Interictal [i]', )
         horizontal_layout.addWidget(button)
         button.clicked.connect(self.interictal_callback)
 
-        #next button
+        # next button
         right = "\u2192"
         self.next_button = QPushButton(f'Next [{right}]', )
         horizontal_layout.addWidget(self.next_button)
         self.next_button.clicked.connect(self.next_callback)
 
-        #save button
+        # save button
         self.save_button = QPushButton(f'Save', )
         horizontal_layout.addWidget(self.save_button)
         self.save_button.clicked.connect(self.save_callback)
 
-        #actions
+        # actions
         self.goLeftAction = QAction('Previous', self)
         self.goLeftAction.setShortcut('left')
         self.goLeftAction.triggered.connect(self.previous_callback)
@@ -190,7 +190,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.InterictalAction.triggered.connect(self.interictal_callback)
         self.addAction(self.InterictalAction)
 
-        #add indicators
+        # add indicators
         self.DurationLabel = QLabel('SzDur', )
         self.FreqLabel = QLabel('SzFreq', )
         self.PISLabel = QLabel('Suppression', )
@@ -200,11 +200,10 @@ class GUI_main(QtWidgets.QMainWindow):
             label.setFont(QFont('Arial', 12))
             horizontal_layout.addWidget(label)
 
-
         vbox.addLayout(horizontal_layout)
 
         vbox.addWidget(self.separator)
-        #later add a middle, thinner row for motion
+        # later add a middle, thinner row for motion
         self.FigCanvas1 = SubplotsCanvas()
         custom_toolbar = SelectorToolbar(self.FigCanvas1, self)
         vbox.addWidget(custom_toolbar)
@@ -240,6 +239,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.frameTimer.timeout.connect(self.display_next_frame)
 
         ## video
+        self.playback_framerate = 30
         self.videoLabel = QLabel()
         self.videoLabel.setMinimumSize(240, 150)
         self.videoLabel.setAlignment(Qt.AlignCenter)
@@ -263,8 +263,6 @@ class GUI_main(QtWidgets.QMainWindow):
         controlLayout.addWidget(self.positionSlider)
 
         vbox.addLayout(controlLayout)
-
-
 
         return groupbox
 
@@ -295,33 +293,31 @@ class GUI_main(QtWidgets.QMainWindow):
         self.positionSlider.setValue(self.frame_index)
 
         # updating position of video marker and adding to main plot
-        marker_x = (self.frame_index/30 + self.szdat.plot_delta) * self.szdat.fs
-        self.szdat.marker_line.set_xdata([marker_x,marker_x])
+        marker_x = (self.frame_index / self.playback_framerate + self.szdat.plot_delta) * self.szdat.fs
+        self.szdat.marker_line.set_xdata([marker_x, marker_x])
         self.FigCanvas1.draw()
 
         self.frame_index += 1
-
 
     def play(self):
         if self.frameTimer.isActive():
             self.frameTimer.stop()
             self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
         else:
-            self.frameTimer.start(int(1000 / 30))  # Assuming 30 FPS
+            self.frameTimer.start(int(1000 / self.playback_framerate))
             self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
 
     def exitCall(self):
         sys.exit(app.exec_())
 
-
     def mediaStateChanged(self, state):
         # changes icon when play/pause button are pressed
         if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
             self.playButton.setIcon(
-                    self.style().standardIcon(QStyle.SP_MediaPause))
+                self.style().standardIcon(QStyle.SP_MediaPause))
         else:
             self.playButton.setIcon(
-                    self.style().standardIcon(QStyle.SP_MediaPlay))
+                self.style().standardIcon(QStyle.SP_MediaPlay))
 
     def positionChanged(self, position):
         # changes position in slider
@@ -334,7 +330,6 @@ class GUI_main(QtWidgets.QMainWindow):
         # moving to specific position in video and showing that frame
         self.frame_index = position
         self.show_frame(self.frames[self.frame_index])
-
 
     def reset_video_player(self):
         self.frameTimer.stop()
@@ -362,7 +357,6 @@ class GUI_main(QtWidgets.QMainWindow):
         sz = self.szdat.get_sz(self.active_sz, full=True)
         t0, t1 = sz['Start'], sz['Stop']
 
-
         ## GETTING THE VIDEO PATH AND SPECIFIC OPENCV FRAMES BASED ON THE START AND END TIMES
         video_path, self.frames = self.szdat.get_frames(t0, t1)
         # considering the case that the method fails
@@ -381,8 +375,6 @@ class GUI_main(QtWidgets.QMainWindow):
         self.frame_index = 0
         self.show_frame(self.frames[0])
 
-
-
     def select_rec_callback(self):
         # open a recording: display filedioalog, call SzReviewData, update listbox.
 
@@ -390,22 +382,22 @@ class GUI_main(QtWidgets.QMainWindow):
                                                    filter=f'*{self.settings["rec_suffix"]}')
         self.wdir = os.path.dirname(fn[0])
         if self.setup == 'LNCM':
-            self.wdir = os.path.dirname(self.wdir)+'/'
+            self.wdir = os.path.dirname(self.wdir) + '/'
         self.prefix, self.ch, self.tag = self.get_prefix(os.path.basename(fn[0]))
 
         self.path_label.setText(f'Loading data for {self.prefix} ... Please wait.')
         QApplication.processEvents()
         self.current_selected_i = None
 
-        #load data
+        # load data
         self.szdat = SzReviewData(self.wdir, self.prefix, self.ch, tag=self.tag, setup=self.setup)
 
-        #set list widget
+        # set list widget
         self.sz_list.clear()
         self.sz_list.addItems(self.szdat.szlist)
         self.active_sz = None
 
-        #color if already completed:
+        # color if already completed:
         included_sz = self.szdat.output_sz['Included'].isin((1, 'TRUE', True))
         excluded_sz = self.szdat.output_sz['Included'].isin((0, 'FALSE', False))
         interictal_sz = self.szdat.output_sz['Interictal'].isin((1, 'TRUE', True))
@@ -420,7 +412,6 @@ class GUI_main(QtWidgets.QMainWindow):
         # print(self.szdat.output_sz['Included'])
         # print(excluded_sz)
 
-
         self.path_label.setText(self.prefix)
         self.reset_video_player()
 
@@ -431,15 +422,14 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def color_lut(self, color):
         lut = {
-        'true': '#38fc59',
-        'false': '#fc8638',
-        'interictal': '#38cbfc'
+            'true': '#38fc59',
+            'false': '#fc8638',
+            'interictal': '#38cbfc'
         }
         return lut.get(color, 'grey')
 
-
     def next_callback(self):
-        if self.szdat.get_sz(self.active_sz) == '': #if pressed next without marking it not sz, we set it as reviewed
+        if self.szdat.get_sz(self.active_sz) == '':  # if pressed next without marking it not sz, we set it as reviewed
             self.szdat.set_sz(self.active_sz, True)
             self.mark_complete(self.current_selected_i, 'true')
             self.flag_unsaved()
@@ -460,13 +450,13 @@ class GUI_main(QtWidgets.QMainWindow):
         current_item = self.sz_list.item(self.current_selected_i)
         self.active_sz = current_item.text()
         self.sz_list.setCurrentItem(current_item)
-        self.new_plot=True
+        self.new_plot = True
         self.refresh_data()
         self.color_next_button()
 
     def color_next_button(self):
         sz = self.szdat.get_sz(self.active_sz, full=True)
-        is_sz = sz["Included"] != False #value can be ''
+        is_sz = sz["Included"] != False  # value can be ''
         is_iis = sz["Interictal"] == True
         if is_sz and not is_iis:
             self.next_button.setStyleSheet(f"background-color: {self.color_lut('true')}")
@@ -474,8 +464,6 @@ class GUI_main(QtWidgets.QMainWindow):
             self.next_button.setStyleSheet(f"background-color: {self.color_lut('interictal')}")
         elif not is_sz:
             self.next_button.setStyleSheet(f"background-color: {self.color_lut('false')}")
-
-
 
     def update_indicators(self):
         self.curation_checks = {}
@@ -505,7 +493,6 @@ class GUI_main(QtWidgets.QMainWindow):
             self.curation_checks["PIS"] = False
         self.PISLabel.setText(f'{PISdur:.1f} s')
 
-
     def list_clicked(self):
         self.current_selected_i = self.sz_list.currentRow()
         self.select_sz()
@@ -523,7 +510,6 @@ class GUI_main(QtWidgets.QMainWindow):
             self.save_button.setStyleSheet("background-color: red")
         self.unsaved_changes += 1
         self.save_button.setText(f'Save ({self.unsaved_changes})')
-
 
     def toggle_callback(self):
         if self.active_sz is None:
@@ -544,17 +530,17 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.flag_unsaved()
         sz = self.szdat.get_sz(self.active_sz, full=True)
-        is_sz = sz["Included"] != False #value can be ''
-        if is_sz and sz["Included"] == '': #set to reviewed
+        is_sz = sz["Included"] != False  # value can be ''
+        if is_sz and sz["Included"] == '':  # set to reviewed
             self.szdat.set_sz(self.active_sz, value=True)
         is_iis = sz["Interictal"] == True
-        if is_sz and not is_iis: #toggle ii
+        if is_sz and not is_iis:  # toggle ii
             self.szdat.set_sz(self.active_sz, value=True, key='Interictal')
             self.mark_complete(self.current_selected_i, 'interictal')
-        elif is_sz and is_iis: #toggle ii
+        elif is_sz and is_iis:  # toggle ii
             self.szdat.set_sz(self.active_sz, value=False, key='Interictal')
             self.mark_complete(self.current_selected_i, 'true')
-        elif not is_sz: #set to sz and ii
+        elif not is_sz:  # set to sz and ii
             self.szdat.set_sz(self.active_sz, True)
             self.szdat.set_sz(self.active_sz, value=True, key='Interictal')
             self.mark_complete(self.current_selected_i, 'interictal')
@@ -565,9 +551,6 @@ class GUI_main(QtWidgets.QMainWindow):
         self.flag_unsaved()
         self.refresh_data()
 
-
-
-
     def refresh_data(self):
         self.szdat.plot_sz(self.active_sz, self.FigCanvas1.axd)
         self.update_indicators()
@@ -575,14 +558,16 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.unsaved_changes > 5:
             self.save_callback()
 
+
 class SubplotsCanvas(FigureCanvasQTAgg):
 
     def __init__(self, *args, **kwargs):
         self.fig, self.axd = plt.subplot_mosaic([['top', 'top'],
-                                       ['lower left', 'lower right']],
-                                      gridspec_kw={'width_ratios': [1, 0.3, ]},
-                                      figsize=(12, 6), layout="constrained")
+                                                 ['lower left', 'lower right']],
+                                                gridspec_kw={'width_ratios': [1, 0.3, ]},
+                                                figsize=(12, 6), layout="constrained")
         super(SubplotsCanvas, self).__init__(self.fig)
+
 
 class SelectorToolbar(NavigationToolbar2QT):
     def __init__(self, canvas, parent=None):
@@ -597,7 +582,6 @@ class SelectorToolbar(NavigationToolbar2QT):
         self.stop_button.clicked.connect(self.stop_action)
         self.addWidget(self.stop_button)
 
-
     def start_action(self, event):
         self.event_type = 'Start'
         self.cid = self.canvas.mpl_connect('button_press_event', self.on_click)
@@ -610,6 +594,7 @@ class SelectorToolbar(NavigationToolbar2QT):
         if event.inaxes:
             self.main_gui.edit_sz_callback(self.event_type, event.xdata)
 
+
 def launch_GUI(*args, **kwargs):
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     app = QtWidgets.QApplication(sys.argv)
@@ -618,6 +603,7 @@ def launch_GUI(*args, **kwargs):
     app.setStyle('Fusion')
     gui_main = GUI_main(app, *args, **kwargs)
     sys.exit(app.exec())
+
 
 if __name__ == '__main__':
     launch_GUI()
