@@ -215,9 +215,9 @@ class SzReviewData:
     def read_video(self):
         ## PARSING OVERALL SEGMENT WINDOW FROM SEIZURE FILE NAME
         m = re.search(
-            r'__(?P<day>\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2})'
-            r'_TS_(?P<start>\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2})',
+             r'^(?P<mouse>[^-]+)-.*?_TS_(?P<start>\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2})',
             self.prefix
+
         )
         if not m:
             self.align = None
@@ -232,7 +232,8 @@ class SzReviewData:
         print(ttls_eeg[len(ttls_eeg)-1])
 
         ## COLLECTING ALL VIDEO TTLS WHOSE CLIPS OVERLAP THE WINDOW
-        vid_folder = r'Z:\_RawData\EEG\Dreadd\videos'
+        mouse = m.group('mouse')
+        vid_folder = r'Z:\_RawData\EEG\Dreadd' + "\\" + mouse
         all_video_ttls = []
 
         self.video_clips = []
