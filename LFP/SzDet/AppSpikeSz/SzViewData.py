@@ -55,11 +55,6 @@ class SzReviewData:
             self.get_session_gamma()
         self.read_video()
 
-        # ignore video now. add this after the lfp review features work and can be used in practice
-        # get all ttl times from ephys and pass to video class to align all. this should be done once and stored
-        # there should be a selector in the gui that allows the user to browse to video path if these are not in config
-        # self.vid = self.read_video(self.settings['vid'], self.settings['vidfn'])
-
     def get_fn(self, suffix, timestamp=False):
         if self.setup == 'Pinnacle':
             if self.tag is None:
@@ -233,7 +228,7 @@ class SzReviewData:
 
         ## COLLECTING ALL VIDEO TTLS WHOSE CLIPS OVERLAP THE WINDOW
         mouse = m.group('mouse')
-        vid_folder = r'Z:\_RawData\EEG\Dreadd' + "\\" + mouse
+        vid_folder = r'D:\Shares\Data\_RawData\EEG\Dreadd' + "\\" + mouse
         all_video_ttls = []
 
         self.video_clips = []
@@ -371,7 +366,7 @@ class SzReviewData:
         ## GRABBING ALL FRAMES BETWEEN START AND END FRAME IN THE VIDEO AND APPEDNING TO FRAMES
         while current_frame <= end_frame:
             ret, frame = cap.read()
-            print(ret)
+            # print(ret)
             if not ret:
                 break
             frames.append(frame)
@@ -507,12 +502,12 @@ class SzReviewData:
 
 if __name__ == '__main__':
     setup = 'Pinnacle'
-    path = 'D:\Shares\Data\_Processed\EEG\Tottering/'
+    path = 'D:\Shares\Data\_Processed\EEG\Dreadd/'
     prefix = 'Tot9_2024-05-20_07_06_20_export'
-    setup = 'LNCM'
-    path = 'D:\Shares\Data\_Processed/2P\PVTot/'
-    prefix = 'PVTot9_2024-02-20_lfp_181'
-
-    szdat = SzReviewData(path, prefix, 2, setup=setup)
-    self = szdat
-    sz = szdat.get_sz(self.szlist[1], True)
+    # setup = 'LNCM'
+    # path = 'D:\Shares\Data\_Processed/2P\PVTot/'
+    # prefix = 'PVTot9_2024-02-20_lfp_181'
+    #
+    # szdat = SzReviewData(path, prefix, 2, setup=setup)
+    # self = szdat
+    # sz = szdat.get_sz(self.szlist[1], True)
