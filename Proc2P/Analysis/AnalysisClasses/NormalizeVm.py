@@ -7,7 +7,7 @@ from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.utils import gapless, outlier_indices, lprint
 from multiprocessing import Process
 
-def normalize_trace(session: ImagingSession):
+def normalize_trace(session: ImagingSession, **kwargs):
     '''
     :param session: an initialized ImagingSession
     :return: nothing, saves traces in CaTrace
@@ -27,12 +27,22 @@ def normalize_trace(session: ImagingSession):
         Y = session.ca.trace[c]
         y = numpy.copy(Y)
         # mask outliers and the frames before and after them, as well as running
-        exclude_move = gapless(session.pos.speed, int(fps), 1, expand=int(fps))
+        exclude_move = gapless(session.pos.speed, int(fps), threshold=1, expand=int(fps))
         diff_indices = [x for x in outlier_indices(numpy.diff(Y)) if x < (len(Y) - 2)]
         y[diff_indices] = numpy.nan
         y[exclude_move] = numpy.nan
         y[[x + 1 for x in diff_indices]] = numpy.nan
         y[[x + 2 for x in diff_indices]] = numpy.nan
+        y[:int(fps)] = numpy.nan
+        y[-int(fps):] = numpy.nan
+        # exclude seizures
+        if 'exclude_seizures' in kwargs and kwargs['exclude_seizures']:
+            ir = session.map_instrate()
+            exclude_sz = gapless(ir, int(fps), threshold=1.5, expand=int(fps))
+            if c == 0:
+                exc_rate = numpy.count_nonzero(~exclude_move[exclude_sz]) / len(y) * 100
+                lprint(None, f'Vm normalization {session.prefix} with "exclude_seizures" option, removing {round(exc_rate)}%')
+            y[exclude_sz] = numpy.nan
         baseline = arima_filtfilt(y)
         slo_baseline = gaussian_filter(baseline, int(fps * gauss_sigma))
 
@@ -87,10 +97,14 @@ class Worker(Process):
 
     def run(self):
         for data in iter(self.queue.get, None):
-            path, prefix, tag, overwrite = data
+            if type(data[-1])==dict:
+                path, prefix, tag, overwrite, kwargs = data
+            else:
+                path, prefix, tag, overwrite = data
+                kwargs = {}
             session = ImagingSession(path, prefix, tag, norip=True)
             if overwrite or not os.path.exists(os.path.join(session.ca.pf, 'vm.npy')):
-                normalize_trace(session)
+                normalize_trace(session, **kwargs)
             self.res_queue.put(prefix)
 
 def arima_filtfilt(y, filter_order=(1, 1, 1)):

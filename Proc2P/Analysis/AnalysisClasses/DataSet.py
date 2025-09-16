@@ -75,7 +75,7 @@ class DataSet:
             self.get_current_ver(incr=1)
             self.report()
         if self.mod_flag:
-            self.df.to_feather(self.get_fn())
+            self.df.to_feather(self.get_fn(), compression="uncompressed")
             self.mod_flag = False
 
     def new_df(self):

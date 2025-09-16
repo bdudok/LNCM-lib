@@ -168,7 +168,14 @@ def read_excel(*args, **kwargs):
     fn = args[0]
     if fn.endswith('csv'):
         return pandas.read_csv(*args, **kwargs)
-    return pandas.read_excel(*args, **kwargs, engine='openpyxl', index_col=0)
+    # spreadsheets saved by pd.to_excel contain an unnamed first column, and with repeated load and save cycles,
+    # new ones keep being added. To avoid this, we could open with index_col=0, but then normal files use col A for index
+    # so we read normally, and drop index col if it was unnamed.
+    df = pandas.read_excel(*args, **kwargs, engine='openpyxl',)
+    if (df.index.name is None and
+            len([col for col in df.columns if str(col).startswith('Unnamed')]) > 0):
+        df = df.reset_index()
+    return df
 
 
 def ewma(trace, period=15):

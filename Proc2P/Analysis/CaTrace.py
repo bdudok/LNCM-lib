@@ -18,10 +18,10 @@ from _Dependencies.S2P.dcnv import oasis
 class CaTrace(object):
     __name__ = 'CaTrace'
     def __init__(self, path, prefix, verbose=False, bsltype='poly', exclude=(0, 0), peakdet=False, ch=0, invert=False,
-                 tag=None, last_bg=None, ignore_saturation=True):
+                 tag=None, last_bg=None, ignore_saturation=False):
         '''
         :param bsltype: 'poly' for a 3-order polynom fit. 'original': sliding window minimum,
-         'MonotonicMin': past minimum. Sz_mode switches to MonotonicMin
+         'MonotonicMin': past minimum. Sz_mode switches to MonotonicMin. Don't use for inverted sensor (GEVI)
         :param exclude: start and stop of a frame range which will be excluded from baseline fitting
         :param peakdet: not used
         :param ch: index of channel
