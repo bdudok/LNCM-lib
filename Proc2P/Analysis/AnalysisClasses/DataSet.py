@@ -115,7 +115,7 @@ class DataSet:
         self.set_field(prefix, inclfield, value)
 
     @_changed
-    def exclude(self, prefix, tag=None):
+    def exclude(self, prefix, tag=None, value=True):
         '''
         Mark excluded.
         :param prefix: a prefix (or a list of prefixes)
@@ -124,7 +124,7 @@ class DataSet:
         exclfield = 'Excl'
         if tag is not None:
             exclfield += f'.{tag}'
-        self.set_field(prefix, exclfield, True)
+        self.set_field(prefix, exclfield, value)
 
     @_changed
     def set_field(self, prefix, key, value=True):
