@@ -49,7 +49,7 @@ class IPSP:
             'pre': int(self.session.fps * 100 / 1000),  # duration included before stim (frames)
             'post': int(self.session.fps * 200 / 1000),  # duration included after stim (frames)
             'param': 'rel',  # key of param for ImagingSession to use for traces ('rel')
-            'nan': 4,  # frames
+            'nan': round(self.session.fps * 20 / 1000),  # duration excluded after stim (frames)
         }
         self.baseline_kernels = {}
         if not os.path.exists(self.wdir):

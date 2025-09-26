@@ -7,27 +7,47 @@ from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.utils import gapless, outlier_indices, lprint
 from multiprocessing import Process
 
-def normalize_trace(session: ImagingSession, **kwargs):
+
+def normalize_trace(session: ImagingSession, cells=None, save=True,
+                    gauss_sigma=3, monotonic=None, percentile=1,
+                    exclude_seizures_flag=False, exclude_sz=None,
+                    keep_traces=False):
     '''
     :param session: an initialized ImagingSession
     :return: nothing, saves traces in CaTrace
+    :keywords
+        return_for_test: (bool) instead of saving, return the results for inspection
+        exclude_seizures: (bool)periods marked as seizures are excluded from fitting the models (but are predicted).
+        cell: (int) if specified, only compute that cell
     '''
     fps = session.fps
     look_back_frames = int(fps / 0.3)  # time frame for finding the range, 1/firing rate
-    gauss_sigma = 3  # seconds
     # filter_order = (1, 1, 1)  # for arima. dorpna not compatible with all models, this works fine but slows signals.
-    sliding_step = int(0.1 * fps) #resolution of calculating the range.
+    sliding_step = int(gauss_sigma * fps / 3)  # resolution of calculating the range.
 
     norm_traces = numpy.empty(session.ca.trace.shape)
     norm_traces[:] = numpy.nan
+    trace_cache = {}
 
-    for c in range(session.ca.cells):
+    exclude_move = gapless(session.pos.speed, int(fps), threshold=1, expand=int(fps))
+
+    if exclude_seizures_flag:
+        if exclude_sz is None:
+            exclude_sz = gapless(session.map_instrate(), int(fps), threshold=1.5, expand=int(fps))
+        exc_rate = numpy.count_nonzero(~exclude_move[exclude_sz]) / session.ca.frames * 100
+        lprint(None, f'Vm normalization {session.prefix} with "exclude_seizures" option, removing {round(exc_rate)}%')
+    else:
+        exclude_sz = numpy.zeros(session.ca.frames, 'bool')
+
+    if cells is None:
+        cells = range(session.ca.cells)
+
+    for c in cells:
         lprint(None, 'Processing Vm', session.prefix, f'c{c} of {session.ca.cells}')
         # do arima filtfilt for estimating baseline:    Y = trace
         Y = session.ca.trace[c]
         y = numpy.copy(Y)
         # mask outliers and the frames before and after them, as well as running
-        exclude_move = gapless(session.pos.speed, int(fps), threshold=1, expand=int(fps))
         diff_indices = [x for x in outlier_indices(numpy.diff(Y)) if x < (len(Y) - 2)]
         y[diff_indices] = numpy.nan
         y[exclude_move] = numpy.nan
@@ -36,15 +56,17 @@ def normalize_trace(session: ImagingSession, **kwargs):
         y[:int(fps)] = numpy.nan
         y[-int(fps):] = numpy.nan
         # exclude seizures
-        if 'exclude_seizures' in kwargs and kwargs['exclude_seizures']:
-            ir = session.map_instrate()
-            exclude_sz = gapless(ir, int(fps), threshold=1.5, expand=int(fps))
-            if c == 0:
-                exc_rate = numpy.count_nonzero(~exclude_move[exclude_sz]) / len(y) * 100
-                lprint(None, f'Vm normalization {session.prefix} with "exclude_seizures" option, removing {round(exc_rate)}%')
+        if exclude_seizures_flag:
             y[exclude_sz] = numpy.nan
         baseline = arima_filtfilt(y)
         slo_baseline = gaussian_filter(baseline, int(fps * gauss_sigma))
+        if monotonic is not None:
+            if monotonic == 'up':
+                slo_baseline = (slo_baseline + numpy.maximum.accumulate(slo_baseline)) / 2
+            elif monotonic == 'down':
+                slo_baseline = (slo_baseline + numpy.minimum.accumulate(slo_baseline)) / 2
+            else:
+                raise ValueError('Monotonic should be None, "up" or "down"')
 
         corr = Y - slo_baseline
 
@@ -60,12 +82,12 @@ def normalize_trace(session: ImagingSession, **kwargs):
         cy[numpy.where(diffs > sds)[0] - 1] = numpy.nan
         cy[numpy.where(diffs < -sds)[0] - 1] = numpy.nan
 
-        #look up ranges in steps
+        # look up ranges in steps
         xvals = []
         for i in range(look_back_frames, len(y), sliding_step):
             lookup_slice = slice(i - look_back_frames, i)
             if numpy.count_nonzero(numpy.logical_not(numpy.isnan(cy[lookup_slice]))) > fps:
-                locq[:, i] = numpy.nanpercentile(cy[lookup_slice], [1, 99])
+                locq[:, i] = numpy.nanpercentile(cy[lookup_slice], [percentile, 100 - percentile])
                 xvals.append(i)
 
         # filtfilt the locmax:
@@ -86,10 +108,18 @@ def normalize_trace(session: ImagingSession, **kwargs):
         v = corr[predx]
         vrange = v1 - v0
         norm_traces[c, predx] = (v - v0) / vrange
-    numpy.save(session.ca.pf + '//' + 'vm', norm_traces)
+
+        if keep_traces:
+            trace_cache[c] = [predx, norm_traces[c], slo_baseline, corr, fitg, exclude_move, exclude_sz, ]
+    if save:
+        numpy.save(session.ca.pf + '//' + 'vm', norm_traces)
+    if keep_traces:
+        return trace_cache
+
 
 class Worker(Process):
     __name__ = 'Vm-Worker'
+
     def __init__(self, queue, res_queue):
         super(Worker, self).__init__()
         self.queue = queue
@@ -97,7 +127,7 @@ class Worker(Process):
 
     def run(self):
         for data in iter(self.queue.get, None):
-            if type(data[-1])==dict:
+            if type(data[-1]) == dict:
                 path, prefix, tag, overwrite, kwargs = data
             else:
                 path, prefix, tag, overwrite = data
@@ -107,16 +137,16 @@ class Worker(Process):
                 normalize_trace(session, **kwargs)
             self.res_queue.put(prefix)
 
+
 def arima_filtfilt(y, filter_order=(1, 1, 1)):
+    filtfilt = numpy.empty((2, len(y)))
     # filter
     ma_model = ARIMA(y, order=filter_order, missing='drop', )
     model_fit = ma_model.fit()
-    result = model_fit.predict()
-    result[0] = y[0]
+    filtfilt[0] = model_fit.predict()
     # reverse filter
     ma_model = ARIMA(y[::-1], order=filter_order, missing='drop', )
     model_fit = ma_model.fit()
-    result_rev = model_fit.predict()
-    result_rev[0] = y[-1]
+    filtfilt[1] = model_fit.predict()[::-1]
     # average
-    return (result + result_rev[::-1]) / 2
+    return numpy.nanmean(filtfilt, axis=0)
