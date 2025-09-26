@@ -29,7 +29,8 @@ find imaging sessions in self hosted database
 
 ## Ephys
 ### LFP.SzDet.AppSpikeSz
-tune and save spike detection settings for a set of sessions
+SpikeSzDet - tune and save spike detection settings for a set of sessions, run seizure detection
+SzViewGUI - review EEG with synced video, manually curate and edit automatically detected seizures
 
 ## 2-photon
 ### Proc2p.Analysis.BatchGUI
