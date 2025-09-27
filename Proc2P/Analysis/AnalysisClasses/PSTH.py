@@ -257,6 +257,9 @@ class PSTH:
             elif self.param_key == 'LFP':
                 line = a.ephys.edat[1]
                 fill_line = True
+            elif self.param_key == 'LFPabs':
+                line = numpy.abs(a.ephys.edat[1])
+                fill_line = True
             # elif self.param_key == 'inst_ev_freq':
             #     np_fn = a.prefix+'_inst_sz_freq_1116.npy'# adjust between sz and epi events as needed
             #     if os.path.exists(np_fn):

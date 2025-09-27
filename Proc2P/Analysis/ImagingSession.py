@@ -281,11 +281,12 @@ class ImagingSession(object):
             if not pm > 0:
                 param = self.ca.ntr
                 self.disc_param = False
-                print('All values zero,', opn, ', continuing with ntr')
+                raise ValueError(f'All values for {opn} are zero')
         except:
             param = self.ca.ntr
             self.disc_param = False
-            print('Param not parsed,', opn, ', continuing with ntr')
+            print()
+            raise NotImplementedError(f'Param not parsed: {opn}')
         return param
 
     def timetoframe(self, t: float, TimeRef='relativeTime'):
