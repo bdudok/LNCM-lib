@@ -283,7 +283,8 @@ class Exclusions:
     def get_excluded(self, excltype, parse=True):
         '''Get list of prefixes that are exclued with specific tag'''
         params = {
-            f"filter__field_{config['ExclID']['Exclusion']}__single_select_equal": excltype,
+            f"filter__field_{config['ExclID']['Exclusion']}__contains": excltype,
+            #don't use single_select_equal, it returns every non-empty row
         }
 
         resp = requests.get(config['excl_url'],
