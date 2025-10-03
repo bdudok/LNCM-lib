@@ -293,6 +293,7 @@ class IPSP:
         using the parameter of the fit as amplitude. NB that alternatively, we could add the bias,
          or compute the diff of where the fit curve min is relative to baseline.
          :return: array of frame, baseline, response, amplitude for each c, e
+         NB don't use "response" for analysis. use "amplitude"-"baseline" to get response values (y at peak)
         '''
         #response is ampl parameter of the fit, compared to where it returns to
         #amplitude is the peak value minus baseline value
