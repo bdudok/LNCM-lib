@@ -280,10 +280,13 @@ class PreProc:
                         self.opto_name = 'ExternalDevice'
                         self.found_output.append('Opto')
                         incl_stims = numpy.array([i for i, x in enumerate(stimframes) if 0 < x < self.n_frames])
-                        led_op = pandas.DataFrame({'Intensity': intensities[incl_stims],
-                                                   'ImgFrame': stimframes[incl_stims],
-                                                   'Duration': durations[incl_stims]}, index=posindex[incl_stims])
-                        stimframes = stimframes[incl_stims]
+                        if len(incl_stims):
+                            led_op = pandas.DataFrame({'Intensity': intensities[incl_stims],
+                                                       'ImgFrame': stimframes[incl_stims],
+                                                       'Duration': durations[incl_stims]}, index=posindex[incl_stims])
+                            stimframes = stimframes[incl_stims]
+                        else:
+                            stimframes = None
                 if stimframes is not None and len(stimframes):
                     badframes = numpy.array(badframes, dtype='int')
                     led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
