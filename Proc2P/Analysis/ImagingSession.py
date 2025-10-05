@@ -129,6 +129,9 @@ class ImagingSession(object):
     def map_opto(self):
         if self.si['has_opto']:
             opto_frames = self.ca.sync.load('opto')
+            if opto_frames is None:
+                self.opto = None
+                return -1
             self.opto = numpy.zeros(self.ca.frames, dtype='bool')
             self.opto[opto_frames] = 1
             if len(opto_frames) > 3:
