@@ -40,8 +40,10 @@ class SzReviewData:
         self.ch = ch
         self.tag = tag
         self.setup = setup
+        self.uses_video = False #make this configurable once the functionality is ready
         self.load_data(skip_gamma)
         self.init_output()
+
 
     def load_data(self, skip_gamma):
         self.input_sz = read_excel(self.get_fn('sztime'))
@@ -53,7 +55,8 @@ class SzReviewData:
         self.read_ephys()
         if not skip_gamma:
             self.get_session_gamma()
-        self.read_video()
+        if self.uses_video:
+            self.read_video()
 
     def get_fn(self, suffix, timestamp=False):
         if self.setup == 'Pinnacle':
