@@ -12,7 +12,6 @@ from sklearn.decomposition import PCA
 from Proc2P.Bruker.ConfigVars import CF
 from matplotlib import pyplot as plt
 from Proc2P.Bruker.PreProc import SessionInfo
-from _Dependencies.S2P.dcnv import oasis
 
 
 class CaTrace(object):
@@ -71,6 +70,10 @@ class CaTrace(object):
     #     self.open_raw(trace=numpy.load(self.pf))
 
     def deconvolve(self, batch=1000, tau=0.75, fs=None):
+        from _Dependencies.S2P.dcnv import oasis
+        # oasis is tying us to numpy 1.24 and python 3.6.
+        # I should port to 3.11+ and make a system call to a script in
+        # a separate environment (or using a binary)
         X = self.rel
         if fs is None:
             fs = float(self.version_info['fps'])
