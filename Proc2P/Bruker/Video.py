@@ -93,7 +93,7 @@ class CropVideo:
                 json.dump(self.rect, f)
                 self.b_save.label.set_text('Eye Saved')
                 print(self.rect, 'saved.')
-            tifffile.imsave(self.savepath + '_video_preview.tif', self.preview)
+            tifffile.imwrite(self.savepath + '_video_preview.tif', self.preview)
 
     def save_motion_crop(self, *args):
         if self.rect is not None:

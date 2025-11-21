@@ -17,7 +17,7 @@ if sys.version_info < (3, 7):
 else:
     sima_available = False
 from multiprocessing import Process
-from TkApps import SourceTarget, PickFromList, ShowMessage
+from Proc2P.Analysis.TkApps import SourceTarget, PickFromList, ShowMessage
 import copy
 
 
@@ -327,6 +327,7 @@ class Gui:
         self.current_key = None
         self.saved_rois = []
         self.saved_paths = []
+        self.main_drawn = False
 
         os.chdir(path)
         print(path, prefix)
@@ -375,9 +376,18 @@ class Gui:
     def loop(self, client=None):
         interactive = True
         while interactive:
-            if cv2.getWindowProperty('Rois', 0) < 0:
-                interactive = False
-                cv2.destroyAllWindows()
+            if not self.main_drawn:
+                main_open = cv2.getWindowProperty('Rois', cv2.WND_PROP_VISIBLE)
+                if main_open:
+                    self.main_drawn = True
+            else:
+                try:
+                    main_closed = cv2.getWindowProperty('Rois', cv2.WND_PROP_VISIBLE) < 1
+                except cv2.error:
+                    main_closed = True
+                if main_closed:
+                    interactive = False
+                    cv2.destroyAllWindows()
             k = cv2.waitKey(25) & 0xFF
             if k == ord('l'):
                 self.lasso_callback('add')

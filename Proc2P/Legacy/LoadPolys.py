@@ -4,7 +4,7 @@ import numpy
 import scipy
 import cv2
 import copy, math
-from tifffile import imsave, TiffFile
+from tifffile import imwrite, TiffFile
 import h5py
 
 class LoadPolys(object):
@@ -325,7 +325,7 @@ class LoadImage(object):
             sstack = numpy.zeros(stack.shape, dtype=numpy.uint8)
             sstack[:, :, :, 0] = stack[:, :, :, 2]
             sstack[:, :, :, 1] = stack[:, :, :, 1]
-            imsave(self.prefix + '_stack.tif', sstack)
+            imwrite(self.prefix + '_stack.tif', sstack)
             cv2.imwrite(self.prefix + '_MIP.png', numpy.amax(self.stack, axis=0))
         return z
 

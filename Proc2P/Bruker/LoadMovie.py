@@ -1,6 +1,6 @@
 import os
 import numpy
-from tifffile import imsave, TiffFile
+from tifffile import TiffFile #if looking to import imsave, use imwrite instead.
 from Proc2P.utils import lprint
 
 

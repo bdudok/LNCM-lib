@@ -1,5 +1,5 @@
 import numpy
-from tifffile import imsave
+from tifffile import imwrite
 # import cv2
 import os
 
@@ -53,7 +53,7 @@ def TimeProfile(procpath, prefix, cfg, ret=False, channel=0):
         im /= numpy.percentile(im, 95)
         im = numpy.minimum(1, im)
         fn = f'_linescan_x_{line}-{kernel}-ch{channel}_{duration[0]}-{duration[1]}.tif'
-        imsave(dpath + prefix + fn, (im.transpose() * 255).astype('uint8'))
+        imwrite(dpath + prefix + fn, (im.transpose() * 255).astype('uint8'))
 
 
 # def OEProfile(prefix, ret=False): #not updated
@@ -104,7 +104,7 @@ def TimeProfile(procpath, prefix, cfg, ret=False, channel=0):
 #         im[t_margin:-t_margin, height:, ch_lookup[ci]] = cv2.LUT((y * 255).astype('uint8'), table)
 #
 #     imr = cv2.resize(im, (width + height, 1920), interpolation=cv2.INTER_LANCZOS4)
-#     imsave(prefix + f'_linescan_cl.tif', imr.transpose())
+#     imwrite(prefix + f'_linescan_cl.tif', imr.transpose())
 #     if ret:
 #         return (l_prof, c_prof)
 #     else:

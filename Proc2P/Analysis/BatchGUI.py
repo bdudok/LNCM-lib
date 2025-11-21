@@ -32,7 +32,7 @@ from Proc2P.Analysis.CaTrace import Worker as tr_Worker
 
 #for ephys
 from Proc2P.Bruker.LoadEphys import Ephys
-from Ripples import Ripples#, export_SCA
+from Proc2P.Analysis.Ripples import Ripples#, export_SCA
 # from Spike_Sz_detect import Worker as SzDet_Worker
 
 # for views
@@ -46,8 +46,8 @@ from scipy.signal import decimate
 from Proc2P.Analysis.AssetFinder import AssetFinder
 # from RenameTDML import RenameTDML
 # from BehaviorSession import BehaviorSession
-from TkApps import PickFromList
-from TimeProfile import TimeProfile
+# from TkApps import PickFromList
+from Proc2P.Analysis.TimeProfile import TimeProfile
 from Proc2P.Analysis.AnalysisClasses.ExportStop import exportstop
 # from Batch_Utils import split_ephys, export_speed, export_speed_cms
 
