@@ -164,11 +164,26 @@ def startstop(speed, duration=50, gap=150, ret_loc='actual', span=None, speed_th
     return starts, stops
 
 
-def read_excel(*args, **kwargs):
+def read_excel(*args, keep_index=False, **kwargs):
+    '''
+    A wrapper for opening Excel files using openpyxl
+    :param args: passed to pandas reader
+    :param keep_index: if True, keep the first column as index (Default: False)
+    :param kwargs: passed to pandas reader
+    :return: DataFrame
+    '''
     fn = args[0]
+    keep_index = False
     if fn.endswith('csv'):
         return pandas.read_csv(*args, **kwargs)
-    return pandas.read_excel(*args, **kwargs, engine='openpyxl', index_col=0)
+    df = pandas.read_excel(*args, **kwargs, engine='openpyxl', index_col=0)
+    # index_col=0 makes the first column index. It's not accessible by .loc or by name.
+    if keep_index:
+        return df
+    # if the input file was already saved by pandas, it has an unnamed index column. We don't want to keep that.
+    drop_index = df.index.name == "Unnamed: 0"
+    # reset_index will change the index column into a regular (named) column (unless it was unnamed, then drops it).
+    return df.reset_index(drop=drop_index)
 
 
 def ewma(trace, period=15):

@@ -606,4 +606,4 @@ def launch_GUI(*args, **kwargs):
 
 
 if __name__ == '__main__':
-    launch_GUI()
+    launch_GUI(setupID='LNCM')

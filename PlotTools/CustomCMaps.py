@@ -26,3 +26,4 @@ custom_cmaps['ra'] = ListedColormap(numpy.array([lin**gamma, bl, bl, alpha * 0.8
 
 gamma = 1.0 / 0.8
 custom_cmaps['redblackblue'] = ListedColormap(numpy.array([left**gamma, bl, right**gamma, alpha]).transpose())
+custom_cmaps['redblue'] = ListedColormap(numpy.array([1-lin, bl, lin, alpha]).transpose())
