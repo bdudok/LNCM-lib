@@ -241,13 +241,14 @@ class IPSP:
         fit a single trial trace to the IPSP model
         :param c:
         :param event_index:
-        :return: amplitude and fit
+        :return: the response trace (Y), the baseline, and the fit
+        The baseline is determined as the mean pre-stim trace with backwards gaussian weight decay
         '''
         Y = self.raw_resps[event_index, c][self.config.pre:]
         notna_bl = [i for i in range(self.config.pre) if
                     ((i not in self.wh_nan[0]) and (not numpy.isnan(self.raw_resps[event_index, c, i])))]
         if not ((len(notna_bl) > 10) and (numpy.count_nonzero(numpy.logical_not(numpy.isnan(Y))) > 10)):
-            return Y, notna_bl, None
+            return Y, numpy.array(notna_bl).mean(), None
         weights = self.get_baseline_kernel()
         bl = self.raw_resps[event_index, c][notna_bl]
         bl_mean = DescrStatsW(bl, weights[notna_bl], ddof=0)
