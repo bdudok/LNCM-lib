@@ -2,6 +2,7 @@ import os
 import numpy
 from sklearn import cluster
 from pyedflib import highlevel
+from envs.local_config import lfp_config
 
 class EDF:
     __name__ = 'ReadEDF'
@@ -12,7 +13,7 @@ class EDF:
             self.prefix = prefix + '.edf'
         d = highlevel.read_edf(os.path.join(self.path, self.prefix))
         self.data = d[0]
-        self.fs = d[1][0]['sample_rate']
+        self.fs = d[1][0][lfp_config["EDF_fs_key"]]
         self.unit = d[1][0]['dimension']
         self.channels = [x['label'] for x in d[1]]
         self.rejection_ops = rejection_ops
@@ -69,6 +70,6 @@ class EDF:
             self.raw_trace = None
 
 if __name__ == '__main__':
-    path = 'D:\Shares\Data\_RawData\Pinnacle\Kainate\VKPV6/2024-03-25/'
+    path = 'D:\Shares\Data\_RawData\EEG\Kainate\VKPV6/2024-03-25/'
     fn = 'VKPV6_2024-03-25_2024-03-25_12_31_50_TS_2024-03-25_14_31_50_export.edf'
     a = EDF(path, fn)
