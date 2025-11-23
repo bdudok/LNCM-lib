@@ -11,8 +11,10 @@ import numpy
 import zipfile
 from shapely.geometry import Polygon, Point
 import sys
+
 if sys.version_info < (3, 7):
     import sima
+
     sima_available = True
 else:
     sima_available = False
@@ -20,6 +22,22 @@ from multiprocessing import Process
 from Proc2P.Analysis.TkApps import SourceTarget, PickFromList, ShowMessage
 import copy
 
+
+def check_window(title):
+    '''
+    Helper function to see if a window exists, because opencv now throws an error when checking closed window's prop
+    :param title: window name
+    :return: bool (is visible) if opencv window exists, -1 if window is closed
+    '''
+    try:
+        w_closed = cv2.getWindowProperty(title, cv2.WND_PROP_VISIBLE) < 1
+    except cv2.error:
+        return -1
+    return not w_closed
+
+def create_window(title):
+    if not check_window(title):
+        cv2.namedWindow(title, cv2.WINDOW_GUI_NORMAL)
 
 class MouseTest:
     def __init__(self):
@@ -41,6 +59,7 @@ class MouseTest:
 
 class Worker(Process):
     __name__ = 'RoiWorker'
+
     def __init__(self, queue):
         super(Worker, self).__init__()
         self.queue = queue
@@ -55,7 +74,7 @@ class Worker(Process):
                 lprint(self, 'Calling autodetect with:', din, logger=log)
                 RoiEditor(path, prefix, ).autodetect(approach=apps, config=config, log=log)
             except Exception as e:
-                lprint(self, 'Autodetect failed with error:', e,)
+                lprint(self, 'Autodetect failed with error:', e, )
 
 
 class Lasso:
@@ -80,7 +99,7 @@ class Lasso:
         cv2.setMouseCallback('Lasso', self.drawmouse)
         self.retval = False
         while self.retval is False:
-            if cv2.getWindowProperty('Lasso', 0) < 0:
+            if check_window('Lasso') < 0:
                 break
             k = cv2.waitKey(1) & 0xFF
         cv2.destroyWindow('Lasso')
@@ -130,15 +149,16 @@ class Newroi:
         self.polys = []
         self.coords = []
         self.drawing = False
+        create_window('Draw')
         cv2.imshow('Draw', self.im)
         cv2.moveWindow('Draw', int(800 + x - self.parent.zoomsize / 2),
                        min(int(600 + y - self.parent.zoomsize / 2), int(1080 - self.parent.zoomsize)))
         cv2.setMouseCallback('Draw', self.drawmouse)
         self.retval = False
         while self.retval is False:
-            if cv2.getWindowProperty('Draw', 0) < 0:
+            if check_window('Draw') < 0:
                 break
-            k = cv2.waitKey(1) & 0xFF
+        k = cv2.waitKey(1) & 0xFF
         cv2.destroyWindow('Draw')
 
     def drawmouse(self, event, y, x, flags, param):
@@ -201,9 +221,9 @@ class Translate:
 
         interactive = True
         while interactive:
-            if cv2.getWindowProperty('Target', 0) < 0:
+            if check_window('Target') < 0:
                 break
-            if cv2.getWindowProperty('Source', 0) < 0:
+            if check_window('Source') < 0:
                 break
             k = cv2.waitKey(25) & 0xFF
             if k == ord('w'):
@@ -300,6 +320,7 @@ class Translate:
 
 class Gui:
     __name__ = 'RoiEditorGUI'
+
     def __init__(self, path, prefix, exporting=False, preferred_tag='1'):
         self.path = path
         self.preferred_tag = preferred_tag
@@ -342,14 +363,17 @@ class Gui:
         self.pic = cv2.cvtColor(preview_rgb, cv2.COLOR_RGB2BGR)
 
         self.currim = self.pic
+        self.lims = 1, 100
         if len(self.active_keys) > 0:
             self.calc_sizes()
-        else:
-            self.empty_init()
 
+        create_window('Rois')
         cv2.imshow('Rois', self.pic)
-        cv2.createTrackbar('Min Size', 'Rois', self.lims[0], self.lims[1], self.slimChange)
-        cv2.createTrackbar('Max Size', 'Rois', self.lims[1], self.lims[1], self.slimChange)
+        try:
+            cv2.createTrackbar('Min Size', 'Rois', self.lims[0], self.lims[1], self.slimChange)
+            cv2.createTrackbar('Max Size', 'Rois', self.lims[1], self.lims[1], self.slimChange)
+        except:
+            print(self.lims)
         # cv2.createTrackbar('Brightness', 'Rois', self.blims[0], self.blims[1], self.slimChange)
         # cv2.createTrackbar('Max Bright', 'Rois', self.blims[1], self.blims[1], self.slimChange)
         # cv2.createTrackbar('Kurtosis', 'Rois', self.klims[0], self.klims[1], self.slimChange)
@@ -358,36 +382,26 @@ class Gui:
         cv2.moveWindow('Rois', 0, 0)
         cv2.setMouseCallback('Rois', self.mouse)
 
-        cv2.namedWindow('Zoom')
+        create_window('Zoom')
         self.zoom_flag = True
         self.zoom()
         cv2.moveWindow('Zoom', 800, 0);
 
-        cv2.namedWindow('Result')
+        create_window('Result')
         self.draw_result()
         cv2.moveWindow('Result', 800, 600);
         cv2.setMouseCallback('Result', self.resmouse)
 
-    def empty_init(self):
-        self.lims = 0, 100
-        # self.blims = 0, 100
-        # self.klims = 0, 100
-
     def loop(self, client=None):
         interactive = True
         while interactive:
-            if not self.main_drawn:
-                main_open = cv2.getWindowProperty('Rois', cv2.WND_PROP_VISIBLE)
-                if main_open:
-                    self.main_drawn = True
-            else:
-                try:
-                    main_closed = cv2.getWindowProperty('Rois', cv2.WND_PROP_VISIBLE) < 1
-                except cv2.error:
-                    main_closed = True
-                if main_closed:
+            if self.main_drawn:
+                if not check_window('Rois'):
                     interactive = False
-                    cv2.destroyAllWindows()
+            else:
+                #we skip checking on main window status until it's drawn
+                if check_window('Rois') < 0:
+                    self.main_drawn = True
             k = cv2.waitKey(25) & 0xFF
             if k == ord('l'):
                 self.lasso_callback('add')
@@ -413,16 +427,7 @@ class Gui:
             elif k == ord('o'):
                 self.options_callback()
             elif k == ord('q'):
-                ret = PickFromList(['Exit without saving', 'Save ROI only', 'Save to sbx', 'Cancel']).ret
-                if ret == 0:
-                    interactive = False
-                elif ret == 1:
-                    self.save_callback()
-                    interactive = False
-                elif ret == 2:
-                    self.save_callback()
-                    self.save_sbx()
-                    interactive = False
+                interactive = False
             elif k in [ord('-'), ord('+')]:
                 i = self.active_keys.index(self.current_key)
                 if k == ord('-'):
@@ -436,6 +441,8 @@ class Gui:
                 self.current_key = self.active_keys[i]
                 self.calc_sets(self.current_key)
                 self.draw()
+        self.close_callback()
+
     #
     # def save_sbx(self):
     #     print('Exporting masks in background...')
@@ -511,7 +518,6 @@ class Gui:
             self.saved_paths.append(mplpath.Path(roi))
         self.draw_result()
 
-
     def save(self):
         if len(self.saved_rois) < 1:
             print('0 rois, roi file not saved for', self.prefix)
@@ -528,7 +534,7 @@ class Gui:
                         exs.append(int(f[:-4].split('_')[-1]))
                     except:
                         pass
-            exi = max(exs)+1
+            exi = max(exs) + 1
             while os.path.exists(self.opPath + self.prefix + '_saved_roi_' + str(exi) + '.npy'):
                 exi += 1
             fn = self.prefix + '_saved_roi_' + str(exi)
@@ -543,7 +549,10 @@ class Gui:
         self.draw()
 
     def slimChange(self, v):
-        self.lims = [cv2.getTrackbarPos('Min Size', 'Rois'), cv2.getTrackbarPos('Max Size', 'Rois')]
+        self.lims = [cv2.getTrackbarPos('Min Size', 'Rois'),
+                     cv2.getTrackbarPos('Max Size', 'Rois')]
+        self.lims = [min(0, self.lims[0]),
+                     max([1, self.lims[0]+1, self.lims[1]])]
         # self.blims = [cv2.getTrackbarPos('Brightness', 'Rois'), cv2.getTrackbarPos('Max Bright', 'Rois')]
         # self.klims[0] = cv2.getTrackbarPos('Kurtosis', 'Rois')
         for i, s in enumerate(self.sizes[self.current_key]):
@@ -648,6 +657,7 @@ class Gui:
             m[i] = int((self.pos[i] - start[i]) * self.zoomfactor)
         cv2.line(im, (m[1], 0), (m[1], self.zoomsize), color=(255, 255, 255))
         cv2.line(im, (0, m[0]), (self.zoomsize, m[0]), color=(255, 255, 255))
+        create_window('Zoom')
         cv2.imshow('Zoom', im)
 
     def add_current(self, dil=False):
@@ -720,7 +730,7 @@ class Gui:
         self.currim = cv2.LUT(im, self.lut)
         self.zoom()
         im = numpy.array(self.currim)
-        #fill with black the left and bottom of the pic, if it's too small for the GUI.
+        # fill with black the left and bottom of the pic, if it's too small for the GUI.
         # this is done after polys are drawn, and does not effect the image data, just the drawing of the 'Rois' window
         # the zoom will work with the new image coordinates though (top left corner)
         min_h = 200
@@ -728,11 +738,11 @@ class Gui:
         if im.shape[1] < min_w:
             old_im = numpy.copy(im)
             im = numpy.zeros((im.shape[0], min_w, im.shape[2]), im.dtype)
-            im[:, min_w-old_im.shape[1]:, :] = old_im
+            im[:, min_w - old_im.shape[1]:, :] = old_im
         if im.shape[0] < min_h:
             old_im = numpy.copy(im)
             im = numpy.zeros((min_h, im.shape[1], im.shape[2]), im.dtype)
-            im[:old_im.shape[0],:, :] = old_im
+            im[:old_im.shape[0], :, :] = old_im
         if len(self.active_keys) > 0:
             cv2.putText(im, str(len(self.psets[self.current_key])) + ' of', (0, 25),
                         fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=0.5, color=(255, 255, 255))
@@ -797,10 +807,9 @@ class Gui:
             sizes.extend(self.sizes[key])
             bright.extend(self.brightness[key][:, self.channels[0]])
             kurtos.extend(self.brightness[key][:, self.channels[1]])
-        self.lims = [int(min(sizes)), int(max(sizes) + 1)]
+        self.lims = [max(0, int(min(sizes))), min(10, int(max(sizes) + 1))]
         # self.blims = [int(min(bright)), int(max(bright) + 1)]
         # self.klims = [int(min(kurtos)), int(max(kurtos) + 1)]
-
 
     def load_rois(self):
 
@@ -835,6 +844,7 @@ class Gui:
 
 class RoiEditor(object):
     __name__ = 'RoiEditor'
+
     def __init__(self, procpath, prefix):
         self.img = FrameDisplay(procpath, prefix, tag='skip')
         self.procpath = procpath
@@ -909,7 +919,7 @@ class RoiEditor(object):
     def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config={}, exclude_opto=True,
                    log=None):
         if not sima_available:
-            print('For using segmentation, run using 3.6 env (2pcode36)' )
+            print('For using segmentation, run using 3.6 env (2pcode36)')
             raise EnvironmentError('SIMA not compatible with current Python version.')
         approach = list(approach)
         prefix = self.prefix
@@ -928,7 +938,7 @@ class RoiEditor(object):
             have_opto = False
         # find trim:
         # x0, x1, y0, y1 = 10, 15, 10, 10
-        x0, x1, y0, y1 = 1, 1, 1, 1#not needed for bruker
+        x0, x1, y0, y1 = 1, 1, 1, 1  # not needed for bruker
         # create 50 frames which are each an average of 100, in random order
         dsname = self.opPath + prefix + '_avgs' + '.sima'
         idsname = self.opPath + prefix + '_iavgs' + '.sima'
@@ -1028,7 +1038,8 @@ class RoiEditor(object):
             if 'PC' in item:
                 if not all_def:
                     itemtag = item + '-'.join([str(config[pname]) for pname in pnames])
-            lprint(self, item, 'Size setting: diam', config['Diameter'], 'min:', config['MinSize'], 'max:', config['MaxSize'], logger=log)
+            lprint(self, item, 'Size setting: diam', config['Diameter'], 'min:', config['MinSize'], 'max:',
+                   config['MaxSize'], logger=log)
 
             py_approach = sima.segment.PlaneCA1PC(channel=ch, verbose=False,
                                                   cut_min_size=int(config['MinSize']),
@@ -1119,11 +1130,15 @@ if __name__ == '__main__':
     # ('D:/Shares/Data/_Processed/2P/testing//', 'SncgTot4_2023-11-09_LFP_002', ['PC-G', 'STICA-G'],
     #  {'Start': '0', 'Stop': 'end', 'Diameter': '20', 'MinSize': '100', 'MaxSize': '800'})
 
-
     wdir = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
-    prefix = 'JEDI-Sncg65_2024-12-10_lfp_opto_124'
-    r = RoiEditor(wdir, prefix, )
+    prefix = 'JEDI-Bl-53_2025-10-15_opto_05Hz_1397'
 
-    preview_rgb = r.get_pic()
+    # r = RoiEditor(wdir, prefix, )
+
+    g = Gui(wdir, prefix, preferred_tag='test')
+    resp = g.loop(client='gui')
+    print(resp)
+
+    # preview_rgb = r.get_pic()
 
     # pic = cv2.cvtColor(preview_rgb, cv2.COLOR_RGB2BGR)

@@ -701,7 +701,7 @@ class RoiEd:
         self.gui = roi_Gui(self.parent.filelist.wdir, prefix, preferred_tag=tag)
         if self.gui.loop(client='gui'):
             self.save_callback()
-            self.sbx_callback()
+            # self.sbx_callback()
             self.close_callback()
         # else:
         #     self.close_callback()
@@ -718,8 +718,8 @@ class RoiEd:
     def close_callback(self):
         self.gui.close_callback()
 
-    def sbx_callback(self):
-        self.gui.save_sbx()
+    # def sbx_callback(self):
+    #     self.gui.save_sbx()
 
     def row(self, incr=1):
         self.current_row += incr
