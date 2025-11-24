@@ -1,0 +1,3 @@
+conda env export -f .\PycharmProjects\LNCM-lib\envs\environment.yml
+
+#NB I don't know why the yml file shows scipy under pip. Everything should be installed from conda-forge.
