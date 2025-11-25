@@ -16,6 +16,7 @@ from Proc2P.Bruker.PreProc import SessionInfo
 
 class CaTrace(object):
     __name__ = 'CaTrace'
+
     def __init__(self, path, prefix, verbose=False, bsltype='poly', exclude=(0, 0), peakdet=False, ch=0, invert=False,
                  tag=None, last_bg=None, ignore_saturation=False):
         '''
@@ -38,7 +39,7 @@ class CaTrace(object):
         self.is_dual = False
         self.log = logger()
         self.log.set_handle(path, prefix)
-        self.last_bg = last_bg # if True, will use the last ROI to correct for background before baseline fitting
+        self.last_bg = last_bg  # if True, will use the last ROI to correct for background before baseline fitting
         # parse channel
         if ch in (0, 'Ch2', 'First', 'Green'):
             ch = 0
@@ -54,7 +55,7 @@ class CaTrace(object):
         self.tag = tag
         self.pf = self.opPath + f'{prefix}_trace_{tag}-ch{ch}'  # folder name
         self.sync = Sync(path, prefix)
-        self.keys = ['bsl', 'rel', 'ntr', 'trace', 'smtr',]
+        self.keys = ['bsl', 'rel', 'ntr', 'trace', 'smtr', ]
         self.verbose = verbose
         if ignore_saturation:
             bsltype = 'MonotonicMin'
@@ -71,15 +72,12 @@ class CaTrace(object):
 
     def deconvolve(self, batch=1000, tau=0.75, fs=None):
         from _Dependencies.S2P.dcnv import oasis
-        # oasis is tying us to numpy 1.24 and python 3.6.
-        # I should port to 3.11+ and make a system call to a script in
-        # a separate environment (or using a binary)
         X = self.rel
         if fs is None:
             fs = float(self.version_info['fps'])
         self.nnd = oasis(X - numpy.min(X, axis=0), batch_size=batch, tau=tau, fs=fs)
 
-    def open_raw(self, trace=None):
+    def open_raw(self, trace=None, trunc=None):
         # init containers and pool
         if trace is not None:
             self.trace = trace
@@ -97,6 +95,8 @@ class CaTrace(object):
             self.trace = self.trace[..., self.ch]
         elif self.ch > 0:
             return -1
+        if trunc is not None:
+            self.trace = self.trace[:, :trunc]
         self.cells, self.frames = self.trace.shape
         if not self.cells:
             lprint(self, 'Zero cells in roi: ' + file_name)
@@ -119,7 +119,7 @@ class CaTrace(object):
         bad_frames = self.sync.load('opto', suppress=True)
         if bad_frames is not None:
             lprint(self, f'{len(bad_frames)} opto frames excluded from baseline fit', logger=self.log)
-            self.ol_index.extend(bad_frames)
+            self.ol_index.extend([x for x in bad_frames if x < self.frames])
         if not self.ignore_saturation:
             # remove outliers
             self.ol_index.extend(outlier_indices(numpy.nanmean(self.trace, axis=0), thresh=12))
@@ -166,13 +166,12 @@ class CaTrace(object):
         self.version_info = {'v': '13', 'bsltype': self.bsltype, 'sz_mode': str(self.ignore_saturation),
                              'channel': str(self.ch),
                              'fps': f'{round(self.fps, 1)}',
-                             'bg_corr':str(self.last_bg)}  # should contain only single strings as values
+                             'bg_corr': str(self.last_bg)}  # should contain only single strings as values
         numpy.save(self.pf + '//' + 'info', self.version_info)
         message = f'Tag: {self.tag}, Ch: {self.ch}, sz_mode: {self.ignore_saturation}, baseline: {self.bsltype}'
         lprint(self, self.prefix, self.cells, 'cells saved.', message, logger=self.log)
 
-
-    #these functions are used to save additional time series shaped (c, f) in the traces folder.
+    # these functions are used to save additional time series shaped (c, f) in the traces folder.
     def save_custom(self, key, value):
         numpy.save(self.pf + '//' + key, value)
 
@@ -194,7 +193,7 @@ class CaTrace(object):
             pf_try = [self.tag + '.np', self.tag + '-ch0.np', '1' + '.np', '1' + '-ch0.np', self.tag + 'dual.np',
                       '1-dual.np']
             for x in pf_try:
-                pf = self.opPath+self.prefix + '-' + x
+                pf = self.opPath + self.prefix + '-' + x
                 if os.path.exists(pf):
                     self.pf = pf
                     lprint(self, 'Loading traces from', pf)
@@ -265,6 +264,7 @@ class CaTrace(object):
 
 class Worker(Process):
     __name__ = 'CaTrace-Worker'
+
     def __init__(self, queue, res_queue, verbose=False):
         super(Worker, self).__init__()
         self.queue = queue
@@ -276,7 +276,7 @@ class Worker(Process):
             c, data, fps, bsltype, movement, exclude, peakdet, ol_index, ignore_saturation = data
             if self.verbose:
                 lprint(self, 'Starting cell ' + str(c))
-            t1, t2, frames = int(2.5*fps), int(25*fps), len(data)
+            t1, t2, frames = int(2.5 * fps), int(25 * fps), len(data)
             if movement is None:
                 movement = numpy.zeros(frames, dtype='bool')
             smw = numpy.empty(frames)
@@ -299,10 +299,10 @@ class Worker(Process):
             for t in range(frames):
                 ti0 = max(0, int(t - t1 * 0.5))
                 ti1 = min(frames, int(t + t1 * 0.5) + 1)
-                if ti1>ti0:
+                if ti1 > ti0:
                     smw[t] = numpy.nanmean(data[ti0:ti1])
                 else:
-                    smw[t] = smw[t-1]
+                    smw[t] = smw[t - 1]
             if numpy.count_nonzero(numpy.isnan(smw)) > len(nan_samples):
                 this_is_nancell = True
             if numpy.nanmax(smw) == 0:
@@ -322,10 +322,10 @@ class Worker(Process):
                         if len(sneg) > 1:
                             nsmw = numpy.copy(smw)
                             for t in sneg:
-                                start, stop = int(max(0, t - (5*fps))), int(min(frames, t + 5*fps))
+                                start, stop = int(max(0, t - (5 * fps))), int(min(frames, t + 5 * fps))
                                 tc1, tc2 = numpy.nanargmax(smw[start:t]) + start, numpy.nanargmax(smw[t:stop]) + t
-                                inds = list(numpy.arange(start, max(tc1, start + 0.5*self.fps)))
-                                inds.extend(numpy.arange(min(tc2, stop - 0.5*fps), stop))
+                                inds = list(numpy.arange(start, max(tc1, start + 0.5 * self.fps)))
+                                inds.extend(numpy.arange(min(tc2, stop - 0.5 * fps), stop))
                                 nsmw[tc1:tc2] = numpy.nanmean(smw[inds])
                             smw = nsmw
                         else:
@@ -342,7 +342,7 @@ class Worker(Process):
                     for i in range(frames):
                         bsl[i] = numpy.polyval(poly, i)
                     if numpy.any(bsl < 0):
-                        lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline',)
+                        lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline', )
                         bsltype = 'original'
                 elif bsltype in ['original', 'both']:  # both not implemented
                     # the F0 method described in Jia Nat Prot 2011 paper
@@ -359,7 +359,7 @@ class Worker(Process):
                         if not exclude[0] < t <= exclude[1]:
                             if smw[t] > 0:
                                 minv = smw[t]
-                                bsl[:t+1] = minv
+                                bsl[:t + 1] = minv
                         t += 1
                     while t < frames:
                         if not exclude[0] < t <= exclude[1]:

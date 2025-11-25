@@ -279,17 +279,10 @@ class ImagingSession(object):
                     param[:, t:t+maskn] = numpy.nan
         elif type(param) == int:
             param = self.ewma_smooth(param)
-        try:
-            pm = numpy.nanmax(param)
-            if not pm > 0:
-                param = self.ca.ntr
-                self.disc_param = False
-                raise ValueError(f'All values for {opn} are zero')
-        except:
-            param = self.ca.ntr
-            self.disc_param = False
-            print()
-            raise NotImplementedError(f'Param not parsed: {opn}')
+
+        pm = numpy.nanmax(param)
+        if not pm > 0:
+            raise ValueError(f'All values for {opn} are zero')
         return param
 
     def timetoframe(self, t: float, TimeRef='relativeTime'):

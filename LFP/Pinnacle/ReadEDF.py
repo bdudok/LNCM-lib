@@ -2,7 +2,7 @@ import os
 import numpy
 from sklearn import cluster
 from pyedflib import highlevel
-from envs.local_config import lfp_config
+from envs.site_config import lfp_config
 
 class EDF:
     __name__ = 'ReadEDF'

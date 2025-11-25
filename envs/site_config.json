@@ -1,0 +1,12 @@
+{
+  "python36_executable": "N:/envs/Barna/envs/lncm36/python.exe",
+  "EDF_fs_key":
+    {"version_specific":{
+      "6": "sample_rate",
+      "11": "sample_frequency"
+    }
+  },
+  "alt_processed_paths": ["E:/ExtDrives/LNCM1/_Processed/", "Y:/_Processed/"],
+  "alt_raw_paths": ["E:/ExtDrives/LNCM2/_RawData/"],
+  "ledcal": 230
+}

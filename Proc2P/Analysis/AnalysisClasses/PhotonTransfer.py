@@ -4,7 +4,7 @@ import pandas
 
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.Bruker.LoadMovie import LoadMovie
-from Proc2P.Bruker.ConfigVars import CF
+from envs import CONFIG
 
 from Proc2P.utils import lprint, logger, path_to_list
 from matplotlib import pyplot as plt
@@ -122,7 +122,7 @@ class ExportPhotonTransfer:
             rpath = path1[path1.find(key) + len(key):]
             parent_folders = path_to_list(rpath)
             # check in each alt path and stop if found em
-            for alt_path in CF.alt_raw_paths:
+            for alt_path in CONFIG.alt_raw_paths:
                 path2 = os.path.join(os.path.realpath(alt_path), *parent_folders)
                 filelist = [fn for fn in os.listdir(path2) if ((prefix in fn) and ('.ome.tif' in fn))]
                 if len(filelist):

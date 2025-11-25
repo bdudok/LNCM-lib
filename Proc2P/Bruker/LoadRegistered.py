@@ -1,6 +1,6 @@
 import numpy
 import os
-from Proc2P.Bruker.ConfigVars import CF
+from envs import CONFIG
 from Proc2P.utils import path_to_list
 
 class LoadRegistered():
@@ -46,7 +46,7 @@ class LoadRegistered():
         path = path1[path1.find(key)+len(key):]
         parent_folders = path_to_list(path)
         #check in each alt path and stop if found em
-        for alt_path in CF.alt_processed_paths:
+        for alt_path in CONFIG.alt_processed_paths:
             path2 = os.path.join(os.path.realpath(alt_path), *parent_folders)
             self.find_files_in_folder(path2)
             if len(self.input_files):

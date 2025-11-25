@@ -16,6 +16,9 @@ def normalize_trace(session: ImagingSession, cells=None, save=True,
     :param session: an initialized ImagingSession
     :return: nothing, saves traces in CaTrace
     :keywords
+        monotonic: if 'up' (such as bleaching in inverted gevi trace): baseline is increasing throughout the recording
+            can be less accurate than default polynom, but reduces the number of cells that need to be excluded due to
+            poor baseline fitting
         return_for_test: (bool) instead of saving, return the results for inspection
         exclude_seizures: (bool)periods marked as seizures are excluded from fitting the models (but are predicted).
         cell: (int) if specified, only compute that cell
