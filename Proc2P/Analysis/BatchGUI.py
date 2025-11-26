@@ -1712,11 +1712,11 @@ if __name__ == '__main__':
         #     Process(target=plot_overlay, args=job).start()
         # elif jobtype == 'lfp_overlay_qa':
         #     Process(target=plot_overlay_qa, args=job).start()
-        elif jobtype == 'SzDet':
-            if szdet_nworker < 20:
-                SzDet_Worker(szdet_queue).start()
-                szdet_nworker += 1
-            szdet_queue.put(job)
+        # elif jobtype == 'SzDet':
+        #     if szdet_nworker < 20:
+        #         SzDet_Worker(szdet_queue).start()
+        #         szdet_nworker += 1
+        #     szdet_queue.put(job)
         elif jobtype == 'exportstop':
             print(job)
             # if job[-1] == 'm2':

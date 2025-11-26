@@ -21,10 +21,10 @@ def main():
     config = job["config"]
 
 
-    # log = logger()
-    # log.set_handle(path, prefix)
-    # lprint(None, 'Calling autodetect with:', (path, prefix, apps, config), logger=log)
-    # RoiEditor(path, prefix, ).autodetect(approach=apps, config=config, log=log)
+    log = logger()
+    log.set_handle(path, prefix)
+    lprint(None, 'Calling autodetect with:', (path, prefix, apps, config), logger=log)
+    RoiEditor(path, prefix, ).autodetect(approach=apps, config=config, log=log)
 
     print(json.dumps({
         "status": "ok",
@@ -34,6 +34,5 @@ def main():
 
 
 if __name__ == "__main__":
-    print('hello')
-    # main()
+    main() # this will be executed on system call
 

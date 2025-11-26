@@ -18,10 +18,10 @@ if sys.version_info < (3, 7):
     sima_available = True
 else:
     sima_available = False
+    from Proc2P.Analysis.Autodetect_wrapper import roi_detector
 from multiprocessing import Process
 from Proc2P.Analysis.TkApps import SourceTarget, PickFromList, ShowMessage
 import copy
-
 
 def check_window(title):
     '''
@@ -56,7 +56,6 @@ class MouseTest:
         elif event == cv2.EVENT_LBUTTONDOWN:
             print('Left!')
 
-
 class Worker(Process):
     __name__ = 'RoiWorker'
 
@@ -69,10 +68,15 @@ class Worker(Process):
             # the whole thing goes in a try so worker is not dead on error. remove this for debugging.
             try:
                 path, prefix, apps, config = din
-                log = logger()
-                log.set_handle(path, prefix)
-                lprint(self, 'Calling autodetect with:', din, logger=log)
-                RoiEditor(path, prefix, ).autodetect(approach=apps, config=config, log=log)
+                if sima_available:
+                    # if we're on Python 3.6 and sima installed, call the detector directly
+                    log = logger()
+                    log.set_handle(path, prefix)
+                    lprint(self, 'Calling autodetect with:', din, logger=log)
+                    RoiEditor(path, prefix, ).autodetect(approach=apps, config=config, log=log)
+                else:
+                    # if we're on Python 3.11, call the detector through the 3.6 executable
+                    lprint(self, roi_detector(path, prefix, apps, config))
             except Exception as e:
                 lprint(self, 'Autodetect failed with error:', e, )
 

@@ -12,7 +12,7 @@ from envs import CONFIG
 PY36_PYTHON = CONFIG.python36_executable
 PY36_SCRIPT = os.path.join(Path(__file__).parent,  'Autodetect_worker.py')
 
-def run_py36_job(path, prefix, apps, config):
+def _run_py36_job(path, prefix, apps, config):
 
     payoad = {"path": path, "prefix":prefix, "apps":apps, "config":config}
 
@@ -34,6 +34,12 @@ def run_py36_job(path, prefix, apps, config):
         print("STDERR:", e.stderr, file=sys.stderr)
         raise
 
+roi_detector = _run_py36_job
+
 if __name__ == "__main__":
-    result = run_py36_job(path='test', prefix='test-prefix', apps=['a', 'b'], config={"good": True})
+    path = 'D:/Shares/Data/_Processed/2P/CCK/'
+    prefix = 'Sncg146_2025-07-29_optostim_127'
+    apps = ['STICA', 'iPC']
+    config = {'Start': 0, 'Stop': 'end', 'Diameter': 20, 'MinSize':100, 'MaxSize':800}
+    result = roi_detector(path=path, prefix=prefix, apps=apps, config=config)
     print(result)
