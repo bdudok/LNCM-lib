@@ -1,5 +1,8 @@
 '''
-Launches the BatchGUI app (tk)
-Running this requires the 2pcode36 env (python 3.6)
+Launches the BatchGUI app for 2P data processing and review
 '''
-import
+
+from Proc2P.Analysis.BatchGUI import *
+
+if __name__ == '__main__':
+    BatchGUIQt.launch_GUI()

@@ -1,9 +1,8 @@
+from PySide6 import QtGui, QtCore, QtWidgets
 import matplotlib
-from pathlib import Path
-matplotlib.use('Qt5Agg')
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
+matplotlib.use('QtAgg')
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib import pyplot as plt
-from enum import Enum
 plt.rcParams['font.size'] = 8
 plt.rcParams['font.sans-serif'] = 'Arial'
 import numpy
@@ -11,33 +10,18 @@ import os
 import json
 import sys
 
-
-from pyqtgraph import Qt
-from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
 from Proc2P.utils import logger, lprint
-
+from Proc2P.Analysis.BatchGUI.Config import *
 from Proc2P.Analysis.AssetFinder import AssetFinder
 
 '''
 Gui for viewing and processing 2P data.
 This file just defines widgets, all functions are imported from the analysis classes or the legacy (Tk) BatchGUI app.
 '''
-class GuiConfig:
-    settings_filename = os.path.join(Path.home(), 'BatchGUI-settings.json') #for gui setting permanence
-    MainWindowGeometry = (30, 60, 1200, 800)
-    TextWidgetHeight = 60
-    ConsoleWidgetHeight = 300
-    ConsoleWidgetWidth = 900
-    plot_canvas_size = (9, 3) #inches,
 
-class State(Enum):
-    SETUP = 0
-    EDITING_ROI = 1
-    VIEWING_TRACE = 2
 
 def apply_layout(widget):
     widget.setLayout(widget.layout)
-
 
 class GUI_main(QtWidgets.QMainWindow):
     __name__= 'BatchGUI'
@@ -48,7 +32,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.config = GuiConfig()
 
         self.wdir = '.'
-        self.saved_fields = ('wdir',) #GUI values that are saved in a user-specific config file
+        self.saved_fields = ('wdir', 'tag_label') #GUI values that are saved in a user-specific config file
         self.selector_fields = () #list those of saved_fields which are single-select widgets
         self.attr_fields = ('wdir', )#list those of saved_fields where we store the attribute value
         #anything not in selector or attr fields is using the .text() of the corresponding widget
@@ -72,8 +56,9 @@ class GUI_main(QtWidgets.QMainWindow):
         self.table_widget.layout.addWidget(self.filelist_widget)
 
         self.tabs = QtWidgets.QTabWidget()
-        self.make_settings_tab()
         n_tabs = 1
+        self.make_editor_tab()
+
 
         self.tabs.resize(int(100 * n_tabs), 100)
 
@@ -111,14 +96,30 @@ class GUI_main(QtWidgets.QMainWindow):
         select_path_button.clicked.connect(self.select_path_callback)
         self.session_bar.layout.addWidget(self.separator)
         self.path_label = QtWidgets.QLabel(str(self.settings_dict.get('wdir')))
+        self.session_bar.layout.addWidget(self.path_label)
+        self.session_bar.layout.addWidget(self.separator)
+
+        self.session_bar.layout.addWidget(QtWidgets.QLabel('Prefix:'))
+        self.prefix_label = QtWidgets.QLabel('')
+        self.prefix_label.setFixedWidth(self.config.PrefixFieldWidth)
+        self.session_bar.layout.addWidget(self.prefix_label)
+        self.session_bar.layout.addWidget(self.separator)
+
+        self.session_bar.layout.addWidget(QtWidgets.QLabel('ROI tag:'))
+        self.tag_label = QtWidgets.QLineEdit()
+        if 'tag_label' in self.settings_dict:
+            self.tag_label.setText(str(self.settings_dict['tag_label']))
+        self.tag_label.setFixedWidth(self.config.TagFieldWidth)
+        self.session_bar.layout.addWidget(self.tag_label)
 
     def make_console_widget(self):
-        self.console_widget.setText('Console...')
+        self.console_widget.setText('~')
         self.console_widget.setFixedHeight(self.config.ConsoleWidgetHeight)
         # self.console_widget.setFixedWidth(self.config.ConsoleWidgetWidth)
 
 
     def make_filelist_widget(self):
+        self.filelist_widget.setFixedWidth(self.config.PrefixFieldWidth)
         self.filelist_widget.layout = QtWidgets.QVBoxLayout()
         self.filelist_widget.layout.addWidget(QtWidgets.QLabel('Prefix list'))
         self.prefix_list = QtWidgets.QListWidget(self)
@@ -126,13 +127,13 @@ class GUI_main(QtWidgets.QMainWindow):
         self.prefix_list.itemSelectionChanged.connect(self.set_prefix)
         self.filelist_widget.layout.addWidget(self.prefix_list)
 
-        #TODO add list
         apply_layout(self.filelist_widget)
 
-    def make_settings_tab(self):
-        self.settingsTab = QtWidgets.QWidget()
-        self.settingsTab.layout = QtWidgets.QVBoxLayout()
-        self.tabs.addTab(self.settingsTab, "Settings")
+    def make_editor_tab(self):
+        self.EditorTab = QtWidgets.QWidget()
+        self.EditorTab.layout = QtWidgets.QVBoxLayout()
+        #TODO import widget and connect to callbacks
+        self.tabs.addTab(self.EditorTab, "ROI editor")
 
 
     def make_realtime_tab(self):
@@ -193,7 +194,7 @@ class GUI_main(QtWidgets.QMainWindow):
         start_dir = self.wdir
         if not os.path.exists(str(start_dir)):
             start_dir = None
-        user_input = QtWidgets.QFileDialog.getExistingDirectory(self.filelist_widget, 'Select Folder', directory=start_dir)
+        user_input = QtWidgets.QFileDialog.getExistingDirectory(self.filelist_widget, 'Select Folder', dir=start_dir)
         if user_input:
             self.wdir = user_input
             self.path_label.setText(self.wdir)
@@ -205,6 +206,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def set_prefix(self):
         self.active_prefix = [x.text() for x in self.prefix_list.selectedItems()]
+        self.prefix_label.setText(self.active_prefix[0])
 
     def setup_live_fig(self):
         ca = self.FigCanvasRT.ax
