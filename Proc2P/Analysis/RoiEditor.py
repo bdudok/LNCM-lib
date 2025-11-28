@@ -23,7 +23,10 @@ from multiprocessing import Process
 from Proc2P.Analysis.TkApps import SourceTarget, PickFromList, ShowMessage
 import copy
 
-
+'''
+The RoiEditor class in here is used by all BatchGU versions, including new (qt version) roi editor
+The opencv interface in here is only used by the legacy BatchGUI (3.6).
+'''
 class MouseTest:
     def __init__(self):
         im = numpy.empty((100, 100), dtype='uint8')
@@ -840,6 +843,15 @@ class RoiEditor(object):
         self.procpath = procpath
         self.prefix = prefix
         self.opPath = os.path.join(procpath, prefix + '/')
+
+    def find_rois(self):
+        exs = []
+        for f in os.listdir(self.opPath):
+            if self.prefix in f and '_saved_roi_' in f:
+                if os.path.getsize(self.opPath + f) > 128:
+                    exs.append(f)
+        exs.sort()
+        return exs
 
     @staticmethod
     def save_roi(roi_list, fn, image_shape, translate=(0, 0)):
