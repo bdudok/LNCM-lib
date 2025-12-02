@@ -41,7 +41,7 @@ class Worker(Process):
 
 
 def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_alt_path=True,
-                 overwrite=False, use_raw_movie=False):
+                 overwrite=False, use_movie='S2P'):
     '''
     Compute average pixel intensity in each ROI and each frame of a movie
     :param path: the processed folder
@@ -54,8 +54,10 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
     :param enable_alt_path: If the registered movie not found, looks in the backup folders specified in config.
     This is used because we delete the registered movies from the server after 6 months.
     :param overwrite: if False, checks if output exists and doesn't pull if yes
-    :param use_raw_movie: if True, uses the raw movie instead of the registered one.
-    Looks up path in the session info file.
+    :param use_movie:
+        'S2P': default registered movie
+        'Raw': uses the raw movie instead of the registered one. Looks up path in the session info file.
+        'GEVIReg': uses the alternative corrected movie
     :return: saves the output traces to a file. Only returns report string (also saved in the log).
     '''
     #get binary mask
@@ -69,13 +71,9 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
         print(prefix, f': Trace file for {tag} exists, skipping...')
         return -1
 
-    if use_raw_movie:
-        si = SessionInfo(opPath, prefix)
-        info = si.load()
-        movies = get_raw_movies(info)
-        channelnames = si.info["channelnames"]
-        nframes, height, width = movies[channelnames[0]].shape
-    else:
+    #parse input
+    if use_movie == 'S2P':
+         #case: S2P registered movie
         im = LoadImage(path, prefix)
         if enable_alt_path: #check if the raw data exists. this can be moved if the session is archived
             if not len(im.imdat.input_files):
@@ -83,6 +81,22 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
         channelnames = im.channels
         nframes = im.nframes
         height, width = im.info['sz']
+    elif use_movie == 'Raw':
+         #case: raw bruker tiff
+        si = SessionInfo(opPath, prefix)
+        info = si.load()
+        movies = get_raw_movies(info)
+        channelnames = si.info["channelnames"]
+        nframes, height, width = movies[channelnames[0]].shape
+    elif use_movie == 'GEVIReg':
+         #case: alternative registered movie
+        #TODO now hard code path, later intergateh this as an option in LoadImage and just pass the alt tag to it
+        im = numpy.load(os.path.join(opPath, 'GEVIReg', prefix+'_registered_Ch2.npy'), mmap_mode='r')
+        print(im.shape)
+        nframes, height, width = im.shape
+        channelnames = ['Ch2',]
+    else:
+        raise ValueError(f'use_movie not implemented for {use_movie}')
 
 
     data = load_roi_file(roi_name)
@@ -147,10 +161,12 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
                 print(f'Pulling {prefix}:{int(next_report*100/len(channels)+50*chi):2d}% ({speed/1000:.1f} ms/frame)')
                 next_report += rep_size
             stop = int(min(nframes, start + chunk_len))
-            if use_raw_movie:
+            if use_movie == 'Raw':
                 inmem_data = movies[ch][start:stop]
-            else:
+            elif use_movie == 'S2P':
                 inmem_data = numpy.array(im.imdat.get_channel(ch)[start:stop])
+            elif use_movie == 'GEVIReg':
+                inmem_data = numpy.array(im[start:stop])
             if snr_weighted:
                 if weights is None:
                     #get the weights of each pixel within ROI for each cell based on snr in first chunk
@@ -187,14 +203,17 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
     avgtype = ('simple', 'weighted')[snr_weighted]
     message = f'Pulled {avgtype} average from {int(nframes)} frames ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}'
     message += '\r\n' + f'Channel order is: {channels}'
-    if use_raw_movie:
-        message += '\r\n' + f'Raw movie was used (no registration).'
+    message += '\r\n' + f'{use_movie} movie was used '
     return message
 
 if __name__ == '__main__':
     path = r'D:\Shares\Data\_Processed\2P\eCB-GRAB/'
     prefix = 'BL6-31_2025-08-07_e-stimdrug_201'
     tag = 'rtest'
+
+    path = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
+    prefix = 'JEDI-Sncg73_2024-11-19_burst_033'
+    tag = 'GRtest'
 
     # opPath = os.path.join(path, prefix + '/')
     # si = SessionInfo(opPath, prefix)
@@ -204,6 +223,6 @@ if __name__ == '__main__':
     # chn = channelnames[0]
 
 
-    retval = pull_signals(path, prefix, tag=tag, ch='All', snr_weighted=False, use_raw_movie=True)
+    retval = pull_signals(path, prefix, tag=tag, ch='All', snr_weighted=True, use_movie='GEVIReg')
     print(retval)
 

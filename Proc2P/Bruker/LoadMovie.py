@@ -1,7 +1,8 @@
 import os
 import numpy
 from tifffile import TiffFile #if looking to import imsave, use imwrite instead.
-from Proc2P.utils import lprint
+from Proc2P.utils import lprint, path_to_list
+from envs import CONFIG
 
 
 def get_raw_movies(info):
@@ -10,24 +11,42 @@ def get_raw_movies(info):
     :return: a dict of the concatenated arrays for each channel
     '''
     dpath = info['dpath']
-    filelist = os.listdir(dpath)
+    prefix = info.prefix
+    filelist = [fn for fn in os.listdir(dpath) if ((prefix in fn) and ('.ome.tif' in fn))]
+    if not len(filelist):
+        # look in alternative paths
+        path1 = str(dpath)
+        key = '_RawData'
+        rpath = path1[path1.find(key) + len(key):]
+        parent_folders = path_to_list(rpath)
+        # check in each alt path and stop if found em
+        for alt_path in CONFIG.alt_raw_paths:
+            path2 = os.path.join(os.path.realpath(alt_path), *parent_folders)
+            filelist = [fn for fn in os.listdir(path2) if ((prefix in fn) and ('.ome.tif' in fn))]
+            if len(filelist):
+                print(f'Image data loaded from {path2}')
+                dpath = path2
+                break
     movies = {}
     n_frames = info['n_frames']
     for channel_name in info['channelnames']:
         sz = None
         input_tiffs = [fn for fn in filelist if f'_{channel_name}_' in fn]
         lprint(None, f'Reading {len(input_tiffs)} files for {channel_name}')
+        if not len(input_tiffs):
+            raise FileNotFoundError(f'No ome.tif files found at {dpath} for {prefix}')
         i = 0
         for fn in input_tiffs:
+            print(dpath, fn)
             m = LoadMovie(os.path.join(dpath, fn))
             m.load_data()
             if sz is None:
                 sz = m.sz
                 height, width = sz
                 data = numpy.empty((n_frames, height, width), dtype=m.data.dtype)
-            l = m.nframes
+            l = min(m.nframes, n_frames - i) # to discard spurious frames from malformed tif exports
             # print(data.shape, i, l, m.data.shape)
-            data[i:i + l] = m.data
+            data[i:i + l] = m.data[:l]
             i += l
         movies[channel_name] = data
         sz = None

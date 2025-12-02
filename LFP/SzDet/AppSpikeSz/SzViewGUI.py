@@ -1,32 +1,32 @@
 import sys, os
 import re
-from PyQt5 import QtGui, QtWidgets, QtCore
+from PySide6 import QtGui, QtWidgets, QtCore
 import os.path
 import cv2
 import datetime
 
-from PyQt5.QtMultimedia import QMediaPlayer
-from PyQt5.QtMultimediaWidgets import QVideoWidget
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
+from PySide6.QtMultimedia import QMediaPlayer
+from PySide6.QtMultimediaWidgets import QVideoWidget
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib import pyplot as plt
 from LFP.SzDet.AppSpikeSz.SzViewData import SzReviewData
 
-from PyQt5.QtCore import QDir, Qt, QUrl
-from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
-from PyQt5.QtMultimediaWidgets import QVideoWidget
-from PyQt5.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel,
+from PySide6.QtCore import QDir, Qt, QUrl
+from PySide6.QtMultimedia import QMediaContent, QMediaPlayer
+from PySide6.QtMultimediaWidgets import QVideoWidget
+from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel,
                              QPushButton, QSizePolicy, QSlider, QStyle, QVBoxLayout, QWidget)
-from PyQt5.QtWidgets import QMainWindow, QWidget, QPushButton, QAction
-from PyQt5.QtGui import QIcon
+from PySide6.QtWidgets import QMainWindow, QWidget, QPushButton, QAction
+from PySide6.QtGui import QIcon
 import sys
 from Proc2P.Treadmill import rsync
 import os
 
 # GUI
 # import sys
-# from PyQt5 import Qt
-from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import (QApplication, QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
+# from PySide6 import Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (QApplication, QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
                              QGroupBox, QListWidget, QAction, QAbstractItemView, QLineEdit, QCheckBox)
 
 from Proc2P.utils import *

@@ -6,7 +6,7 @@ from pathlib import Path
 
 '''
 Loads lab- or installation-specific config from the site_config.json file
-When adding a new field, include it with a type hint in SiteConfig below, as well as in the json file.
+For code completion, when adding a new field, include it with a type hint in SiteConfig below, as well as in the json.
 If there are settings that depend on the python version, set its value in the json like this:
     {'version_specific': {'6': 'sample_rate', '11': 'sample_frequency'}}
 '''
@@ -18,6 +18,7 @@ class SiteConfig:
     alt_processed_paths: list # LoadRegistered uses this to find archived motion-corrected movies in backups
     alt_raw_paths: list # scripts use this to find archived raw movies in backups
     ledcal: float #100 % led power in mW, for calibrating photostimulation intensity
+    scratch_disk: str #saving temporary files
 
 def _load_config(fname) -> SiteConfig:
     this_package = Path(__file__).resolve().parent

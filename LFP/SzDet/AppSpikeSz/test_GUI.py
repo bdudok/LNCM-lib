@@ -1,6 +1,6 @@
 #GUI
 import sys, os
-from PyQt5 import QtGui, QtWidgets, QtCore
+from PySide6 import QtGui, QtWidgets, QtCore
 from SzViewGUI import GUI_main
 
 def launch_GUI(*args, **kwargs):

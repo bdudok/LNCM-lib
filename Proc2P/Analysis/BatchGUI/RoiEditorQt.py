@@ -41,6 +41,21 @@ class GUI_main(QtWidgets.QMainWindow):
             self.setGeometry(*self.config.MainWindowGeometry)
             self.show()
 
+    def eventFilter(self, obj, event):
+        if self.state == State.LIVE:
+            if event.type() == QtCore.QEvent.MouseButtonPress:
+                if obj is self.input_window:
+                    if event.button() == QtCore.Qt.LeftButton:
+                        print("Input Widget clicked at:", event.position())
+                        # call your callback here
+                    return True
+                elif obj is self.result_window:
+                    if event.button() == QtCore.Qt.LeftButton:
+                        print("Result Widget clicked at:", event.position())
+                        # call your callback here
+                    return True
+        return super().eventFilter(obj, event)
+
     def make_widgets(self):
         self.widget.layout = QtWidgets.QVBoxLayout()
 
@@ -72,8 +87,10 @@ class GUI_main(QtWidgets.QMainWindow):
         self.widget.layout.addWidget(self.ROI_windows)
 
         self.input_window = QtWidgets.QLabel(self)
+        self.input_window.installEventFilter(self)
         self.ROI_windows.layout.addWidget(self.input_window)
         self.result_window = QtWidgets.QLabel(self)
+        self.result_window.installEventFilter(self)
         self.ROI_windows.layout.addWidget(self.result_window)
         apply_layout(self.ROI_windows)
 
@@ -107,9 +124,18 @@ class GUI_main(QtWidgets.QMainWindow):
             if preview_fn not in self.previews:
                 img = tifffile.imread(os.path.join(self.rois.opPath, preview_fn))
                 self.previews[preview_fn] = numpy.copy(img)
-            img = self.previews[preview_fn]
-            h, w, ch = img.shape
+            img = self.previews[preview_fn].squeeze()
+            ch = 3
+            if len(img.shape) == ch:
+                h, w, ch = img.shape
+            else:
+                h, w = img.shape
+                g = numpy.zeros((h, w, ch), img.dtype)
+                g[..., 1] = img
+                img = g
             qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
+
+
 
             # Resize while preserving aspect ratio to fit QLabel width
             target_width = self.input_window.width()
@@ -156,9 +182,9 @@ if __name__ == '__main__':
     # launch_GUI()
 
     wdir = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
-    prefix = 'JEDI-Bl-53_2025-10-15_opto_05Hz_1397'
-    wdir = 'D:\Shares\Data\_Processed/2P\CCK/'
-    prefix = 'Sncg146_2025-07-29_optostim_127'
+    prefix = 'JEDI-Sncg124_2025-05-06_opto_burst_665'
+    # wdir = 'D:\Shares\Data\_Processed/2P\CCK/'
+    # prefix = 'Sncg146_2025-07-29_optostim_127'
 
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle('Fusion')

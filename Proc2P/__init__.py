@@ -1,6 +1,7 @@
 import matplotlib
-if not matplotlib.get_backend() == 'TkAgg':
-    matplotlib.use('TkAgg')
+mpl_backend = 'TkAgg'
+if not matplotlib.get_backend() == mpl_backend:
+    matplotlib.use(mpl_backend)
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import os

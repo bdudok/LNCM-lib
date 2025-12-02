@@ -482,7 +482,7 @@ class SessionInfo:
     def __init__(self, procpath, prefix):
         self.procpath = procpath
         self.prefix = prefix
-        self.filehandle = self.procpath + self.prefix + '_SessionInfo.json'
+        self.filehandle = os.path.join(self.procpath,  self.prefix + '_SessionInfo.json')
         self.info = {}
 
     def load(self):

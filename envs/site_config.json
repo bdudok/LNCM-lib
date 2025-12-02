@@ -6,7 +6,15 @@
       "11": "sample_frequency"
     }
   },
-  "alt_processed_paths": ["E:/ExtDrives/LNCM1/_Processed/", "Y:/_Processed/"],
-  "alt_raw_paths": ["E:/ExtDrives/LNCM2/_RawData/"],
-  "ledcal": 230
+  "alt_processed_paths": [
+    "E:/ExtDrives/LNCM1/_Processed/",
+    "E:/ExtDrives/LNCM7/_Processed/",
+    "Y:/_Processed/"
+  ],
+  "alt_raw_paths": [
+    "E:/ExtDrives/LNCM2/_RawData/",
+    "E:/ExtDrives/LNCM6/_RawData/"
+  ],
+  "ledcal": 230,
+  "scratch_disk": "E:/tmp/"
 }
