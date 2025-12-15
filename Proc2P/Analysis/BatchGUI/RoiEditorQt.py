@@ -17,6 +17,9 @@ from Proc2P.Analysis.BatchGUI.Config import *
 from Proc2P.Analysis.BatchGUI.utils import *
 from Proc2P.Analysis.RoiEditor import RoiEditor
 import tifffile
+from shapely.geometry import Polygon, Point
+import matplotlib.path as mplpath
+import cv2
 
 '''
 Gui for manually drawing ROIs and editing ROI sets.
@@ -79,9 +82,37 @@ class GUI_main(QtWidgets.QMainWindow):
         self.ROI_list.currentIndexChanged.connect(self.update_preview)
         self.control_window.layout.addWidget(self.ROI_list)
         apply_layout(self.control_window)
-
-
         self.widget.layout.addWidget(self.control_window)
+
+        self.slider_window = QtWidgets.QWidget(self)
+        self.slider_window.layout = QtWidgets.QHBoxLayout()
+        self.slider_window.setFixedHeight(self.config.TextWidgetHeight)
+
+        self.min_size = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.max_size = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.gamma = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.min_size_label = QtWidgets.QLabel(label)
+        self.max_size_label = QtWidgets.QLabel(label)
+        self.gamma_label = QtWidgets.QLabel(label)
+        for slider, label, labeltext in zip((self.min_size, self.max_size, self.gamma),
+                                            (self.min_size_label, self.max_size_label, self.gamma_label),
+                                            ('MinSize', 'MaxSize', 'Gamma')):
+            label.setText(labeltext)
+            label.setFixedWidth(self.config.ButtonLabelWidth)
+            self.slider_window.layout.addWidget(label)
+            slider.setMinimum(1)
+            slider.setMaximum(30)
+            slider.setTickPosition(QtWidgets.QSlider.TicksBelow)
+            self.slider_window.layout.addWidget(slider)
+        for slider in (self.min_size, self.max_size):
+            slider.valueChanged.connect(self.slider_update)
+        self.gamma.valueChanged.connect(self.update_preview)
+        self.min_size.setValue(1)
+        self.max_size.setValue(30)
+        self.gamma.setValue(15)
+        apply_layout(self.slider_window)
+        self.widget.layout.addWidget(self.slider_window)
+
         self.ROI_windows = QtWidgets.QWidget(self)
         self.ROI_windows.layout=QtWidgets.QHBoxLayout()
         self.widget.layout.addWidget(self.ROI_windows)
@@ -102,6 +133,9 @@ class GUI_main(QtWidgets.QMainWindow):
         self.state = State.SETUP
         self.previews = {}
         self.rois = RoiEditor(procpath, prefix)
+        self.saved_rois = []
+        self.log = logger()
+        self.log.set_handle(procpath, prefix)
         roi_tags = self.rois.find_rois()
         for f in roi_tags:
             polys = RoiEditor.load_roi(os.path.join(self.rois.opPath, f))
@@ -114,8 +148,21 @@ class GUI_main(QtWidgets.QMainWindow):
             if self.config.ROI_preview_default in self.preview_list.itemText(i):
                 self.preview_list.setCurrentIndex(i)
 
+        self.calc_sizes()
         self.state = State.LIVE
         self.update_preview()
+
+    def slider_update(self):
+        if self.state == State.LIVE:
+            min_size = self.min_size.value()
+            self.min_size_label.setText(f'Min: {min_size}')
+            max_size = self.max_size.value()
+            self.max_size_label.setText(f'Max: {max_size}')
+            key = self.ROI_list.currentText()
+            for i, s in enumerate(self.sizes[key]):
+                self.size_filter_masks[key][i] = not ((s < min_size) or (s > max_size))
+            self.update_preview()
+
 
     def update_preview(self):
         if self.state == State.LIVE:
@@ -124,18 +171,11 @@ class GUI_main(QtWidgets.QMainWindow):
             if preview_fn not in self.previews:
                 img = tifffile.imread(os.path.join(self.rois.opPath, preview_fn))
                 self.previews[preview_fn] = numpy.copy(img)
-            img = self.previews[preview_fn].squeeze()
-            ch = 3
-            if len(img.shape) == ch:
-                h, w, ch = img.shape
-            else:
-                h, w = img.shape
-                g = numpy.zeros((h, w, ch), img.dtype)
-                g[..., 1] = img
-                img = g
+            gamma = 15.0 / (self.gamma.value() + 1)
+            self.lut = numpy.array([((i / 255.0) ** gamma) * 255 for i in numpy.arange(0, 256)]).astype('uint8')
+            img = cv2.LUT(self.previews[preview_fn].squeeze(), self.lut)
+            h, w, ch = img.shape
             qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
-
-
 
             # Resize while preserving aspect ratio to fit QLabel width
             target_width = self.input_window.width()
@@ -153,20 +193,41 @@ class GUI_main(QtWidgets.QMainWindow):
             painter = QtGui.QPainter(qimg_resized)
             painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
             painter.setPen(QtGui.QPen(QtCore.Qt.yellow, 1))
-            for poly in self.polys:
-                poly_scaled = [(x*self.rescale_factor, y*self.rescale_factor) for (x, y) in poly]
-                points = [QtCore.QPointF(x, y) for x, y in poly_scaled]
-                painter.drawPolygon(QtGui.QPolygonF(points))
+            for poly, incl in zip(self.polys, self.size_filter_masks[self.ROI_list.currentText()]):
+                if incl:
+                    poly_scaled = [(x*self.rescale_factor, y*self.rescale_factor) for (x, y) in poly]
+                    points = [QtCore.QPointF(x, y) for x, y in poly_scaled]
+                    painter.drawPolygon(QtGui.QPolygonF(points))
             painter.end()
 
             self.input_window.setPixmap(QtGui.QPixmap.fromImage(qimg_resized))
 
 
+    def calc_sizes(self):
+        self.sizes = {}
+        self.paths = {}
+        self.size_filter_masks = {}
+        all_sizes = []
+        items = [(self.ROI_list.itemText(i), self.ROI_list.itemData(i)) for i in range(self.ROI_list.count())]
+        for key, polys in items:
+            self.sizes[key] = []
+            self.paths[key] = []
+            self.size_filter_masks[key] = numpy.ones(len(polys), dtype='bool')
+            for ip, coords in enumerate(polys):
+                poly = RoiEditor.trim_coords(numpy.array(coords), self.rois.img.image.info['sz'])
+                p = Polygon(poly)
+                self.sizes[key].append(numpy.sqrt(p.area))
+                mp = mplpath.Path(poly)
+                self.paths[key].append(mp)
+            all_sizes.extend(self.sizes[key])
+        self.size_lims = [int(min(all_sizes)), int(max(all_sizes) + 1)]
 
-
-
-
-
+        sliders = (self.min_size, self.max_size)
+        for slider in sliders:
+            slider.setMinimum(self.size_lims[0])
+            slider.setMaximum(self.size_lims[1])
+        for l, s in zip(self.size_lims, sliders):
+            s.setValue(l)
 
 
 def launch_GUI(*args, **kwargs):
