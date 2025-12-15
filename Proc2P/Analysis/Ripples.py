@@ -1,7 +1,7 @@
 import numpy, scipy, os, pandas
 from matplotlib import pyplot as plt
 # from LFP.EphysFunctions import butter_bandpass_filter
-from scipy.signal import bessel, hilbert, filtfilt, decimate, sosfiltfilt
+from scipy.signal import bessel, hilbert, decimate, sosfiltfilt
 from scipy.io import savemat
 from datetime import datetime
 from matplotlib.widgets import RectangleSelector
@@ -148,55 +148,43 @@ class Ripples(object):
         nyq = 0.5 * self.fs
         low = lowcut / nyq
         high = min(highcut / nyq, 0.95)
-        self.filter = bessel(order, [low, high], btype='band')
+        self.filter = bessel(order, [low, high], btype='band', output='sos')
         return self.filter
 
     def run_filt(self, trace=None, filter=None):
         if trace is None:
-            self.ftr = filtfilt(*self.filter, self.trace)
+            self.ftr = sosfiltfilt(self.filter, self.trace)
             htr = hilbert(self.ftr)
             self.envelope = numpy.abs(htr)
             self.std = self.ftr.std()
         else:
-            ftr = filtfilt(*filter, trace)
+            ftr = sosfiltfilt(filter, trace)
             htr = hilbert(ftr)
             envelope = numpy.abs(htr)
             return ftr, envelope
 
-    def calc_theta(self):
+    def get_filt_trace(self, cutoffs):
         nyq = 0.5 * self.fs
-        filter = bessel(self.filt_order, [6.0 / nyq, 9.0 / nyq], btype='band')
-        self.tft = filtfilt(*filter, self.trace)
-        htr = hilbert(self.tft)
-        self.theta = numpy.abs(htr)
+        filter = bessel(self.filt_order, [x / nyq for x in cutoffs], btype='band', output='sos')
+        ft = sosfiltfilt(filter, self.trace)
+        htr = hilbert(ft)
+        env = numpy.abs(htr)
+        return ft, env
+
+    def calc_theta(self):
+        self.tft, self.theta = self.get_filt_trace([6, 9])
 
     def calc_sgamma(self):
-        nyq = 0.5 * self.fs
-        filter = bessel(self.filt_order, [20.0 / nyq, 55.0 / nyq], btype='band')
-        self.gft = filtfilt(*filter, self.trace)
-        htr = hilbert(self.gft)
-        self.gamma = numpy.abs(htr)
+        self.gft, self.gamma = self.get_filt_trace([20, 55])
 
     def calc_fgamma(self):
-        nyq = 0.5 * self.fs
-        filter = bessel(self.filt_order, [60.0 / nyq, 100.0 / nyq], btype='band')
-        self.gft = filtfilt(*filter, self.trace)
-        htr = hilbert(self.gft)
-        self.gamma = numpy.abs(htr)
+        self.gft, self.gamma = self.get_filt_trace([60, 100])
 
     def calc_bgamma(self):
-        nyq = 0.5 * self.fs
-        filter = bessel(self.filt_order, [20.0 / nyq, 100.0 / nyq], btype='band')
-        self.gft = filtfilt(*filter, self.trace)
-        htr = hilbert(self.gft)
-        self.gamma = numpy.abs(htr)
+        self.gft, self.gamma = self.get_filt_trace([20, 100])
 
     def calc_slo(self):
-        nyq = 0.5 * self.fs
-        sos = bessel(self.filt_order, [3.0 / nyq, 6.0 / nyq], btype='band', output='sos')
-        self.gft = sosfiltfilt(sos, self.trace)
-        htr = hilbert(self.gft)
-        self.gamma = numpy.abs(htr)
+        self.gft, self.gamma = self.get_filt_trace([3, 6])
 
     def set_up_recursive(self, calc_diff):
         self.incl = numpy.ones(self.envelope.shape, dtype='bool')
