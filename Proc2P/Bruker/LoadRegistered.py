@@ -2,6 +2,13 @@ import numpy
 import os
 from envs import CONFIG
 from Proc2P.utils import path_to_list
+from enum import Enum
+
+class Source(Enum):
+    S2P = 0
+    GEVIReg = 1
+    Raw = 2
+
 
 class LoadRegistered():
     __name__ = 'LoadRegistered'
@@ -10,16 +17,25 @@ class LoadRegistered():
     #pass full path to the processed output folder.
     '''
 
-    def __init__(self, procpath, prefix):
+    def __init__(self, procpath, prefix, source=Source.S2P):
+        '''
+        Open a registered 2P movie (saved by Suite2P or by GEVIReg)
+        :param source: 'S2P' or 'GEVIReg'
+        '''
         self.path = os.path.join(procpath, prefix)
         self.prefix = prefix
-        lp = os.path.join(self.path, 'suite2p/plane0/ops.npy')
-        ops = numpy.load(lp, allow_pickle=True).item()
-        self.n_frames = ops['frames_per_folder'][0]
-        self.Ly = ops['Ly']
-        self.Lx = ops['Lx']
+        self.source = source
+        if source == Source.S2P:
+            lp = os.path.join(self.path, 'suite2p/plane0/ops.npy')
+            ops = numpy.load(lp, allow_pickle=True).item()
+            self.n_frames = ops['frames_per_folder'][0]
+            self.Ly = ops['Ly']
+            self.Lx = ops['Lx']
+
+            self.shape = (self.n_frames, self.Ly, self.Lx)
+        elif source == Source.GEVIReg:
+            pass # no prep required, npy header contains shape, will be set by load()
         self.find_files_in_folder(self.path)
-        self.shape = (self.n_frames, self.Ly, self.Lx)
         self.load()
 
     def find_files_in_folder(self, path):
@@ -29,7 +45,10 @@ class LoadRegistered():
         self.input_files = []
         self.channel_keys = []
         for ti, (tag, key) in enumerate(zip(tags, keys)):
-            bp = os.path.join(path, self.prefix + f'_registered{tag}.bin')
+            if self.source == Source.S2P:
+                bp = os.path.join(path, self.prefix + f'_registered{tag}.bin')
+            elif self.source == Source.GEVIReg:
+                bp = os.path.join(path, 'GEVIReg', self.prefix + f'_registered{tag}.npy')
             if os.path.exists(bp):
                 self.input_files.append(bp)
                 self.channel_keys.append(key)
@@ -56,10 +75,17 @@ class LoadRegistered():
 
     def load(self):
         if len(self.input_files):
-            self.data = numpy.memmap(self.input_files[0], mode='r', dtype='int16', shape=self.shape)
-            self.bitdepth = pow(2, 12)
-            if len(self.input_files) > 1:
-                self.data2 = numpy.memmap(self.input_files[1], mode='r', dtype='int16', shape=self.shape)
+            if self.source == Source.S2P:
+                self.data = numpy.memmap(self.input_files[0], mode='r', dtype='int16', shape=self.shape)
+                if len(self.input_files) > 1:
+                    self.data2 = numpy.memmap(self.input_files[1], mode='r', dtype='int16', shape=self.shape)
+            elif self.source == Source.GEVIReg:
+                self.data = numpy.load(self.input_files[0], mmap_mode='r')
+                self.shape = self.data.shape
+                self.n_frames, self.Ly, self.Lx = self.shape
+                if len(self.input_files) > 1:
+                    self.data2 = numpy.load(self.input_files[1], mmap_mode='r')
+            self.bitdepth = pow(2, 13) # all bruker data has 13 effective bits
         else:
             self.data = None
 

@@ -7,7 +7,7 @@ import os
 import copy, math
 import tifffile
 
-from Proc2P.Bruker.LoadRegistered import LoadRegistered
+from Proc2P.Bruker.LoadRegistered import LoadRegistered, Source
 from Proc2P.utils import lprint
 
 
@@ -61,11 +61,11 @@ class LoadPolys(object):
 
 
 class LoadImage(object):
-    def __init__(self, procpath, prefix):
+    def __init__(self, procpath, prefix, source=Source.S2P):
         self.prefix = prefix
         self.opPath = procpath + prefix + '/'
         self.data_loaded = False
-        self.imdat = LoadRegistered(procpath, prefix)
+        self.imdat = LoadRegistered(procpath, prefix, source)
         self.info = {'sz': (self.imdat.Ly, self.imdat.Lx)}
         self.nframes = self.imdat.n_frames
         self.nplanes = 1

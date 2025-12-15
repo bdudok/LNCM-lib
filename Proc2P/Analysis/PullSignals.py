@@ -1,6 +1,7 @@
 import numpy
 from Proc2P.Analysis.LoadPolys import LoadImage, load_roi_file
 from Proc2P.Bruker.LoadMovie import LoadMovie, get_raw_movies
+from Proc2P.Bruker.LoadRegistered import Source
 from Proc2P.Bruker.PreProc import SessionInfo
 import matplotlib.path as mplpath
 from statsmodels.stats.weightstats import DescrStatsW
@@ -41,7 +42,7 @@ class Worker(Process):
 
 
 def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_alt_path=True,
-                 overwrite=False, use_movie='S2P'):
+                 overwrite=False, use_movie=Source.S2P):
     '''
     Compute average pixel intensity in each ROI and each frame of a movie
     :param path: the processed folder
@@ -55,9 +56,9 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
     This is used because we delete the registered movies from the server after 6 months.
     :param overwrite: if False, checks if output exists and doesn't pull if yes
     :param use_movie:
-        'S2P': default registered movie
-        'Raw': uses the raw movie instead of the registered one. Looks up path in the session info file.
-        'GEVIReg': uses the alternative corrected movie
+        S2P: default registered movie
+        Raw: uses the raw movie instead of the registered one. Looks up path in the session info file.
+        GEVIReg: uses the alternative corrected movie
     :return: saves the output traces to a file. Only returns report string (also saved in the log).
     '''
     #get binary mask
@@ -72,29 +73,23 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
         return -1
 
     #parse input
-    if use_movie == 'S2P':
+    if use_movie in (Source.S2P, Source.GEVIReg):
          #case: S2P registered movie
-        im = LoadImage(path, prefix)
+        im = LoadImage(path, prefix, source=use_movie)
         if enable_alt_path: #check if the raw data exists. this can be moved if the session is archived
             if not len(im.imdat.input_files):
-                im.imdat.find_alt_path()
+                im.imdat.find_alt_path() #load it from backup location
+        print(im.imdat.input_files)
         channelnames = im.channels
         nframes = im.nframes
         height, width = im.info['sz']
-    elif use_movie == 'Raw':
+    elif use_movie == Source.Raw:
          #case: raw bruker tiff
         si = SessionInfo(opPath, prefix)
         info = si.load()
         movies = get_raw_movies(info)
         channelnames = si.info["channelnames"]
         nframes, height, width = movies[channelnames[0]].shape
-    elif use_movie == 'GEVIReg':
-         #case: alternative registered movie
-        #TODO now hard code path, later intergateh this as an option in LoadImage and just pass the alt tag to it
-        im = numpy.load(os.path.join(opPath, 'GEVIReg', prefix+'_registered_Ch2.npy'), mmap_mode='r')
-        print(im.shape)
-        nframes, height, width = im.shape
-        channelnames = ['Ch2',]
     else:
         raise ValueError(f'use_movie not implemented for {use_movie}')
 
@@ -161,12 +156,10 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
                 print(f'Pulling {prefix}:{int(next_report*100/len(channels)+50*chi):2d}% ({speed/1000:.1f} ms/frame)')
                 next_report += rep_size
             stop = int(min(nframes, start + chunk_len))
-            if use_movie == 'Raw':
+            if use_movie == Source.Raw:
                 inmem_data = movies[ch][start:stop]
-            elif use_movie == 'S2P':
+            elif use_movie in (Source.S2P, Source.GEVIReg):
                 inmem_data = numpy.array(im.imdat.get_channel(ch)[start:stop])
-            elif use_movie == 'GEVIReg':
-                inmem_data = numpy.array(im[start:stop])
             if snr_weighted:
                 if weights is None:
                     #get the weights of each pixel within ROI for each cell based on snr in first chunk
@@ -212,7 +205,7 @@ if __name__ == '__main__':
     tag = 'rtest'
 
     path = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
-    prefix = 'JEDI-Sncg73_2024-11-19_burst_033'
+    prefix = 'JEDI-Sncg131_2025-06-19_burst_1016'
     tag = 'GRtest'
 
     # opPath = os.path.join(path, prefix + '/')
@@ -223,6 +216,6 @@ if __name__ == '__main__':
     # chn = channelnames[0]
 
 
-    retval = pull_signals(path, prefix, tag=tag, ch='All', snr_weighted=True, use_movie='GEVIReg')
+    retval = pull_signals(path, prefix, tag=tag, ch='All', snr_weighted=True, use_movie=Source.GEVIReg)
     print(retval)
 
