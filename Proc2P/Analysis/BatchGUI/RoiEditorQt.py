@@ -47,10 +47,11 @@ class GUI_main(QtWidgets.QMainWindow):
     def eventFilter(self, obj, event):
         if self.state == State.LIVE:
             if event.type() == QtCore.QEvent.MouseButtonPress:
+                global_pos = event.globalPosition().toPoint()
+                child_pos = obj.mapFromGlobal(global_pos)
                 if obj is self.input_window:
                     if event.button() == QtCore.Qt.LeftButton:
-                        print("Input Widget clicked at:", event.position())
-                        # call your callback here
+                        self.pick(child_pos, widget=obj, mode='add')
                     return True
                 elif obj is self.result_window:
                     if event.button() == QtCore.Qt.LeftButton:
@@ -117,8 +118,19 @@ class GUI_main(QtWidgets.QMainWindow):
         self.ROI_windows.layout=QtWidgets.QHBoxLayout()
         self.widget.layout.addWidget(self.ROI_windows)
 
+        self.input_controls = QtWidgets.QWidget()
+        self.input_controls.setFixedWidth(self.config.ButtonLabelWidth)
+        self.input_controls.layout = QtWidgets.QHBoxLayout()
+
+        self.button_lasso = QtWidgets.QPushButton()
+        self.button_lasso.setText('Lasso [l]')
+        self.button_lasso.clicked.connect(self.lasso_callback)
+        self.input_controls.layout.addWidget(self.button_lasso)
+        apply_layout(self.input_controls)
+
         self.input_window = QtWidgets.QLabel(self)
         self.input_window.installEventFilter(self)
+        self.ROI_windows.layout.addWidget(self.input_controls)
         self.ROI_windows.layout.addWidget(self.input_window)
         self.result_window = QtWidgets.QLabel(self)
         self.result_window.installEventFilter(self)
@@ -134,6 +146,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.previews = {}
         self.rois = RoiEditor(procpath, prefix)
         self.saved_rois = []
+        self.saved_paths = []
         self.log = logger()
         self.log.set_handle(procpath, prefix)
         roi_tags = self.rois.find_rois()
@@ -160,12 +173,12 @@ class GUI_main(QtWidgets.QMainWindow):
             self.max_size_label.setText(f'Max: {max_size}')
             key = self.ROI_list.currentText()
             for i, s in enumerate(self.sizes[key]):
-                self.size_filter_masks[key][i] = not ((s < min_size) or (s > max_size))
+                self.incl[key][i] = not ((s < min_size) or (s > max_size))
             self.update_preview()
-
 
     def update_preview(self):
         if self.state == State.LIVE:
+            self.current_key = self.ROI_list.currentText()
             self.polys = self.ROI_list.currentData()
             preview_fn = self.preview_list.currentData()
             if preview_fn not in self.previews:
@@ -175,6 +188,7 @@ class GUI_main(QtWidgets.QMainWindow):
             self.lut = numpy.array([((i / 255.0) ** gamma) * 255 for i in numpy.arange(0, 256)]).astype('uint8')
             img = cv2.LUT(self.previews[preview_fn].squeeze(), self.lut)
             h, w, ch = img.shape
+            self.image_h, self.image_w = h, w
             qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
 
             # Resize while preserving aspect ratio to fit QLabel width
@@ -185,34 +199,85 @@ class GUI_main(QtWidgets.QMainWindow):
 
             qimg_resized = qimg.scaled(target_width, target_height,
                                        QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
-
             self.output_image = copy.copy(qimg_resized)
-            self.result_window.setPixmap(QtGui.QPixmap.fromImage(self.output_image))
 
-            # Draw polygons
-            painter = QtGui.QPainter(qimg_resized)
-            painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-            painter.setPen(QtGui.QPen(QtCore.Qt.yellow, 1))
-            for poly, incl in zip(self.polys, self.size_filter_masks[self.ROI_list.currentText()]):
-                if incl:
-                    poly_scaled = [(x*self.rescale_factor, y*self.rescale_factor) for (x, y) in poly]
-                    points = [QtCore.QPointF(x, y) for x, y in poly_scaled]
-                    painter.drawPolygon(QtGui.QPolygonF(points))
+            # Draw polygons on input
+            painter = self.get_painter(qimg_resized)
+            for poly, incl in zip(self.polys, self.incl[self.current_key]):
+                color = (QtCore.Qt.gray, QtCore.Qt.yellow)[int(incl)]
+                painter.setPen(QtGui.QPen(color, 1))
+                self.paint_poly(poly, painter)
             painter.end()
-
             self.input_window.setPixmap(QtGui.QPixmap.fromImage(qimg_resized))
 
+            #Draw polygons on output
+            painter = self.get_painter(self.output_image)
+            painter.setPen(QtGui.QPen(QtCore.Qt.magenta, 1))
+            for poly in self.saved_rois:
+                self.paint_poly(poly, painter)
+            painter.end()
+            self.result_window.setPixmap(QtGui.QPixmap.fromImage(self.output_image))
+
+    def get_painter(self, image):
+        painter = QtGui.QPainter(image)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        return painter
+
+    def paint_poly(self, poly, painter):
+        poly_scaled = [(x * self.rescale_factor, y * self.rescale_factor) for (x, y) in poly]
+        points = [QtCore.QPointF(x, y) for x, y in poly_scaled]
+        painter.drawPolygon(QtGui.QPolygonF(points))
+
+    def lasso_callback(self):
+        pass
+        #draw a poly on this widget or spawn a new window
+
+    def pick(self, pos, widget, mode):
+        #transform to image coordinate from widget reference
+        offset_x = (widget.width() - self.image_w * self.rescale_factor) / 2
+        offset_y = (widget.height() - self.image_h * self.rescale_factor) / 2
+        pix_x = (pos.x() - offset_x) / self.rescale_factor
+        pix_y = (pos.y() - offset_y) / self.rescale_factor
+        point = [pix_x, pix_y]
+        if mode == 'add':
+            for i, poly in enumerate(self.polys):
+                if self.paths[self.current_key][i].contains_point(point):
+                    if poly not in self.saved_rois:
+                        self.saved_rois.append(poly)
+                        self.saved_paths.append(mplpath.Path(poly))
+                        if not self.incl[self.current_key][i]:
+                            self.incl[self.current_key][i] = True
+                            self.update_preview()
+                        else:
+                            self.draw_result(poly)
+                        break
+        elif mode == 'remove':
+            for i in range(len(self.saved_rois)):
+                if self.saved_paths[i].contains_point([x, y]):
+                    self.saved_rois.pop(i)
+                    self.saved_paths.pop(i)
+                    self.draw_result()
+                    found = True
+                    break
+
+    def draw_result(self, poly):
+        #draw a poly on the result without updating everything
+        painter = self.get_painter(self.output_image)
+        painter.setPen(QtGui.QPen(QtCore.Qt.magenta, 1))
+        self.paint_poly(poly, painter)
+        painter.end()
+        self.result_window.setPixmap(QtGui.QPixmap.fromImage(self.output_image))
 
     def calc_sizes(self):
         self.sizes = {}
         self.paths = {}
-        self.size_filter_masks = {}
+        self.incl = {}
         all_sizes = []
         items = [(self.ROI_list.itemText(i), self.ROI_list.itemData(i)) for i in range(self.ROI_list.count())]
         for key, polys in items:
             self.sizes[key] = []
             self.paths[key] = []
-            self.size_filter_masks[key] = numpy.ones(len(polys), dtype='bool')
+            self.incl[key] = numpy.ones(len(polys), dtype='bool')
             for ip, coords in enumerate(polys):
                 poly = RoiEditor.trim_coords(numpy.array(coords), self.rois.img.image.info['sz'])
                 p = Polygon(poly)
@@ -229,6 +294,52 @@ class GUI_main(QtWidgets.QMainWindow):
         for l, s in zip(self.size_lims, sliders):
             s.setValue(l)
 
+# this is llm below, use it to connect to the input widget
+class FreehandPolygonWidget(QtWidgets.QWidget):
+    polygonFinished = QtCore.Signal(list)  # emits [(x, y), ...]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMouseTracking(True)
+        self._drawing = False
+        self._points = []  # list of QPointF
+
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self._drawing = True
+            self._points = [QtCore.QPointF(event.position())]  # Qt6-style; for PyQt5 use event.pos()
+            self.update()
+
+    def mouseMoveEvent(self, event):
+        if self._drawing and (event.buttons() & QtCore.Qt.LeftButton):
+            self._points.append(QtCore.QPointF(event.position()))
+            self.update()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton and self._drawing:
+            self._drawing = False
+            # emit polygon coordinates as Python list of tuples
+            coords = [(p.x(), p.y()) for p in self._points]
+            self.polygonFinished.emit(coords)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self._points:
+            return
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        pen = QtGui.QPen(QtCore.Qt.magenta, 2)
+        painter.setPen(pen)
+
+        path = QtGui.QPainterPath()
+        path.moveTo(self._points[0])
+        for p in self._points[1:]:
+            path.lineTo(p)
+        painter.drawPath(path)
+
+    def polygonCoordinates(self):
+        """Call this to get the last drawn polygon as [(x, y), ...]."""
+        return [(p.x(), p.y()) for p in self._points]
 
 def launch_GUI(*args, **kwargs):
     app = QtWidgets.QApplication(sys.argv)
