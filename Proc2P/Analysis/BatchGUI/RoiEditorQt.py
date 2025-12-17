@@ -2,16 +2,18 @@ import copy
 
 from PySide6 import QtGui, QtCore, QtWidgets
 import matplotlib
+
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib import pyplot as plt
+
 plt.rcParams['font.size'] = 8
 plt.rcParams['font.sans-serif'] = 'Arial'
 import numpy
 import os
 import json
 import sys
-
+from enum import Enum
 from Proc2P.utils import logger, lprint
 from Proc2P.Analysis.BatchGUI.Config import *
 from Proc2P.Analysis.BatchGUI.utils import *
@@ -25,8 +27,16 @@ import cv2
 Gui for manually drawing ROIs and editing ROI sets.
 '''
 
+
+class AddModes(Enum):
+    CONTAIN = 0
+    OVERLAP = 1
+    PRESERVE = 2
+
+
 class GUI_main(QtWidgets.QMainWindow):
-    __name__= 'ROIEditor'
+    __name__ = 'ROIEditor'
+
     def __init__(self, app, title='Editor', parent_widget=None):
         super().__init__()
         self.setWindowTitle(title)
@@ -52,11 +62,14 @@ class GUI_main(QtWidgets.QMainWindow):
                 if obj is self.input_window:
                     if event.button() == QtCore.Qt.LeftButton:
                         self.pick(child_pos, widget=obj, mode='add')
+                    elif event.button() == QtCore.Qt.RightButton:
+                        self.add_current()
                     return True
                 elif obj is self.result_window:
                     if event.button() == QtCore.Qt.LeftButton:
-                        print("Result Widget clicked at:", event.position())
-                        # call your callback here
+                        self.pick(child_pos, widget=obj, mode='remove')
+                    elif event.button() == QtCore.Qt.RightButton:
+                        self.draw_new_ROI(child_pos, widget=obj)
                     return True
         return super().eventFilter(obj, event)
 
@@ -115,20 +128,49 @@ class GUI_main(QtWidgets.QMainWindow):
         self.widget.layout.addWidget(self.slider_window)
 
         self.ROI_windows = QtWidgets.QWidget(self)
-        self.ROI_windows.layout=QtWidgets.QHBoxLayout()
+        self.ROI_windows.layout = QtWidgets.QHBoxLayout()
         self.widget.layout.addWidget(self.ROI_windows)
 
         self.input_controls = QtWidgets.QWidget()
-        self.input_controls.setFixedWidth(self.config.ButtonLabelWidth)
-        self.input_controls.layout = QtWidgets.QHBoxLayout()
+        self.input_controls.setFixedWidth(self.config.ButtonLabelWidth * 1.5)
+        self.input_controls.layout = QtWidgets.QVBoxLayout()
 
-        self.button_lasso = QtWidgets.QPushButton()
-        self.button_lasso.setText('Lasso [l]')
-        self.button_lasso.clicked.connect(self.add_lasso_callback)
-        self.input_controls.layout.addWidget(self.button_lasso)
+        # Callbacks to drawing functions
+        buttons = {
+            'Lasso [l]': self.add_lasso_callback,
+            'Lasso - dilate [i]': self.dil_lasso_callback,
+            'Draw large ROI [g]': self.draw_lasso_callback,
+            'Remove [r]': self.remove_lasso_callback,
+            'Dilate [d]': self.dilate_callback,
+            'Save [e]': self.save_callback,
+            'Clear output [c]': self.clear_callback,
+        }
+
+        for key, value in buttons.items():
+            b = QtWidgets.QPushButton(key)
+            b.clicked.connect(value)
+            self.input_controls.layout.addWidget(b)
+            action = QtGui.QAction(key[:-4], self)
+            action.setShortcut(QtGui.QKeySequence(key[-2]))
+            action.triggered.connect(value)
+            self.addAction(action)
+
+        # Add mode selector
+        self.input_controls.layout.addWidget(QtWidgets.QLabel('Add mode:'))
+        self._button_to_mode = {}
+        self.modegroup = QtWidgets.QButtonGroup(self)
+        self.modegroup.setExclusive(True)
+        for mode in AddModes:
+            btn = QtWidgets.QRadioButton(mode.name.title(), self)
+            self.input_controls.layout.addWidget(btn)
+            self.modegroup.addButton(btn)
+            self._button_to_mode[btn] = mode
+
+        self.modegroup.buttonClicked.connect(self.on_mode_changed)
+        list(self._button_to_mode.keys())[0].setChecked(True)
+        self.addmode = list(AddModes)[0]
+
         apply_layout(self.input_controls)
-
-        self.addmode = 'contain'
 
         self.input_window = QtWidgets.QLabel(self)
         self.input_window.installEventFilter(self)
@@ -143,10 +185,11 @@ class GUI_main(QtWidgets.QMainWindow):
         self.widget.layout.addWidget(self.tooltip_widget)
         apply_layout(self.widget)
 
-    def open_session(self, procpath, prefix):
+    def open_session(self, procpath, prefix, preferred_tag='1'):
         self.state = State.SETUP
         self.previews = {}
         self.rois = RoiEditor(procpath, prefix)
+        self.preferred_tag = preferred_tag
         self.saved_rois = []
         self.saved_paths = []
         self.log = logger()
@@ -155,10 +198,10 @@ class GUI_main(QtWidgets.QMainWindow):
         for f in roi_tags:
             polys = RoiEditor.load_roi(os.path.join(self.rois.opPath, f))
             if len(polys):
-                self.ROI_list.addItem(f, polys) #store polys as userdata in the combobox
+                self.ROI_list.addItem(f, polys)  # store polys as userdata in the combobox
         for fn in os.listdir(self.rois.opPath):
             if prefix in fn and fn.endswith('.tif'):
-                self.preview_list.addItem(fn[len(prefix)+1:-4], fn) #store preview filenames as userdata
+                self.preview_list.addItem(fn[len(prefix) + 1:-4], fn)  # store preview filenames as userdata
         for i in range(self.preview_list.count()):
             if self.config.ROI_preview_default in self.preview_list.itemText(i):
                 self.preview_list.setCurrentIndex(i)
@@ -189,6 +232,7 @@ class GUI_main(QtWidgets.QMainWindow):
             gamma = 15.0 / (self.gamma.value() + 1)
             self.lut = numpy.array([((i / 255.0) ** gamma) * 255 for i in numpy.arange(0, 256)]).astype('uint8')
             img = cv2.LUT(self.previews[preview_fn].squeeze(), self.lut)
+            self.img = img
             h, w, ch = img.shape
             self.image_h, self.image_w = h, w
             qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
@@ -198,7 +242,6 @@ class GUI_main(QtWidgets.QMainWindow):
             aspect_ratio = h / w
             target_height = int(target_width * aspect_ratio)
             self.rescale_factor = target_width / w
-
             qimg_resized = qimg.scaled(target_width, target_height,
                                        QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
             self.output_image = copy.copy(qimg_resized)
@@ -213,7 +256,7 @@ class GUI_main(QtWidgets.QMainWindow):
             painter.end()
             self.input_window.setPixmap(QtGui.QPixmap.fromImage(qimg_resized))
 
-            #Draw polygons on output
+            # Draw polygons on output
             painter = self.get_painter(self.output_image)
             painter.setPen(QtGui.QPen(QtCore.Qt.magenta, 1))
             for poly in self.saved_rois:
@@ -231,12 +274,90 @@ class GUI_main(QtWidgets.QMainWindow):
         points = [QtCore.QPointF(x, y) for x, y in poly_scaled]
         painter.drawPolygon(QtGui.QPolygonF(points))
 
+    def on_mode_changed(self, button):
+        self.addmode = self._button_to_mode[button]
+
     def add_lasso_callback(self):
         self.lasso('add')
 
+    def dil_lasso_callback(self):
+        self.lasso('add-dil')
+
+    def draw_lasso_callback(self):
+        self.lasso('draw')
+
+    def remove_lasso_callback(self):
+        self.lasso('remove')
+
+    def dilate_callback(self):
+        nrs = []
+        for roi in self.saved_rois:
+            nrs.append(RoiEditor.dilate_polygon(roi, buffer=1))
+        self.saved_rois = []
+        self.saved_paths = []
+        for roi in nrs:
+            self.saved_rois.append(roi)
+            self.saved_paths.append(mplpath.Path(roi))
+        self.update_preview()
+
+    def save_callback(self):
+        suffix = '_saved_roi_'
+        opPath = self.rois.opPath
+        prefix = self.rois.prefix
+        if len(self.saved_rois) < 1:
+            print('0 rois, roi file not saved for', prefix)
+            return -1
+        fn = prefix + suffix + self.preferred_tag
+        if os.path.exists(opPath + fn + '.npy'):
+            exs = [0]
+            for f in os.listdir(opPath):
+                if prefix in f and suffix in f:
+                    if '_' in f[:-5]:
+                        # keep autodetected rois from breaking numbering
+                        roi_id = f[:-4].split('_')[-1]
+                        if roi_id.isdigit():
+                            exs.append(int())
+            exi = max(exs) + 1
+            while os.path.exists(opPath + prefix + suffix + str(exi) + '.npy'):
+                exi += 1
+            fn = prefix + suffix + str(exi)
+        RoiEditor.save_roi(self.saved_rois, opPath + fn, self.rois.img.image.info['sz'])
+        msg = f'{len(self.saved_rois)} saved in {fn}'
+        lprint(self, msg, logger=self.log)
+        QtWidgets.QMessageBox(QtWidgets.QMessageBox.NoIcon,  # no standard icon → no system chime
+                              'Saved', msg, QtWidgets.QMessageBox.Ok, self).exec()
+        # QtWidgets.QMessageBox.information(self, 'Saved', msg)
+
+    def clear_callback(self):
+        self.saved_rois = []
+        self.saved_paths = []
+        self.update_preview()
+
+    def draw_new_ROI(self, pos, widget):
+        self.zoomfactor = self.config.zoomfactor
+        point = self.coord_from_click(pos, widget)
+        xsize = self.ROI_windows.width() / self.zoomfactor / self.rescale_factor
+        ysize = self.ROI_windows.height() / self.zoomfactor / self.rescale_factor
+        x0 = int(max(0, self.image_w - xsize, point[0] / self.rescale_factor - xsize / 2))
+        y0 = int(max(0, self.image_h - ysize, point[1] / self.rescale_factor - ysize / 2))
+        x1 = int(min(x0 + xsize, self.image_w))
+        y1 = int(min(y0 + ysize, self.image_h))
+        print(x0, x1, y0, y1)
+        img = numpy.ascontiguousarray(self.img[y0:y1, x0:x1])
+        h, w, ch = img.shape
+        print(h, w)
+        qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
+        self.zoom_w = (x1 - x0) * self.rescale_factor * self.zoomfactor
+        self.zoom_h = (y1 - y0) * self.rescale_factor * self.zoomfactor
+        print(self.zoom_w, self.zoom_h, self.rescale_factor, self.zoomfactor)
+        self.zoom_image = qimg.scaled(self.zoom_w , self.zoom_h,
+                                      QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        self.zoom_corner = [x0, y0]
+        self.lasso('new')
+
     def lasso(self, mode):
-        lasso = FreehandPolygonWidget(self)
-        lasso.exec()
+        lasso = FreehandPolygonWidget(self, mode=mode)
+        lasso.exec() #TODO implement scaling back to image coords when mode is new
         ps = lasso.polys
         if 'add' in mode:
             rois = []
@@ -270,6 +391,11 @@ class GUI_main(QtWidgets.QMainWindow):
                     p.append(self.saved_paths[i])
             self.saved_rois = r
             self.saved_paths = p
+        elif mode == 'new':
+            for p in ps:
+                if len(p) > 3:
+                    self.saved_rois.append(p)
+                    self.saved_paths.append(mplpath.Path(p))
         self.update_preview()
 
     def add_current(self, dil=False):
@@ -278,18 +404,18 @@ class GUI_main(QtWidgets.QMainWindow):
                 p = self.polys[i]
                 if dil:
                     p = Polygon(p).buffer(3).exterior.coords
-                if (not p in self.saved_rois) or self.addmode == 'preserve':
+                if (not p in self.saved_rois) or self.addmode == AddModes.PRESERVE:
                     # check if roi is inside existing roi
                     tp = mplpath.Path(p)
                     cm = tp.vertices.mean(axis=0)
                     point1 = Point(cm)
                     skip = False
-                    if self.addmode == 'contain':
+                    if self.addmode == AddModes.CONTAIN:
                         for ep in self.saved_paths:
                             if ep.contains_point(cm):
                                 skip = True
                                 break
-                    elif self.addmode == 'overlap':
+                    elif self.addmode == AddModes.OVERLAP:
                         p1 = Polygon(p)
                         for oi, ep in enumerate(self.saved_paths):
                             if ep.contains_point(cm):
@@ -303,15 +429,18 @@ class GUI_main(QtWidgets.QMainWindow):
                     if not skip:
                         self.saved_rois.append(p)
                         self.saved_paths.append(tp)
+        self.update_preview()
 
-
-    def pick(self, pos, widget, mode):
-        #transform to image coordinate from widget reference
+    def coord_from_click(self, pos, widget):
+        # transform to image coordinate from widget reference
         offset_x = (widget.width() - self.image_w * self.rescale_factor) / 2
         offset_y = (widget.height() - self.image_h * self.rescale_factor) / 2
         pix_x = (pos.x() - offset_x) / self.rescale_factor
         pix_y = (pos.y() - offset_y) / self.rescale_factor
-        point = [pix_x, pix_y]
+        return [pix_x, pix_y]
+
+    def pick(self, pos, widget, mode):
+        point = self.coord_from_click(pos, widget)
         if mode == 'add':
             for i, poly in enumerate(self.polys):
                 if self.paths[self.current_key][i].contains_point(point):
@@ -333,7 +462,7 @@ class GUI_main(QtWidgets.QMainWindow):
                     break
 
     def draw_result(self, poly):
-        #draw a poly on the result without updating everything
+        # draw a poly on the result without updating everything
         painter = self.get_painter(self.output_image)
         painter.setPen(QtGui.QPen(QtCore.Qt.magenta, 1))
         self.paint_poly(poly, painter)
@@ -366,15 +495,25 @@ class GUI_main(QtWidgets.QMainWindow):
         for l, s in zip(self.size_lims, sliders):
             s.setValue(l)
 
+
 class FreehandPolygonWidget(QtWidgets.QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, mode='add'):
         super().__init__(parent)
         self.setWindowTitle("Lasso")
+        self.mode = mode
 
-        self.image = parent.lasso_image
-        self.image_h = parent.image_h
-        self.image_w = parent.image_w
-        self.rescale_factor = parent.rescale_factor
+        if mode == 'add':
+            self.image = parent.lasso_image
+            self.image_h = parent.image_h
+            self.image_w = parent.image_w
+            self.rescale_factor = parent.rescale_factor
+        elif mode == 'new':
+            self.image = parent.zoom_image
+            print(self.image.width(),self.image.height() )
+            self.image_h = parent.zoom_h
+            self.image_w = parent.zoom_w
+            self.rescale_factor = parent.rescale_factor * parent.zoomfactor
+
         self.widget = QtWidgets.QWidget(self)
         self.widget.layout = QtWidgets.QVBoxLayout()
         self.widget.setFixedWidth(self.image.width())
@@ -399,7 +538,6 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
         elif event.button() == QtCore.Qt.RightButton and self._drawing:
             self.update()
             self.finishPoly()
-
 
     def mouseMoveEvent(self, event):
         if self._drawing and (event.buttons() & QtCore.Qt.LeftButton):
@@ -446,6 +584,7 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
         painter.drawPath(path)
         self.label.setPixmap(QtGui.QPixmap.fromImage(self.image))
 
+
 def launch_GUI(*args, **kwargs):
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle('Fusion')
@@ -468,6 +607,6 @@ if __name__ == '__main__':
     font = QtGui.QFont()
     app.setFont(font)
     gui = GUI_main(app, )
-    gui.open_session(wdir, prefix)
+    gui.open_session(wdir, prefix, preferred_tag='test')
 
     sys.exit(app.exec())

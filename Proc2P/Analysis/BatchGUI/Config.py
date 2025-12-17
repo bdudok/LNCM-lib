@@ -13,6 +13,7 @@ class GuiConfig:
     TagFieldWidth = 100
     plot_canvas_size = (9, 3) #inches,
     ROI_preview_default = 'avgmax'
+    zoomfactor = 4.0 #for ROI editor
 
 
 class State(Enum):
