@@ -9,7 +9,7 @@ from multiprocessing import Process
 
 
 def normalize_trace(session: ImagingSession, cells=None, save=True,
-                    gauss_sigma=3, monotonic=None, percentile=1,
+                    gauss_sigma=3, monotonic=None, percentile=1, exclude_move=True,
                     exclude_seizures_flag=False, exclude_sz=None,
                     keep_traces=False):
     '''
@@ -32,7 +32,10 @@ def normalize_trace(session: ImagingSession, cells=None, save=True,
     norm_traces[:] = numpy.nan
     trace_cache = {}
 
-    exclude_move = gapless(session.pos.speed, int(fps), threshold=1, expand=int(fps))
+    if exclude_move:
+        exclude_move = gapless(session.pos.speed, int(fps), threshold=1, expand=int(fps))
+    else:
+        exclude_move = numpy.zeros(session.ca.frames, dtype='bool')  # we don't want to exclude cells if mouse is running much
 
     if exclude_seizures_flag:
         if exclude_sz is None:
@@ -56,8 +59,8 @@ def normalize_trace(session: ImagingSession, cells=None, save=True,
         y[exclude_move] = numpy.nan
         y[[x + 1 for x in diff_indices]] = numpy.nan
         y[[x + 2 for x in diff_indices]] = numpy.nan
-        y[:int(fps)] = numpy.nan
-        y[-int(fps):] = numpy.nan
+        y[:int(fps*2)] = numpy.nan
+        y[-int(fps*2):] = numpy.nan
         # exclude seizures
         if exclude_seizures_flag:
             y[exclude_sz] = numpy.nan

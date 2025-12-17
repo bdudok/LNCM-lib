@@ -55,6 +55,9 @@ def register(proc_path, prefix, config):
     ref_channel = channelnames[0]  # for now
     config.registered_suffix = f'_registered_{ref_channel}.npy'
     fps = session.fps
+    if fps < (config.displacement_lowpass * 2):
+        lprint(None, f'FPS is {fps}, too low for filter setting {config.displacement_lowpass} Hz')
+        return 0
 
     memmap_fn = os.path.join(config.scratch_path, prefix + '_raw.npy')
     oPath = touch_path(proc_path, prefix, 'GEVIReg')
@@ -107,6 +110,7 @@ def register(proc_path, prefix, config):
         s2pr = ops['meanImg']
         norm_s2pr = norm_img(s2pr, s2pr.min(), s2pr.max() - s2pr.min())
         ref_offset = phase_cross_correlation(norm_s2pr, r, upsample_factor=10)[0]
+        config.S2P_offset = ref_offset
         lprint(None, f'Offset from S2P reference: {ref_offset}')
         r = norm_s2pr # this updates the reference for upcoming steps
 
