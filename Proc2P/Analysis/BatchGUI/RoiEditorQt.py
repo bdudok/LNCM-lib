@@ -34,6 +34,13 @@ class AddModes(Enum):
     PRESERVE = 2
 
 
+class FreehandModes(Enum):
+    ADD = 0
+    NEW = 1
+
+
+
+
 class GUI_main(QtWidgets.QMainWindow):
     __name__ = 'ROIEditor'
 
@@ -334,30 +341,50 @@ class GUI_main(QtWidgets.QMainWindow):
         self.update_preview()
 
     def draw_new_ROI(self, pos, widget):
-        self.zoomfactor = self.config.zoomfactor
-        point = self.coord_from_click(pos, widget)
-        xsize = self.ROI_windows.width() / self.zoomfactor / self.rescale_factor
-        ysize = self.ROI_windows.height() / self.zoomfactor / self.rescale_factor
-        x0 = int(max(0, self.image_w - xsize, point[0] / self.rescale_factor - xsize / 2))
-        y0 = int(max(0, self.image_h - ysize, point[1] / self.rescale_factor - ysize / 2))
+        self.zoomfactor = self.config.zoomfactor # display size over actual image size
+        # clicked point in image coordinates
+        point = [x / self.rescale_factor for x in self.coord_from_click(pos, widget)]
+        # desired size of the cropped out image region
+        xsize = self.ROI_windows.width() / self.zoomfactor
+        ysize = self.ROI_windows.height() / self.zoomfactor
+        #corners of the crop (image coordinates
+        x0 = int(max(0, min(self.image_w - xsize, point[0] - xsize / 2)))
+        y0 = int(max(0, min(self.image_h - ysize, point[1] - ysize / 2)))
         x1 = int(min(x0 + xsize, self.image_w))
         y1 = int(min(y0 + ysize, self.image_h))
-        print(x0, x1, y0, y1)
+        #scaled up image
         img = numpy.ascontiguousarray(self.img[y0:y1, x0:x1])
         h, w, ch = img.shape
-        print(h, w)
         qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
-        self.zoom_w = (x1 - x0) * self.rescale_factor * self.zoomfactor
-        self.zoom_h = (y1 - y0) * self.rescale_factor * self.zoomfactor
-        print(self.zoom_w, self.zoom_h, self.rescale_factor, self.zoomfactor)
+        self.zoom_w = (x1 - x0) * self.zoomfactor
+        self.zoom_h = (y1 - y0) * self.zoomfactor
         self.zoom_image = qimg.scaled(self.zoom_w , self.zoom_h,
                                       QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        #draw the existing ROIs on the image
+        painter = self.get_painter(self.zoom_image)
+        painter.setPen(QtGui.QPen(QtCore.Qt.magenta, 1))
+        for poly in self.saved_rois:
+            scaled_poly = []
+            for p in poly:
+                x = (p[0] - x0) * self.zoomfactor
+                y = (p[1] - y0) * self.zoomfactor
+                if (0 < x < self.zoom_w) and (0 < y < self.zoom_h):
+                    scaled_poly.append(QtCore.QPointF(x, y))
+            if len(scaled_poly) > 3:
+                painter.drawPolygon(QtGui.QPolygonF(scaled_poly))
+        painter.end()
+
         self.zoom_corner = [x0, y0]
+        self.zoom_point = point
         self.lasso('new')
 
     def lasso(self, mode):
-        lasso = FreehandPolygonWidget(self, mode=mode)
-        lasso.exec() #TODO implement scaling back to image coords when mode is new
+        if mode == 'new':
+            freehand_mode = FreehandModes.NEW
+        else:
+            freehand_mode = FreehandModes.ADD
+        lasso = FreehandPolygonWidget(self, mode=freehand_mode)
+        lasso.exec()
         ps = lasso.polys
         if 'add' in mode:
             rois = []
@@ -497,22 +524,23 @@ class GUI_main(QtWidgets.QMainWindow):
 
 
 class FreehandPolygonWidget(QtWidgets.QDialog):
-    def __init__(self, parent=None, mode='add'):
+    def __init__(self, parent=None, mode=FreehandModes.ADD):
         super().__init__(parent)
         self.setWindowTitle("Lasso")
         self.mode = mode
 
-        if mode == 'add':
+        if mode == FreehandModes.ADD:
             self.image = parent.lasso_image
             self.image_h = parent.image_h
             self.image_w = parent.image_w
             self.rescale_factor = parent.rescale_factor
-        elif mode == 'new':
+        elif mode == FreehandModes.NEW:
             self.image = parent.zoom_image
-            print(self.image.width(),self.image.height() )
             self.image_h = parent.zoom_h
             self.image_w = parent.zoom_w
-            self.rescale_factor = parent.rescale_factor * parent.zoomfactor
+            self.zoom_offset = parent.zoom_corner
+            self.zoom_point = parent.zoom_point
+            self.rescale_factor = parent.zoomfactor
 
         self.widget = QtWidgets.QWidget(self)
         self.widget.layout = QtWidgets.QVBoxLayout()
@@ -522,11 +550,14 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
         self.label.setPixmap(QtGui.QPixmap.fromImage(self.image))
         self.widget.layout.addWidget(self.label)
         apply_layout(self.widget)
+        self.first_pos = None
 
         self.setMouseTracking(True)
         self._drawing = False
         self._points = []  # list of QPointF
         self.polys = []
+        # if mode == FreehandModes.NEW:
+        #     self.move_cursor_to_clicked()
 
     def mousePressEvent(self, event):
         global_pos = event.globalPosition().toPoint()
@@ -534,10 +565,16 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
         if event.button() == QtCore.Qt.LeftButton:
             self._drawing = True
             self._points.append(QtCore.QPointF(child_pos))
+            if self.first_pos is None:
+                self.first_pos = child_pos
             self.update()
-        elif event.button() == QtCore.Qt.RightButton and self._drawing:
-            self.update()
+        elif event.button() == QtCore.Qt.RightButton:
             self.finishPoly()
+
+    # def move_cursor_to_clicked(self):
+    #     p = [round((self.zoom_point[i] - self.zoom_offset[i]) * self.rescale_factor) for i in (0, 1)]
+    #     QtGui.QCursor.setPos(self.label.mapToGlobal(QtCore.QPoint(*p)))
+    #     #this does not seem to do anything.
 
     def mouseMoveEvent(self, event):
         if self._drawing and (event.buttons() & QtCore.Qt.LeftButton):
@@ -548,29 +585,47 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
 
     # def mouseReleaseEvent(self, event):
     #     if event.button() == QtCore.Qt.LeftButton and self._drawing:
-    #         self._drawing = False
-    #         self.finishPoly()
+    #         global_pos = event.globalPosition().toPoint()
+    #         child_pos = self.label.mapFromGlobal(global_pos)
+    #         self._points.append(QtCore.QPointF(child_pos))
 
     def finishPoly(self):
-        rescaled = []
-        offset_x = (self.label.width() - self.image_w * self.rescale_factor) / 2
-        offset_y = (self.label.height() - self.image_h * self.rescale_factor) / 2
-        for p in self._points:
-            pix_x = max(0, min(self.image_w, (p.x() - offset_x) / self.rescale_factor))
-            pix_y = max(0, min(self.image_h, (p.y() - offset_y) / self.rescale_factor))
-            rescaled.append([pix_x, pix_y])
-        simplified = [[round(x, 1) for x in rescaled[0]]]
-        for p in rescaled[1:]:
-            xdiff = abs(p[0] - simplified[-1][0])
-            ydiff = abs(p[1] - simplified[-1][1])
-            if max(xdiff, ydiff) > 1:
-                simplified.append([round(x, 1) for x in p])
-        self.polys.append(simplified)
+        if len(self._points) > 3:
+            #close poly and draw it
+            self._drawing = True
+            self._points.append(QtCore.QPointF(self.first_pos))
+            self.paintEvent(None)
+
+            rescaled = []
+            #correct with image position in parent widget
+            if self.mode == FreehandModes.ADD:
+                offset_x = (self.label.width() - self.image_w * self.rescale_factor) / 2
+                offset_y = (self.label.height() - self.image_h * self.rescale_factor) / 2
+            elif self.mode == FreehandModes.NEW:
+                offset_x = (self.label.width() - self.image_w) / 2
+                offset_y = (self.label.height() - self.image_h) / 2
+            for p in self._points:
+                # scale back to image coordinates
+                pix_x = max(0, min(self.image_w, (p.x() - offset_x) / self.rescale_factor))
+                pix_y = max(0, min(self.image_h, (p.y() - offset_y) / self.rescale_factor))
+                rescaled.append([pix_x, pix_y])
+            if self.mode == FreehandModes.NEW:
+                #factor in that zoomed image is cropped
+                rescaled = [[p[0] + self.zoom_offset[0], p[1] + self.zoom_offset[1]] for p in rescaled]
+            simplified = [[round(x, 1) for x in rescaled[0]]]
+            for p in rescaled[1:]:
+                xdiff = abs(p[0] - simplified[-1][0])
+                ydiff = abs(p[1] - simplified[-1][1])
+                if max(xdiff, ydiff) > 1:
+                    simplified.append([round(x, 1) for x in p])
+            self.polys.append(simplified)
         self._points = []
         self._drawing = False
+        self.first_pos = None
 
     def paintEvent(self, event):
-        super().paintEvent(event)
+        if event is not None:
+            super().paintEvent(event)
         if not self._points:
             return
         painter = QtGui.QPainter(self.image)
