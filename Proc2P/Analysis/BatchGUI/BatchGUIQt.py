@@ -13,12 +13,15 @@ import sys
 from Proc2P.utils import logger, lprint
 from Proc2P.Analysis.BatchGUI.Config import *
 from Proc2P.Analysis.AssetFinder import AssetFinder
-
+# from Proc2P.Analysis.BatchGUI.RoiEditorQt import GUI_main as RoiEditorGUI
+from Proc2P.Analysis.BatchGUI.RoiEditorQt import launch_in_subprocess as RoiEditorGUI
 '''
 Gui for viewing and processing 2P data.
 This file just defines widgets, all functions are imported from the analysis classes or the legacy (Tk) BatchGUI app.
 '''
 
+class Tabs(Enum):
+    ROI = "ROI Editor"
 
 def apply_layout(widget):
     widget.setLayout(widget.layout)
@@ -59,11 +62,11 @@ class GUI_main(QtWidgets.QMainWindow):
         n_tabs = 1
         self.make_editor_tab()
 
-
         self.tabs.resize(int(100 * n_tabs), 100)
 
         # add tabs to table
         self.table_widget.layout.addWidget(self.tabs)
+        self.tabs.currentChanged.connect(self.on_tab_changed)
         apply_layout(self.table_widget)
 
         #"console" for printing responses
@@ -132,12 +135,18 @@ class GUI_main(QtWidgets.QMainWindow):
     def make_editor_tab(self):
         self.EditorTab = QtWidgets.QWidget()
         self.EditorTab.layout = QtWidgets.QVBoxLayout()
-        #TODO import widget and connect to callbacks
-        self.tabs.addTab(self.EditorTab, "ROI editor")
+        self.EditorTab.layout.addWidget(QtWidgets.QLabel('Click on a session to open the editor in a new window.'))
+        # self.editor_widget = QtWidgets.QWidget(self)
+        # self.editor_gui = RoiEditorGUI(self, parent_widget=self.editor_widget)
+        # self.EditorTab.layout.addWidget(self.editor_widget)
+        apply_layout(self.EditorTab)
+        self.tabs.addTab(self.EditorTab, Tabs.ROI.value)
+        self.active_tab = Tabs.ROI
 
+    def update_editor_callback(self):
+        RoiEditorGUI(self.wdir, self.active_prefix[0], self.tag_label.text())
 
     def make_realtime_tab(self):
-
         self.realTimeTab = QtWidgets.QWidget()
         self.realTimeTab.layout = QtWidgets.QVBoxLayout()
 
@@ -167,15 +176,8 @@ class GUI_main(QtWidgets.QMainWindow):
         self.realTimeTab.setLayout(self.realTimeTab.layout)
         self.tabs.addTab(self.realTimeTab, "RealTime")
 
-    def make_detector_tab(self):
-        self.detectorTab = QtWidgets.QWidget()
-        self.detectorTab.layout = QtWidgets.QVBoxLayout()
-        self.tabs.addTab(self.detectorTab, "Detectors")
-
-
-    def list_clicked(self):
-        pass
-        # self.log_list
+    def on_tab_changed(self, index):
+        self.active_tab = Tabs(self.tab.tabText(index))
 
     def save_gui_state(self):
         for fieldname in self.saved_fields:
@@ -186,9 +188,6 @@ class GUI_main(QtWidgets.QMainWindow):
             self.settings_dict[fieldname] = v
         with open(self.settings_filename, 'w') as f:
             json.dump(self.settings_dict, f)
-
-    def set_state(self, state):
-        pass
 
     def select_path_callback(self):
         start_dir = self.wdir
@@ -207,6 +206,8 @@ class GUI_main(QtWidgets.QMainWindow):
     def set_prefix(self):
         self.active_prefix = [x.text() for x in self.prefix_list.selectedItems()]
         self.prefix_label.setText(self.active_prefix[0])
+        if self.active_tab == Tabs.ROI:
+            self.update_editor_callback()
 
     def setup_live_fig(self):
         ca = self.FigCanvasRT.ax

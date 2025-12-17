@@ -22,6 +22,7 @@ import tifffile
 from shapely.geometry import Polygon, Point
 import matplotlib.path as mplpath
 import cv2
+from subprocess import Popen
 
 '''
 Gui for manually drawing ROIs and editing ROI sets.
@@ -38,28 +39,39 @@ class FreehandModes(Enum):
     ADD = 0
     NEW = 1
 
-
-
-
-class GUI_main(QtWidgets.QMainWindow):
+class GUI_widget(QtWidgets.QWidget):
     __name__ = 'ROIEditor'
+    #This doesn't actually work - the ide would be to sub this from GUI-main and
+    # have it live in a widget of the calling BATCHGUI app. Using as a modal instead
 
-    def __init__(self, app, title='Editor', parent_widget=None):
-        super().__init__()
-        self.setWindowTitle(title)
-        self.app = app
-        self.config = GuiConfig()
+    def __init__(self, parent, parent_widget, config=None):
+        super().__init__(parent)
+        if config is None:
+            config = GuiConfig()
+        self.config = config
         self.widget = parent_widget
-        if parent_widget is None:
-            self.widget = QtWidgets.QWidget(self)
 
         self.state = State.SETUP
         self.make_widgets()
 
-        if parent_widget is None:
-            self.setCentralWidget(self.widget)
-            self.setGeometry(*self.config.MainWindowGeometry)
-            self.show()
+
+class GUI_main(QtWidgets.QMainWindow):
+    __name__ = 'ROIEditor'
+    def __init__(self, app, title='Editor', config=None):
+        super().__init__()
+        self.setWindowTitle(title)
+        self.app = app
+        if config is None:
+            config = GuiConfig()
+        self.config = config
+        self.widget = QtWidgets.QWidget(self)
+
+        self.state = State.SETUP
+        self.make_widgets()
+
+        self.setCentralWidget(self.widget)
+        self.setGeometry(*self.config.MainWindowGeometry)
+        self.show()
 
     def eventFilter(self, obj, event):
         if self.state == State.LIVE:
@@ -341,26 +353,26 @@ class GUI_main(QtWidgets.QMainWindow):
         self.update_preview()
 
     def draw_new_ROI(self, pos, widget):
-        self.zoomfactor = self.config.zoomfactor # display size over actual image size
+        self.zoomfactor = self.config.zoomfactor  # display size over actual image size
         # clicked point in image coordinates
         point = [x / self.rescale_factor for x in self.coord_from_click(pos, widget)]
         # desired size of the cropped out image region
         xsize = self.ROI_windows.width() / self.zoomfactor
         ysize = self.ROI_windows.height() / self.zoomfactor
-        #corners of the crop (image coordinates
+        # corners of the crop (image coordinates
         x0 = int(max(0, min(self.image_w - xsize, point[0] - xsize / 2)))
         y0 = int(max(0, min(self.image_h - ysize, point[1] - ysize / 2)))
         x1 = int(min(x0 + xsize, self.image_w))
         y1 = int(min(y0 + ysize, self.image_h))
-        #scaled up image
+        # scaled up image
         img = numpy.ascontiguousarray(self.img[y0:y1, x0:x1])
         h, w, ch = img.shape
         qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
         self.zoom_w = (x1 - x0) * self.zoomfactor
         self.zoom_h = (y1 - y0) * self.zoomfactor
-        self.zoom_image = qimg.scaled(self.zoom_w , self.zoom_h,
+        self.zoom_image = qimg.scaled(self.zoom_w, self.zoom_h,
                                       QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
-        #draw the existing ROIs on the image
+        # draw the existing ROIs on the image
         painter = self.get_painter(self.zoom_image)
         painter.setPen(QtGui.QPen(QtCore.Qt.magenta, 1))
         for poly in self.saved_rois:
@@ -591,13 +603,13 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
 
     def finishPoly(self):
         if len(self._points) > 3:
-            #close poly and draw it
+            # close poly and draw it
             self._drawing = True
             self._points.append(QtCore.QPointF(self.first_pos))
             self.paintEvent(None)
 
             rescaled = []
-            #correct with image position in parent widget
+            # correct with image position in parent widget
             if self.mode == FreehandModes.ADD:
                 offset_x = (self.label.width() - self.image_w * self.rescale_factor) / 2
                 offset_y = (self.label.height() - self.image_h * self.rescale_factor) / 2
@@ -610,7 +622,7 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
                 pix_y = max(0, min(self.image_h, (p.y() - offset_y) / self.rescale_factor))
                 rescaled.append([pix_x, pix_y])
             if self.mode == FreehandModes.NEW:
-                #factor in that zoomed image is cropped
+                # factor in that zoomed image is cropped
                 rescaled = [[p[0] + self.zoom_offset[0], p[1] + self.zoom_offset[1]] for p in rescaled]
             simplified = [[round(x, 1) for x in rescaled[0]]]
             for p in rescaled[1:]:
@@ -640,23 +652,22 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
         self.label.setPixmap(QtGui.QPixmap.fromImage(self.image))
 
 
-def launch_GUI(*args, **kwargs):
-    app = QtWidgets.QApplication(sys.argv)
+def main():
+    app = QtWidgets.QApplication()
     app.setStyle('Fusion')
     font = QtGui.QFont()
     app.setFont(font)
-    gui_main = GUI_main(app, *args, **kwargs)
+    gui_main = GUI_main(app)
+    gui_main.open_session(*sys.argv[1:])
     sys.exit(app.exec())
 
-
-if __name__ == '__main__':
-    # launch_GUI()
-
+def test_launcher():
+    #
     wdir = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
     prefix = 'JEDI-Sncg124_2025-05-06_opto_burst_665'
-    # wdir = 'D:\Shares\Data\_Processed/2P\CCK/'
-    # prefix = 'Sncg146_2025-07-29_optostim_127'
-
+    # # wdir = 'D:\Shares\Data\_Processed/2P\CCK/'
+    # # prefix = 'Sncg146_2025-07-29_optostim_127'
+    #
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle('Fusion')
     font = QtGui.QFont()
@@ -665,3 +676,11 @@ if __name__ == '__main__':
     gui.open_session(wdir, prefix, preferred_tag='test')
 
     sys.exit(app.exec())
+
+def launch_in_subprocess(*args, **kwargs):
+    Popen([sys.executable, Path(__file__), *args])
+
+if __name__ == '__main__':
+    main()
+
+    # test_launcher()
