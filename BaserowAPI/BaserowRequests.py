@@ -100,6 +100,9 @@ class GetSessions:
         self.results = pandas.DataFrame(resp.json()['results'])
         if not len(self.results):
             print(f'{prefix} not found in DB')
+        elif len(self.results) > 1:
+            print('More than one entry in db. Check duplicates:')
+            print(self.results)
         return self.results
 
     def get_mouse(self, item=None, mtag=None, ret_sex=False):
