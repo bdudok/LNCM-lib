@@ -658,7 +658,7 @@ def main():
     font = QtGui.QFont()
     app.setFont(font)
     gui_main = GUI_main(app)
-    gui_main.open_session(*sys.argv[1:])
+    gui_main.open_session(*sys.argv[1:]) #pass path, prefix, tag
     sys.exit(app.exec())
 
 def test_launcher():
@@ -678,9 +678,10 @@ def test_launcher():
     sys.exit(app.exec())
 
 def launch_in_subprocess(*args, **kwargs):
+    #can be called with args specifying the session to launch a standalone window
     Popen([sys.executable, Path(__file__), *args])
 
 if __name__ == '__main__':
     main()
-
+    # the main block should only call main() for this to work as a subprocess - for testing, use test_launcher instead
     # test_launcher()
