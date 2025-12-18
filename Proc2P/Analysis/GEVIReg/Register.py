@@ -39,8 +39,9 @@ proc_path = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
 prefix = 'JEDI-Sncg124_2025-04-24_burst_613'
 config = RegConfig()
 
-def register(proc_path, prefix, config):
-# if True:
+
+def register(proc_path, prefix, config=None):
+    # if True:
     verbose = True
     debug = True
 
@@ -48,7 +49,8 @@ def register(proc_path, prefix, config):
     if verbose:
         lprint(None, 'Opening input')
     use_reference = 'S2P'
-    config = RegConfig()
+    if config is None:
+        config = RegConfig()
     session = ImagingSession(proc_path, prefix, tag='skip')
     info = session.si
     channelnames = info["channelnames"]
@@ -112,14 +114,14 @@ def register(proc_path, prefix, config):
         ref_offset = phase_cross_correlation(norm_s2pr, r, upsample_factor=10)[0]
         config.S2P_offset = ref_offset
         lprint(None, f'Offset from S2P reference: {ref_offset}')
-        r = norm_s2pr # this updates the reference for upcoming steps
+        r = norm_s2pr  # this updates the reference for upcoming steps
 
-    #refine reference
+    # refine reference
     snr = numpy.nan_to_num(numpy.average(d, axis=(1, 2)) / numpy.std(d, axis=(1, 2)))
     snr_lim = min(1, numpy.nanpercentile(snr[ref_frames], 25))
     ref_frames = [x for x in ref_frames if snr[x] > snr_lim]
     print(f'After exclude low snr, {len(ref_frames)} ref frames')
-    max_offset = max([abs(x) for x in reg_offset]) # to add to limit for keeping frames as stable reference
+    max_offset = max([abs(x) for x in reg_offset])  # to add to limit for keeping frames as stable reference
     avgs = numpy.zeros([len(ref_frames), *first_ref.shape])
     n_roll = round(config.rolling_avg_size / 1000 * fps)
     disps = numpy.zeros((len(ref_frames), 2))
@@ -138,16 +140,16 @@ def register(proc_path, prefix, config):
     if len(stable_refs) < sr_size:
         add_sr = [x for x in range(len(ref_frames)) if x not in stable_refs]
         print(len(add_sr))
-        stable_refs.extend(numpy.random.choice(add_sr, sr_size-len(stable_refs), replace=False))
+        stable_refs.extend(numpy.random.choice(add_sr, sr_size - len(stable_refs), replace=False))
         print(f'After adding, {len(stable_refs)} "stable" ref frames')
     for i in stable_refs:
         f = ref_frames[i]
         tforms = transform.SimilarityTransform(translation=disps[i])
         avgs[i] = transform.warp(data[f], tforms, order=1, preserve_range=True).astype('float')
 
-    #update reference one last time for using with the final registration
+    # update reference one last time for using with the final registration
     refined_reference = numpy.average(avgs[stable_refs], axis=0).squeeze()
-    avgmax = numpy.nanpercentile(avgs[stable_refs], 95, axis=0).squeeze() #this will be saved as a preview
+    avgmax = numpy.nanpercentile(avgs[stable_refs], 95, axis=0).squeeze()  # this will be saved as a preview
     r = norm_img(refined_reference, norm_min, norm_range)
 
     # init the reg timeseries
@@ -206,7 +208,6 @@ def register(proc_path, prefix, config):
         reg_movie[i] = transform.warp(frame, tforms, order=1, mode='symmetric', preserve_range=True)
     reg_movie.flush()
 
-
     if verbose:
         lprint(None, 'Saving previews')
 
@@ -226,7 +227,7 @@ def register(proc_path, prefix, config):
     ca.imshow(reg_movie[ref_frames].mean(axis=0).squeeze())
     ca.set_title('Output (ref frames)')
 
-    #add a sample to have a general preview of registration quality
+    # add a sample to have a general preview of registration quality
 
     spaced_frames = numpy.linspace(config.ref_margin, n_frames - config.ref_margin, config.ref_size).astype('int64')
     # exp_indices = sort_disp[spaced_frames]
