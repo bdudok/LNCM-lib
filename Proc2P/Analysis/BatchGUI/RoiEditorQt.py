@@ -512,6 +512,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.sizes = {}
         self.paths = {}
         self.incl = {}
+        self.size_lims = [0, 10]
         all_sizes = []
         items = [(self.ROI_list.itemText(i), self.ROI_list.itemData(i)) for i in range(self.ROI_list.count())]
         for key, polys in items:
@@ -525,7 +526,9 @@ class GUI_main(QtWidgets.QMainWindow):
                 mp = mplpath.Path(poly)
                 self.paths[key].append(mp)
             all_sizes.extend(self.sizes[key])
-        self.size_lims = [int(min(all_sizes)), int(max(all_sizes) + 1)]
+        if len(all_sizes):
+            self.size_lims = [int(min(all_sizes)), int(max(all_sizes) + 1)]
+
 
         sliders = (self.min_size, self.max_size)
         for slider in sliders:
