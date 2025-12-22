@@ -13,7 +13,7 @@ class AssetFinder:
         if path is not None:
             self.update()
 
-    def update(self, path=None):
+    def update(self, path=None, reverse=True):
         if path is not None:
             self.path = path
         self.prefixes = []
@@ -22,7 +22,7 @@ class AssetFinder:
             if os.path.isdir(f):
                 if os.path.exists(os.path.join(f, f + '_SessionInfo.json')):
                     self.prefixes.append(f)
-        self.prefixes.sort(reverse=True)
+        self.prefixes.sort(reverse=reverse)
 
     def get_prefixes(self):
         return self.prefixes
