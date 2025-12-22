@@ -5,8 +5,7 @@ import json
 from dataclasses import dataclass, asdict
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.utils import *
-from Proc2P.Bruker.LoadMovie import LoadMovie, get_raw_movies
-from Proc2P.Bruker.PreProc import SessionInfo
+from Proc2P.Bruker.LoadMovie import get_raw_movies
 from skimage.registration import phase_cross_correlation
 from skimage import transform
 from scipy.signal import bessel, sosfiltfilt
@@ -33,6 +32,8 @@ class RegConfig:
     setting_suffix: str = '_regconfig.json'
     registered_suffix: str = '_registered.npy'
     scratch_path: str = 'E:\MCC\BD'
+    overwrite = False
+    ref_channel = 'Ch2'
 
 
 proc_path = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
@@ -51,18 +52,23 @@ def register(proc_path, prefix, config=None):
     use_reference = 'S2P'
     if config is None:
         config = RegConfig()
+    ref_channel = config.ref_channel
+    oPath = touch_path(proc_path, prefix, 'GEVIReg')
+    config.registered_suffix = f'_registered_{ref_channel}.npy'
+    registered_output_handle = os.path.join(oPath, prefix + config.registered_suffix)
+    if (not config.overwrite) and os.path.exists(registered_output_handle):
+        lprint(None, 'Registered output found, skipping')
+        return 0
+
     session = ImagingSession(proc_path, prefix, tag='skip')
     info = session.si
-    channelnames = info["channelnames"]
-    ref_channel = channelnames[0]  # for now
-    config.registered_suffix = f'_registered_{ref_channel}.npy'
+
     fps = session.fps
     if fps < (config.displacement_lowpass * 2):
         lprint(None, f'FPS is {fps}, too low for filter setting {config.displacement_lowpass} Hz')
         return 0
 
     memmap_fn = os.path.join(config.scratch_path, prefix + '_raw.npy')
-    oPath = touch_path(proc_path, prefix, 'GEVIReg')
     disps_fn = os.path.join(oPath, prefix + config.disps_suffix)
     if not os.path.exists(memmap_fn):
         if verbose:
@@ -201,7 +207,7 @@ def register(proc_path, prefix, config=None):
     with open(os.path.join(oPath, prefix + config.setting_suffix), "w") as f:
         json.dump(asdict(config), f, indent=2)
 
-    reg_movie = open_memmap(os.path.join(oPath, prefix + config.registered_suffix), mode='w+',
+    reg_movie = open_memmap(registered_output_handle, mode='w+',
                             shape=data.shape, dtype=numpy.uint16, )
     for i, frame in enumerate(data):
         tforms = transform.SimilarityTransform(translation=f_disp[i])
@@ -255,3 +261,4 @@ def register(proc_path, prefix, config=None):
                 preview[..., chi] = x
         imwrite(previewname, preview)
     plt.close()
+
