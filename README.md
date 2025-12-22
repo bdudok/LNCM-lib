@@ -1,5 +1,7 @@
 # LNCM-lib
 Resources for data analysis in LNCM / Dudok lab
+Recently updated to leave Python 3.6 behind - now all code works in the same 3.11 env. Reach out if you need help with the transition.
+
 
 # The following libraries are included:
 
