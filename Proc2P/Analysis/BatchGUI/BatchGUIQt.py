@@ -198,7 +198,7 @@ class GUI_main(QtWidgets.QMainWindow):
             self.wdir = user_input
             self.path_label.setText(self.wdir)
             os.chdir(self.wdir)
-            self.assets.update(self.wdir)
+            self.assets.update(self.wdir, reverse=False)
             self.current_selected_i = None
             self.prefix_list.clear()
             self.prefix_list.addItems(self.assets.get_prefixes())

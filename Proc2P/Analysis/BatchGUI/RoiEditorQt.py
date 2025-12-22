@@ -267,12 +267,13 @@ class GUI_main(QtWidgets.QMainWindow):
             self.lasso_image = copy.copy(qimg_resized)
 
             # Draw polygons on input
-            painter = self.get_painter(qimg_resized)
-            for poly, incl in zip(self.polys, self.incl[self.current_key]):
-                color = (QtCore.Qt.gray, QtCore.Qt.yellow)[int(incl)]
-                painter.setPen(QtGui.QPen(color, 1))
-                self.paint_poly(poly, painter)
-            painter.end()
+            if self.current_key:
+                painter = self.get_painter(qimg_resized)
+                for poly, incl in zip(self.polys, self.incl[self.current_key]):
+                    color = (QtCore.Qt.gray, QtCore.Qt.yellow)[int(incl)]
+                    painter.setPen(QtGui.QPen(color, 1))
+                    self.paint_poly(poly, painter)
+                painter.end()
             self.input_window.setPixmap(QtGui.QPixmap.fromImage(qimg_resized))
 
             # Draw polygons on output
@@ -561,8 +562,15 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
         self.widget.layout = QtWidgets.QVBoxLayout()
         self.widget.setFixedWidth(self.image.width())
         self.widget.setFixedHeight(self.image.height())
+
         self.label = QtWidgets.QLabel()
+        self.label.setFrameStyle(QtWidgets.QFrame.NoFrame)
+        self.label.setMargin(0)
+        self.label.setContentsMargins(0, 0, 0, 0)
+        self.label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        self.label.setScaledContents(False)
         self.label.setPixmap(QtGui.QPixmap.fromImage(self.image))
+
         self.widget.layout.addWidget(self.label)
         apply_layout(self.widget)
         self.first_pos = None
@@ -612,13 +620,13 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
             self.paintEvent(None)
 
             rescaled = []
-            # correct with image position in parent widget
+            # correct with image position in parent widget - not correct when label margin set to 0
             if self.mode == FreehandModes.ADD:
-                offset_x = (self.label.width() - self.image_w * self.rescale_factor) / 2
-                offset_y = (self.label.height() - self.image_h * self.rescale_factor) / 2
+                offset_x = 0#(self.label.width() - self.image_w * self.rescale_factor) / 2
+                offset_y = 0#(self.label.height() - self.image_h * self.rescale_factor) / 2
             elif self.mode == FreehandModes.NEW:
-                offset_x = (self.label.width() - self.image_w) / 2
-                offset_y = (self.label.height() - self.image_h) / 2
+                offset_x = 0# (self.label.width() - self.image_w) / 2
+                offset_y = 0#(self.label.height() - self.image_h) / 2
             for p in self._points:
                 # scale back to image coordinates
                 pix_x = max(0, min(self.image_w, (p.x() - offset_x) / self.rescale_factor))
