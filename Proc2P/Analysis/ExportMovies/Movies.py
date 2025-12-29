@@ -10,6 +10,7 @@ import h5py
 from scipy.signal import decimate, resample
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.Analysis.LoadPolys import LoadImage, LoadPolys
+from Proc2P.Analysis.LoadPolys import Source as imgSource
 from matplotlib.patches import Circle
 from Proc2P.Analysis.CaTrace import CaTrace
 import json
@@ -56,6 +57,7 @@ class Movie:
         '''
         if not render:
             render = None
+        self.sliders_enabled = False
         self.playback_speed = playback_speed
         self.refresh_rate = refresh_rate
         self.panels = panels
@@ -120,7 +122,7 @@ class Movie:
             self.time = start
             while self.time < stop:
                 if prog > refresh_rate:
-                    cv2.waitKey(3) # to allow rendering occasional frames while exporting
+                    cv2.waitKey(3)  # to allow rendering occasional frames while exporting
                     prog = 0
                 prog += 1
                 self.tick()
@@ -256,175 +258,92 @@ class TestPanel(Panel):
         return im
 
 
-# class Panel_2PMovie(Panel):
-#     def __init__(self, x, y, prefix, fps, refresh=15, smoothing=0, channel=(0,), print_frame=True, print_time=False,
-#                  trim_x=70, trim_y=10, load_polys=False, scaling=False, tag=None, bbox=None, extra_top_cut=0,
-#                  show_all=False, show_points=None, color=None,
-#                  gamma=1.0, dff=False, dff_baseline=None, dff_scale_max=3, mc=None, print_title=(None, 0),
-#                  show_scale=0, print_offset=0, time_offset=0):
-#         info = loadmat(prefix + '.mat')['info']
-#         p = (x, y, info['sz'][1] - 2 * trim_x, info['sz'][0] - 2 * trim_y - extra_top_cut)
-#         super().__init__(p)
-#         self.etc = extra_top_cut
-#         self.gamma = gamma
-#         self.refresh = float(fps) / refresh
-#         self.fps = fps
-#         self.prefix = prefix
-#         self.cell_active = -1
-#         self.cell_slider = -1
-#         self.show_all = show_all
-#         self.show_points = show_points
-#         self.smoothing = smoothing
-#         self.channel = channel
-#         self.color=color
-#         self.print_frame = print_frame
-#         self.print_time = print_time
-#         self.print_offset = print_offset
-#         self.time_offset = time_offset
-#         self.show_scale = show_scale
-#         self.title, self.title_pos = print_title  # label and its position
-#         self.trim_x = trim_x
-#         self.trim_y = trim_y
-#         self.bbox = bbox
-#         self.load_polys = load_polys
-#         self.movie_frame = 0
-#         self.scaling = scaling
-#         self.tag = tag
-#         self.dff = dff
-#         self.dff_baseline = dff_baseline
-#         self.dff_scale_max = dff_scale_max
-#         self.mc_kw = mc
-#         # for picklability:
-#         self.cam = None
-#         self.polys = None
-#         self.dff_values = {}
-#
-#     def nonpickle_init(self):
-#         if self.mc_kw == None:
-#             self.cam = LoadImage(self.prefix, explicit_need_data=True,)
-#         elif self.mc_kw == 'raw':
-#             self.cam = LoadImage(self.prefix, explicit_need_data=True, raw=True)
-#         else:
-#             fn = self.prefix + '_' + self.mc_kw + '.sbx'
-#             self.cam = LoadImage(self.prefix, explicit_need_data=True, force=fn)
-#         if self.load_polys:
-#             self.polys = LoadPolys(self.prefix, tag=self.tag)
-#             self.cms = numpy.empty((len(self.polys.data), 2))
-#             for i in range(len(self.polys.data)):
-#                 self.cms[i, :] = self.polys[i].mean(axis=0)
-#         if self.dff:
-#             print('Determining baseline for DFF')
-#             trim_x, trim_y = self.trim_x, self.trim_y
-#             for channel in self.channel:
-#                 a = self.cam.data[slice(*self.dff_baseline),
-#                     trim_y + self.etc:-trim_y, trim_x:-trim_x, channel].mean(axis=0)
-#                 self.dff_values[channel] = 65535 - a
-#         if self.show_scale > 0:
-#             # calculate number of pixels to show scale
-#             self.show_scale = int(self.show_scale / self.cam.pixelsize)
-#
-#     def run_update(self):
-#         m_frame = int(self.frame / self.refresh)
-#         trim_x, trim_y = self.trim_x, self.trim_y
-#         if self.load_polys:
-#             self.pick_cell()
-#         if m_frame != self.movie_frame:
-#             self.im[:, :, :] = 0
-#             self.movie_frame = m_frame
-#             for ci, channel in enumerate(self.channel):
-#                 if self.smoothing == 0:
-#                     a = numpy.array(self.cam.data[m_frame, trim_y + self.etc:-trim_y, trim_x:-trim_x, channel],
-#                                     dtype='float')
-#                 else:  # perfofrm smoothing if set:
-#                     t0 = int(max(0, m_frame - self.smoothing))
-#                     t1 = int(min(self.cam.nframes, m_frame + self.smoothing + 1))
-#                     a = self.cam.data[t0:t1, trim_y + self.etc:-trim_y, trim_x:-trim_x, channel].mean(axis=0)
-#                 a = 65535 - a
-#                 if self.dff:
-#                     dff = numpy.maximum(a - self.dff_values[channel], 0) / self.dff_values[channel]
-#                     dff = numpy.minimum(dff, self.dff_scale_max)
-#                     a = dff / self.dff_scale_max
-#                 else:
-#                     a /= 65535
-#                 if self.scaling:
-#                     a = numpy.minimum(a * self.scaling, 1)
-#                 a = a ** (1.0 / self.gamma)
-#                 #add to image
-#                 if self.color is None:
-#                     self.im[:, :, channel + 1] = (a * 255).astype('uint8')
-#                 else:
-#                     color = self.color[ci]
-#                     for vi, v in enumerate(color):
-#                         if v:
-#                             self.im[:, :, vi] = (a * 255 * v).astype('uint8')
-#             if self.print_frame:
-#                 cv2.putText(self.im, str(m_frame), (2, 22 + self.print_offset),
-#                             fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1, color=(250, 255, 250))
-#             if self.print_time:
-#                 t = self.frame / self.fps
-#                 if t >= self.time_offset:
-#                     mins, sec = divmod(t - self.time_offset, 60)
-#                     ttext = f'{int(mins)}:{int(sec):02}'
-#                 else:
-#                     mins, sec = divmod(self.time_offset - t, 60)
-#                     ttext = f'-{int(mins)}:{int(sec):02}'
-#                 cv2.putText(self.im, ttext, (2, 22 + 22 * self.print_frame + self.print_offset),
-#                             fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1, color=(250, 255, 250))
-#             if self.title is not None:
-#                 cv2.putText(self.im, self.title, (2, self.title_pos),
-#                             fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1, color=(250, 255, 250))
-#             if self.load_polys and self.cell_active > -1:
-#                 if self.show_all:
-#                     for c in range(len(self.polys.data)):
-#                         self.cell_active = c
-#                         cv2.polylines(self.im, self.getroi(), isClosed=True, color=(255, 255, 255))
-#                 else:
-#                     cv2.polylines(self.im, self.getroi(), isClosed=True, color=(255, 255, 255))
-#             if self.show_points is not None:
-#                 for p in self.getpoints():
-#                     cv2.polylines(self.im, [numpy.array(p).transpose()], isClosed=True, color=(255, 255, 255))
-#             if self.show_scale > 0:
-#                 ypos = self.p[-1] - 10
-#                 cv2.line(self.im, (10, ypos), (10 + self.show_scale, ypos), (255, 255, 255), 2)
-#             self.updated = True
-#
-#     def pick_cell(self):
-#         if self.pick != None:
-#             x, y = self.pick
-#             x += self.trim_x
-#             y += self.trim_y
-#             mini, mind = 0, 99999
-#             for i, cm in enumerate(self.cms):
-#                 d = numpy.sqrt((x - cm[0]) ** 2 + (y - cm[1]) ** 2)
-#                 if d < mind:
-#                     # print (x, y, cm[0], cm[1], d)
-#                     mind = d
-#                     mini = i
-#             self.pick = None
-#             print(f'Cell picked: {mini}')
-#             self.parent.put_cell(mini)
-#             self.cell_active = mini
-#         elif self.slider_moved:
-#             self.cell_active = self.cell
-#
-#     def getroi(self):
-#         new = []
-#         for p in self.polys[self.cell_active]:
-#             x = int(round(p[0])) - self.trim_x
-#             y = int(round(p[1])) - self.trim_y
-#             np = [x, y]
-#             if np not in new:
-#                 new.append(np)
-#         return [numpy.array(new)]
-#
-#     def getpoints(self):
-#         new = []
-#         for p in self.show_points:
-#             circle = Circle(p, 5)
-#             p = circle.get_verts().transpose()
-#             new.append([(p[0] - self.trim_x).round().astype('int'), (p[1] - self.trim_y).round().astype('int')])
-#         return new
-#
+class Panel_2PMovie(Panel):
+    def __init__(self, x, y, procpath, prefix, trim_x=0, trim_y=0, crop=None, available_space=None, scale=1,
+                 img_source=imgSource.S2P, gamma=2.2, brightness=2,
+                 smoothing=1, channel=('Ch2', 'Ch1'),
+                 print_frame=False, print_time=False, time_offset=0, print_offset=10):
+        self.img = LoadImage(procpath, prefix, img_source)
+        h, w = self.img.info['sz']
+        if crop is None:
+            p = (x, y, int((w - 2 * trim_x) * scale), int((h - 2 * trim_y) * scale))
+        else:
+            assert available_space is not None
+            p = available_space
+            crop_w = abs(crop[1] - crop[0])
+            crop_h = abs(crop[3] - crop[2])
+            scale = min(p[2] / crop_w, p[3] / crop_h)
+            p = (x, y, int(crop_w * scale) + 1, int(crop_h * scale) + 1)
+        super().__init__(p)
+        # print(f'Movie size: {(h, w)}, p: {p}')
+        self.crop = crop
+        self.channels = channel
+        self.need_session = False  # but parent needs session
+        self.movie_frame = 0  # frame in the input video file
+        self.time_offset = time_offset
+        self.gamma = gamma
+        self.brightness = brightness
+        self.print_frame = print_frame
+        self.print_time = print_time
+        self.print_offset = print_offset
+        self.smoothing = smoothing
+        # for picklability:
+        self.handle = (procpath, prefix)
+        self.img = None
+        self.trim_x = trim_x
+        self.trim_y = trim_y
+        self.scale = scale
+        self.img_source = img_source
+
+    def nonpickle_init(self):
+        assert hasattr(self.parent, 'session')
+        self.img = LoadImage(*self.handle, self.img_source)
+
+    def run_update(self):
+        next_frame = self.parent.get_2p_frame()
+        if next_frame != self.movie_frame:
+            self.movie_frame = next_frame
+            for chi, ch in enumerate(self.channels):
+                if ch is None:
+                    self.im[..., chi] = 0
+                    continue
+                fdat = self.img.get_frame(next_frame, ch=ch)
+                if self.smoothing > 1:
+                    fdat = numpy.copy(fdat)
+                    i0 = max(0, int(next_frame - self.smoothing))
+                    for i in range(i0, i0+self.smoothing-1):
+                        fdat += self.img.get_frame(i, ch=ch)
+                    fdat = fdat / float(self.smoothing)
+
+                fdat = (self.brightness * (fdat / self.img.imdat.bitdepth)) ** (1.0 / self.gamma)
+                fdat = numpy.clip(fdat * 255, 0, 255)
+                if self.crop is None:
+                    im_data = fdat[self.trim_x:fdat.shape[0] - self.trim_x, self.trim_y:fdat.shape[1] - self.trim_y]
+                else:
+                    im_data = fdat[self.crop[0]:self.crop[1], self.crop[2]:self.crop[3]]
+                if not self.scale == 1:
+                    im_data = cv2.resize(im_data, (0, 0), fx=self.scale, fy=self.scale)
+                xmax = min(self.im.shape[0], im_data.shape[0])
+                ymax = min(self.im.shape[1], im_data.shape[1])
+                self.im[:xmax, :ymax, chi] = im_data[:xmax, :ymax]
+            if self.print_frame:
+                cv2.putText(self.im, str(next_frame), (2, 22 + self.print_offset),
+                            fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1, color=(250, 255, 250))
+            if self.print_time:
+                t = next_frame / self.parent.session.fps
+                if t >= self.time_offset:
+                    mins, sec = divmod(t - self.time_offset, 60)
+                    ttext = f'{int(mins)}:{int(sec):02}'
+                else:
+                    mins, sec = divmod(self.time_offset - t, 60)
+                    ttext = f'-{int(mins)}:{int(sec):02}'
+                cv2.putText(self.im, ttext, (2, 22 + 22 * self.print_frame + self.print_offset),
+                            fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1, color=(250, 255, 250))
+            # if self.title is not None:
+            #     cv2.putText(self.im, self.title, (2, self.title_pos),
+            #                 fontFace=cv2.FONT_HERSHEY_DUPLEX, fontScale=1, color=(250, 255, 250))
+            self.updated = True
+
 
 class Panel_MouseCam(Panel):
     def __init__(self, x, y, cam_file, gamma=2.2, scale=1,
@@ -945,7 +864,7 @@ class Sliding_LFP(Panel):
         l = self.p[2]
         xmin = l / 2 - (sample - t0) / self.nyquistrate
         xmax = l / 2 + (t1 - sample) / self.nyquistrate
-        x = numpy.linspace(xmin, xmax, t1-t0)
+        x = numpy.linspace(xmin, xmax, t1 - t0)
         self.im = numpy.ones((2 * h, l, 3), dtype=numpy.uint8) * 255
         self.im[:, l // 2, :] = 0
         y = self.plot_y[t0:t1] * h + h
