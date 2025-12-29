@@ -4,7 +4,7 @@
 
 conda create --name lncm python=3.11 -c conda-forge -c defaults --strict-channel-priority
 conda activate lncm
-conda install -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph pyedflib lsq-ellipse pandas-stubs pyarrow
+conda install -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph pyedflib lsq-ellipse pandas-stubs pyarrow qt6-multimedia
 
 
 # To use SIMA for ROI detection in 2P movies, we need a Python 3.6 env ("lncm36"), 

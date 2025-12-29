@@ -1,33 +1,20 @@
-import sys, os
+import sys
 import re
 from PySide6 import QtGui, QtWidgets, QtCore
 import os.path
 import cv2
 import datetime
 
-from PySide6.QtMultimedia import QMediaPlayer
-from PySide6.QtMultimediaWidgets import QVideoWidget
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib import pyplot as plt
 from LFP.SzDet.AppSpikeSz.SzViewData import SzReviewData
 
-from PySide6.QtCore import QDir, Qt, QUrl
-from PySide6.QtMultimedia import QMediaContent, QMediaPlayer
-from PySide6.QtMultimediaWidgets import QVideoWidget
-from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel,
-                             QPushButton, QSizePolicy, QSlider, QStyle, QVBoxLayout, QWidget)
-from PySide6.QtWidgets import QMainWindow, QWidget, QPushButton, QAction
-from PySide6.QtGui import QIcon
-import sys
-from Proc2P.Treadmill import rsync
-import os
-
-# GUI
-# import sys
-# from PySide6 import Qt
+from PySide6.QtCore import Qt
+from PySide6.QtMultimedia import QMediaPlayer
+from PySide6.QtGui import QAction
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import (QApplication, QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-                             QGroupBox, QListWidget, QAction, QAbstractItemView, QLineEdit, QCheckBox)
+from PySide6.QtWidgets import (QSlider, QStyle, QApplication, QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
+                             QGroupBox, QListWidget,QAbstractItemView,)
 
 from Proc2P.utils import *
 
@@ -308,7 +295,7 @@ class GUI_main(QtWidgets.QMainWindow):
             self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
 
     def exitCall(self):
-        sys.exit(app.exec_())
+        sys.exit(self.app.exec_())
 
     def mediaStateChanged(self, state):
         # changes icon when play/pause button are pressed
@@ -378,7 +365,7 @@ class GUI_main(QtWidgets.QMainWindow):
     def select_rec_callback(self):
         # open a recording: display filedioalog, call SzReviewData, update listbox.
 
-        fn = QtWidgets.QFileDialog.getOpenFileName(self, caption='Select Recording', directory=self.settings['pardir'],
+        fn = QtWidgets.QFileDialog.getOpenFileName(self, caption='Select Recording', dir=self.settings['pardir'],
                                                    filter=f'*{self.settings["rec_suffix"]}')
         self.wdir = os.path.dirname(fn[0])
         if self.setup == 'LNCM':

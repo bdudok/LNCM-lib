@@ -2,7 +2,7 @@ import os
 import numpy
 from sklearn import cluster
 from pyedflib import highlevel
-from envs.site_config import lfp_config
+from envs import CONFIG
 
 class EDF:
     __name__ = 'ReadEDF'
@@ -13,7 +13,7 @@ class EDF:
             self.prefix = prefix + '.edf'
         d = highlevel.read_edf(os.path.join(self.path, self.prefix))
         self.data = d[0]
-        self.fs = d[1][0][lfp_config["EDF_fs_key"]]
+        self.fs = d[1][0][CONFIG.EDF_fs_key]
         self.unit = d[1][0]['dimension']
         self.channels = [x['label'] for x in d[1]]
         self.rejection_ops = rejection_ops
