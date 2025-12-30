@@ -40,6 +40,7 @@ class SzReviewData:
         self.ch = ch
         self.tag = tag
         self.setup = setup
+        self.align = None
         self.uses_video = False #make this configurable once the functionality is ready
         self.load_data(skip_gamma)
         self.init_output()
@@ -181,23 +182,25 @@ class SzReviewData:
                                            'Time': sztimes, 'Included': '', 'Interictal': False, }, index=[sznames])
         # load previous exclusions
         fn = self.get_fn('save')
+        truthy_values = {1, True, 'TRUE'}
+        falsey_values = {0, False, 'FALSE'}
         if os.path.exists(fn):
-            saved = read_excel(fn)
+            saved = read_excel(fn, keep_index=True)
             for szname in sznames:
-                curated_sz = saved.loc[szname]
+                curated_sz = saved[saved.iloc[:, 0] == szname]
                 for fieldname in ('Included', 'Interictal'):
                     if fieldname not in saved.columns:
                         continue
-                    x = curated_sz[fieldname]
-                    if x in (1, 'TRUE', True):
+                    x = curated_sz[fieldname].item()
+                    if x in truthy_values:
                         x = True
-                    elif x in (0, 'FALSE', False):
+                    elif x in falsey_values:
                         x = False
                     self.output_sz.loc[szname, fieldname] = x
-                if 'Edited' in saved.columns and curated_sz['Edited']:
+                if 'Edited' in saved.columns and curated_sz['Edited'].item():
                     for fieldname in (
                     'Start', 'Stop', 'Duration(s)', 'SpikeCount', 'SpkFreq', 'PostIctalSuppression(s)'):
-                        self.output_sz.loc[szname, fieldname] = curated_sz[fieldname]
+                        self.output_sz.loc[szname, fieldname] = curated_sz[fieldname].item()
 
         self.szlist = sznames
 
