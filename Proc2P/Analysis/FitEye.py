@@ -3,7 +3,7 @@ import numpy
 try:
     from ellipse import LsqEllipse
 except:
-    print('Ellipse fitting not available, use: pip install lsq-ellipse before processing pupil data')
+    print('Ellipse fitting not available, use: conda install lsq-ellipse before processing pupil data')
 
 from Video.LoadAvi import LoadAvi
 from matplotlib import pyplot as plt

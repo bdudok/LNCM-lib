@@ -1,7 +1,10 @@
 import os
 import numpy
 from sklearn import cluster
-from pyedflib import highlevel
+try:
+    from pyedflib import highlevel
+except:
+    print('pyedflib not available, use: "conda install pyedflib" before processing EEG data')
 from envs import CONFIG
 
 class EDF:
