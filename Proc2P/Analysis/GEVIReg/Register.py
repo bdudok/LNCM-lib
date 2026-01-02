@@ -68,15 +68,21 @@ def register(proc_path, prefix, config=None):
         lprint(None, f'FPS is {fps}, too low for filter setting {config.displacement_lowpass} Hz')
         return 0
 
-    memmap_fn = os.path.join(config.scratch_path, prefix + '_raw.npy')
-    disps_fn = os.path.join(oPath, prefix + config.disps_suffix)
-    if not os.path.exists(memmap_fn):
-        if verbose:
-            lprint(None, 'Reading and cacheing raw movie')
-        movies = get_raw_movies(info)
-        numpy.save(memmap_fn, movies[ref_channel])
+    if config.scratch_path is not None:
+        memmap_fn = os.path.join(config.scratch_path, prefix + '_raw.npy')
+        disps_fn = os.path.join(oPath, prefix + config.disps_suffix)
+        if not os.path.exists(memmap_fn):
+            if verbose:
+                lprint(None, 'Reading and cacheing raw movie')
+            movies = get_raw_movies(info)
+            if config.scratch_path is not None:
+                numpy.save(memmap_fn, movies[ref_channel])
 
-    data = numpy.load(memmap_fn, mmap_mode='r')
+        data = numpy.load(memmap_fn, mmap_mode='r')
+    else:
+        movies = get_raw_movies(info)
+        data = movies[ref_channel]
+
     n_frames = info["n_frames"]
     height, width = data.shape[1:]
 
