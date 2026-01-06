@@ -28,13 +28,14 @@ class RegConfig:
     subpixel_precision: float = 10  # fraction of pixel
     ref_margin: float = 5  # sec
     displacement_lowpass: float = 60  # Hz
+    ref_channel: str = 'Ch2' #name of referecne channel (multichannel registration is not implemented)
     disps_suffix: str = '_disps.npy'
     filt_disps_suffix: str = '_disps_filt.npy'
     setting_suffix: str = '_regconfig.json'
     registered_suffix: str = '_registered.npy'
-    scratch_path: str | None = None #'E:\MCC\BD'
-    overwrite = False
-    ref_channel = 'Ch2'
+    scratch_path: str | None = None #'E:\MCC\BD' if a path is specified, saves the raw data in a npy to avoid loading the TIFF
+    overwrite: bool = False # if False, skips the job if the registered output file exists
+    verbose: bool = False # if True, prints additional info
 
 
 proc_path = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
@@ -57,7 +58,7 @@ class Worker(Process):
 
 def register(proc_path, prefix, config=None):
     # if True:
-    verbose = True
+    verbose = config.verbose
     debug = True
 
     # load raw movie
