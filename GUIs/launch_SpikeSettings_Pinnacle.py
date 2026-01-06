@@ -7,7 +7,7 @@ path = 'D:\Shares\Data\_Processed\EEG\Kainate/'
 settings = {
     'LoCut': 120, #band pass filter low cut (Hz)
     'HiCut': 500, #band pass filter high cut (Hz)
-    'Tr1': 2, #spike treshold for spike width measurement (SD)♀
+    'Tr1': 2, #spike treshold for spike width measurement (SD)
     'Tr2': 3, #spike amplitude treshold for spike detection (SD)
     'TrDiff': 7, #threshold for including broad spikes (based on abs diff, SD)
     'Dur': 3, #spike minimum duration (ms)
