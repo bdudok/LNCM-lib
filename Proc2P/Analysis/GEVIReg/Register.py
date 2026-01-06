@@ -11,6 +11,7 @@ from skimage import transform
 from scipy.signal import bessel, sosfiltfilt
 from tifffile import imwrite
 from numpy.lib.format import open_memmap
+from multiprocessing import Process
 
 '''
 Rigid motion correction for high frame rate (GEVI) movies
@@ -31,7 +32,7 @@ class RegConfig:
     filt_disps_suffix: str = '_disps_filt.npy'
     setting_suffix: str = '_regconfig.json'
     registered_suffix: str = '_registered.npy'
-    scratch_path: str = 'E:\MCC\BD'
+    scratch_path: str | None = None #'E:\MCC\BD'
     overwrite = False
     ref_channel = 'Ch2'
 
@@ -40,6 +41,19 @@ proc_path = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
 prefix = 'JEDI-Sncg124_2025-04-24_burst_613'
 config = RegConfig()
 
+class Worker(Process):
+    __name__ = 'GeviReg-Worker'
+
+    def __init__(self, queue, res_queue):
+        super(Worker, self).__init__()
+        self.queue = queue
+        self.res_queue = res_queue
+
+    def run(self):
+        for data in iter(self.queue.get, None):
+            processed_path, prefix, config = data
+            register(*data)
+            self.res_queue.put(prefix)
 
 def register(proc_path, prefix, config=None):
     # if True:
