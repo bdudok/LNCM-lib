@@ -45,28 +45,28 @@ config = RegConfig()
 class Worker(Process):
     __name__ = 'GeviReg-Worker'
 
-    def __init__(self, queue, res_queue):
+    def __init__(self, queue, res_queue, n=0):
         super(Worker, self).__init__()
         self.queue = queue
         self.res_queue = res_queue
+        self.n = n
 
     def run(self):
         for data in iter(self.queue.get, None):
             processed_path, prefix, config = data
             register(*data)
-            self.res_queue.put(prefix)
+            self.res_queue.put((self.__name__+str(self.n), prefix))
 
 def register(proc_path, prefix, config=None):
-    # if True:
-    verbose = config.verbose
-    debug = True
-
-    # load raw movie
-    if verbose:
-        lprint(None, 'Opening input')
-    use_reference = 'S2P'
+    debug = False
     if config is None:
         config = RegConfig()
+    verbose = config.verbose
+    if verbose:
+        lprint(None, 'Opening input')
+    # load raw movie
+    use_reference = 'S2P'
+
     ref_channel = config.ref_channel
     oPath = touch_path(proc_path, prefix, 'GEVIReg')
     config.registered_suffix = f'_registered_{ref_channel}.npy'

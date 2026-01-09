@@ -9,12 +9,14 @@ import numpy
 import os
 import json
 import sys
+import datetime
 
 from Proc2P.utils import logger, lprint
 from Proc2P.Analysis.BatchGUI.Config import *
 from Proc2P.Analysis.AssetFinder import AssetFinder
 # from Proc2P.Analysis.BatchGUI.RoiEditorQt import GUI_main as RoiEditorGUI
 from Proc2P.Analysis.BatchGUI.RoiEditorQt import launch_in_subprocess as RoiEditorGUI
+from Proc2P.Analysis.BatchGUI.QueueManager import Job, JobType
 '''
 Gui for viewing and processing 2P data.
 This file just defines widgets, all functions are imported from the analysis classes or the legacy (Tk) BatchGUI app.
@@ -22,17 +24,19 @@ This file just defines widgets, all functions are imported from the analysis cla
 
 class Tabs(Enum):
     ROI = "ROI Editor"
+    GEVIReg = "GEVIReg"
 
 def apply_layout(widget):
     widget.setLayout(widget.layout)
 
 class GUI_main(QtWidgets.QMainWindow):
     __name__= 'BatchGUI'
-    def __init__(self, app, title='BatchGUI', ):
+    def __init__(self, app, title='BatchGUI', Q_manager=None):
         super().__init__()
         self.setWindowTitle(title)
         self.app = app
         self.config = GuiConfig()
+        self.Q = Q_manager
 
         self.wdir = '.'
         self.saved_fields = ('wdir', 'tag_label') #GUI values that are saved in a user-specific config file
@@ -59,8 +63,9 @@ class GUI_main(QtWidgets.QMainWindow):
         self.table_widget.layout.addWidget(self.filelist_widget)
 
         self.tabs = QtWidgets.QTabWidget()
-        n_tabs = 1
+        n_tabs = 2
         self.make_editor_tab()
+        self.make_gevireg_tab()
 
         self.tabs.resize(int(100 * n_tabs), 100)
 
@@ -70,7 +75,7 @@ class GUI_main(QtWidgets.QMainWindow):
         apply_layout(self.table_widget)
 
         #"console" for printing responses
-        self.console_widget = QtWidgets.QTextEdit(self)
+        self.console_widget = QtWidgets.QPlainTextEdit(self)
         self.make_console_widget()
 
         #add everything to main window layout
@@ -88,7 +93,13 @@ class GUI_main(QtWidgets.QMainWindow):
         self.load_gui_sate()
 
         self.setGeometry(*self.config.MainWindowGeometry)  # Left, top, width, height.
-        # self.connect_sockets() # not used
+
+        # timer to poll the queue
+        self._queue_timer = QtCore.QTimer(self)
+        self._queue_timer.setInterval(1000)
+        self._queue_timer.timeout.connect(self.poll_result)
+        self._queue_timer.start()
+
         self.show()
 
     def make_session_bar(self):
@@ -116,9 +127,10 @@ class GUI_main(QtWidgets.QMainWindow):
         self.session_bar.layout.addWidget(self.tag_label)
 
     def make_console_widget(self):
-        self.console_widget.setText('~')
         self.console_widget.setFixedHeight(self.config.ConsoleWidgetHeight)
-        # self.console_widget.setFixedWidth(self.config.ConsoleWidgetWidth)
+        self.cprint('~')
+        self.redirector = StdRedirector(self.console_widget)
+        sys.stdout = self.redirector
 
 
     def make_filelist_widget(self):
@@ -145,6 +157,26 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def update_editor_callback(self):
         RoiEditorGUI(self.wdir, self.active_prefix[0], self.tag_label.text())
+
+    def make_gevireg_tab(self):
+        self.GEVIRegTab = QtWidgets.QWidget()
+        self.GEVIRegTab.layout = QtWidgets.QVBoxLayout()
+        self.GEVIRegTab.layout.addWidget(QtWidgets.QLabel('Select sessions to add to processing queue'))
+        reg_button = QtWidgets.QPushButton('Process')
+        reg_button.clicked.connect(self.reg_button_callback)
+        self.GEVIRegTab.layout.addWidget(reg_button)
+        apply_layout(self.GEVIRegTab)
+        self.tabs.addTab(self.GEVIRegTab, Tabs.GEVIReg.value)
+        self.active_tab = Tabs.ROI
+
+    def reg_button_callback(self):
+        for prefix in self.active_prefix:
+            self.cprint('GEVIReg:', prefix, 'queued.')
+            self.Q.run_job(Job(JobType.GEVIReg, (self.wdir, prefix, None)))
+
+    def cprint(self, *args):
+        ts = datetime.datetime.now().isoformat(timespec='seconds')
+        self.console_widget.appendPlainText(' '.join([str(x) for x in (ts, *args)]))
 
     def make_realtime_tab(self):
         self.realTimeTab = QtWidgets.QWidget()
@@ -177,7 +209,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.tabs.addTab(self.realTimeTab, "RealTime")
 
     def on_tab_changed(self, index):
-        self.active_tab = Tabs(self.tab.tabText(index))
+        self.active_tab = Tabs(self.tabs.tabText(index))
 
     def save_gui_state(self):
         for fieldname in self.saved_fields:
@@ -254,16 +286,6 @@ class GUI_main(QtWidgets.QMainWindow):
         self.save_gui_state()
         event.accept()
 
-    class StdRedirector:
-        def __init__(self, text_widget):
-            self.text_space = text_widget
-
-        def write(self, string):
-            #TODO update for qt
-            self.text_space.config(state=NORMAL)
-            self.text_space.insert("end", string)
-            self.text_space.see("end")
-            self.text_space.config(state=DISABLED)
 
     def update_trace(self, data):
         decdat = decimate(data, self.config.LiveLineDecimate)
@@ -273,6 +295,23 @@ class GUI_main(QtWidgets.QMainWindow):
         self.live_line.set_ydata(ydata)
         self.FigCanvasRT.draw()
 
+    def poll_result(self):
+        #empties the q and calls the handler function with each item. called by a timer, non_blocking.
+        self.Q.poll_result(self._handle_item_from_worker)
+
+    def _handle_item_from_worker(self, item):
+        worker_name, prefix = item
+        self.cprint(worker_name+':', prefix, 'done.')
+
+class StdRedirector:
+    def __init__(self, text_widget):
+        self.text_space = text_widget
+
+    def write(self, string):
+        self.text_space.appendPlainText(string)
+
+    def flush(self):
+        pass
 
 class SubplotsCanvas(FigureCanvasQTAgg):
 

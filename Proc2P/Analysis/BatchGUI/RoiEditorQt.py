@@ -252,7 +252,11 @@ class GUI_main(QtWidgets.QMainWindow):
             self.lut = numpy.array([((i / 255.0) ** gamma) * 255 for i in numpy.arange(0, 256)]).astype('uint8')
             img = cv2.LUT(self.previews[preview_fn].squeeze(), self.lut)
             self.img = img
-            h, w, ch = img.shape
+            if len(img.shape) == 2:
+                h, w = img.shape
+                ch = 1
+            else:
+                h, w, ch = img.shape
             self.image_h, self.image_w = h, w
             qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
 
