@@ -5,10 +5,12 @@ from multiprocessing import Queue, Process, freeze_support, set_start_method
 from queue import Empty
 #import worker functions
 from Proc2P.Analysis.GEVIReg.Register import Worker as GEVIReg_Worker
+from Proc2P.Analysis.AnalysisClasses.NormalizeVm import Worker as PullVM_Worker
 
 class JobType(Enum):
     TEST = 0
     GEVIReg = 1
+    PullVM = 2
 
 @dataclass
 class Job:
@@ -90,6 +92,7 @@ def BatchGUI_Q():
     Q = QManager()
     Q.register_worker(JobType.TEST, testworker, 3)
     Q.register_worker(JobType.GEVIReg, GEVIReg_Worker, 5)
+    Q.register_worker(JobType.PullVM, PullVM_Worker, 24)
     return Q
 
 if __name__ == '__main__':

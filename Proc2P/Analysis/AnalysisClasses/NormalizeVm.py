@@ -6,7 +6,19 @@ import numpy
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.utils import gapless, outlier_indices, lprint
 from multiprocessing import Process
+from dataclasses import dataclass
 
+@dataclass
+class PullVmConfig:
+    #fields to be configurable from GUI
+    gauss_sigma: float = 3 # resolution of calculating the range (s).
+    monotonic: str | None = 'up' #if 'up' (such as bleaching in inverted gevi trace): baseline is increasing throughout the recording
+    percentile: float = 1 #max and min of the range defined as percentile of values. 1 is good for control, 5 for epileptic
+    exclude_move: bool = False # if true, periods with running are excluded from fitting the models (but are predicted).
+    exclude_seizures_flag: bool = False #if true, periods marked as seizures are excluded from fitting the models (but are predicted).
+    overwrite: bool = False #if False, skips when output exists
+
+#{'exclude_seizures_flag': False, "monotonic": 'up', "percentile": 1, "exclude_move": False}
 
 def normalize_trace(session: ImagingSession, cells=None, save=True,
                     gauss_sigma=3, monotonic=None, percentile=1, exclude_move=True,
@@ -126,10 +138,11 @@ def normalize_trace(session: ImagingSession, cells=None, save=True,
 class Worker(Process):
     __name__ = 'Vm-Worker'
 
-    def __init__(self, queue, res_queue):
+    def __init__(self, queue, res_queue, n=0):
         super(Worker, self).__init__()
         self.queue = queue
         self.res_queue = res_queue
+        self.n = n
 
     def run(self):
         for data in iter(self.queue.get, None):
@@ -141,7 +154,7 @@ class Worker(Process):
             session = ImagingSession(path, prefix, tag, norip=True)
             if overwrite or not os.path.exists(os.path.join(session.ca.pf, 'vm.npy')):
                 normalize_trace(session, **kwargs)
-            self.res_queue.put(prefix)
+            self.res_queue.put((self.__name__ + str(self.n), prefix))
 
 
 def arima_filtfilt(y, filter_order=(1, 1, 1)):

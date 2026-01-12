@@ -10,7 +10,7 @@ import os
 import json
 import sys
 import datetime
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, asdict
 
 from Proc2P.utils import logger, lprint
 from Proc2P.Analysis.BatchGUI.Config import *
@@ -19,6 +19,8 @@ from Proc2P.Analysis.AssetFinder import AssetFinder
 from Proc2P.Analysis.BatchGUI.RoiEditorQt import launch_in_subprocess as RoiEditorGUI
 from Proc2P.Analysis.BatchGUI.QueueManager import Job, JobType
 from Proc2P.Analysis.GEVIReg.Register import RegConfig
+from Proc2P.Analysis.AnalysisClasses.NormalizeVm import PullVmConfig
+
 '''
 Gui for viewing and processing 2P data.
 This file just defines widgets, all functions are imported from the analysis classes or the legacy (Tk) BatchGUI app.
@@ -27,6 +29,8 @@ This file just defines widgets, all functions are imported from the analysis cla
 class Tabs(Enum):
     ROI = "ROI Editor"
     GEVIReg = "GEVIReg"
+    PullVm = 'PullVm'
+
 
 def apply_layout(widget):
     widget.setLayout(widget.layout)
@@ -65,11 +69,11 @@ class GUI_main(QtWidgets.QMainWindow):
         self.table_widget.layout.addWidget(self.filelist_widget)
 
         self.tabs = QtWidgets.QTabWidget()
-        n_tabs = 2
-        self.make_editor_tab()
+        self.n_tabs = 0
         self.make_gevireg_tab()
-
-        self.tabs.resize(int(100 * n_tabs), 100)
+        self.make_editor_tab()
+        self.make_PullVm_tab()
+        self.tabs.resize(int(100 * self.n_tabs), 100)
 
         # add tabs to table
         self.table_widget.layout.addWidget(self.tabs)
@@ -156,6 +160,7 @@ class GUI_main(QtWidgets.QMainWindow):
         apply_layout(self.EditorTab)
         self.tabs.addTab(self.EditorTab, Tabs.ROI.value)
         self.active_tab = Tabs.ROI
+        self.n_tabs += 1
 
     def update_editor_callback(self):
         RoiEditorGUI(self.wdir, self.active_prefix[0], self.tag_label.text())
@@ -180,11 +185,12 @@ class GUI_main(QtWidgets.QMainWindow):
 
         apply_layout(self.GEVIRegTab)
         self.tabs.addTab(self.GEVIRegTab, Tabs.GEVIReg.value)
+        self.n_tabs += 1
 
     def reg_button_callback(self):
+        self.get_config_from_form(self.GEVI_config, self.GEVI_config_editors)
         for prefix in self.active_prefix:
             self.cprint('GEVIReg:', prefix, 'queued.')
-            self.get_config_from_form(self.GEVI_config, self.GEVI_config_editors)
             self.Q.run_job(Job(JobType.GEVIReg, (self.wdir, prefix, self.GEVI_config)))
 
     def create_config_form(self, form: QtWidgets.QFormLayout, cfg: dataclass, editors:dict):
@@ -224,6 +230,37 @@ class GUI_main(QtWidgets.QMainWindow):
                 setattr(cfg, fname, w.isChecked())
             else:
                 setattr(cfg, fname, w.text())
+
+    def make_PullVm_tab(self):
+        self.PullVmTab = QtWidgets.QWidget()
+        self.PullVmTab.layout = QtWidgets.QVBoxLayout()
+        self.PullVmTab.layout.addWidget(QtWidgets.QLabel('Select sessions to add to processing queue'))
+        PullVm_button = QtWidgets.QPushButton('Process')
+        PullVm_button.clicked.connect(self.PullVm_button_callback)
+        self.PullVmTab.layout.addWidget(PullVm_button)
+
+        #add a form to edit config
+        self.PullVm_config_editors = {}
+        PullVm_Config_widget = QtWidgets.QWidget()
+        self.PullVm_config_form = QtWidgets.QFormLayout()
+        self.PullVm_config = PullVmConfig()
+        self.create_config_form(self.PullVm_config_form, self.PullVm_config, self.PullVm_config_editors)
+        PullVm_Config_widget.layout = self.PullVm_config_form
+        apply_layout(PullVm_Config_widget)
+        self.PullVmTab.layout.addWidget(PullVm_Config_widget)
+
+        apply_layout(self.PullVmTab)
+        self.tabs.addTab(self.PullVmTab, Tabs.PullVm.value)
+        self.n_tabs += 1
+
+    def PullVm_button_callback(self):
+        cells_tag = self.tag_label.text()
+        self.get_config_from_form(self.PullVm_config, self.PullVm_config_editors)
+        kwargs = asdict(self.PullVm_config)
+        overwrite = kwargs.pop('overwrite')
+        for prefix in self.active_prefix:
+            self.cprint('PullVm:', prefix, 'queued.')
+            self.Q.run_job(Job(JobType.PullVm, (self.wdir, prefix, cells_tag, overwrite, kwargs)))
 
     def cprint(self, *args):
         ts = datetime.datetime.now().isoformat(timespec='seconds')
