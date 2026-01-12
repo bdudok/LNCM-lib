@@ -10,6 +10,7 @@ import os
 import json
 import sys
 import datetime
+from dataclasses import dataclass, fields
 
 from Proc2P.utils import logger, lprint
 from Proc2P.Analysis.BatchGUI.Config import *
@@ -17,6 +18,7 @@ from Proc2P.Analysis.AssetFinder import AssetFinder
 # from Proc2P.Analysis.BatchGUI.RoiEditorQt import GUI_main as RoiEditorGUI
 from Proc2P.Analysis.BatchGUI.RoiEditorQt import launch_in_subprocess as RoiEditorGUI
 from Proc2P.Analysis.BatchGUI.QueueManager import Job, JobType
+from Proc2P.Analysis.GEVIReg.Register import RegConfig
 '''
 Gui for viewing and processing 2P data.
 This file just defines widgets, all functions are imported from the analysis classes or the legacy (Tk) BatchGUI app.
@@ -165,14 +167,63 @@ class GUI_main(QtWidgets.QMainWindow):
         reg_button = QtWidgets.QPushButton('Process')
         reg_button.clicked.connect(self.reg_button_callback)
         self.GEVIRegTab.layout.addWidget(reg_button)
+
+        #add a form to edit config
+        self.GEVI_config_editors = {}
+        GEVI_Config_widget = QtWidgets.QWidget()
+        self.GEVI_config_form = QtWidgets.QFormLayout()
+        self.GEVI_config = RegConfig()
+        self.create_config_form(self.GEVI_config_form, self.GEVI_config, self.GEVI_config_editors)
+        GEVI_Config_widget.layout = self.GEVI_config_form
+        apply_layout(GEVI_Config_widget)
+        self.GEVIRegTab.layout.addWidget(GEVI_Config_widget)
+
         apply_layout(self.GEVIRegTab)
         self.tabs.addTab(self.GEVIRegTab, Tabs.GEVIReg.value)
-        self.active_tab = Tabs.ROI
 
     def reg_button_callback(self):
         for prefix in self.active_prefix:
             self.cprint('GEVIReg:', prefix, 'queued.')
-            self.Q.run_job(Job(JobType.GEVIReg, (self.wdir, prefix, None)))
+            self.get_config_from_form(self.GEVI_config, self.GEVI_config_editors)
+            self.Q.run_job(Job(JobType.GEVIReg, (self.wdir, prefix, self.GEVI_config)))
+
+    def create_config_form(self, form: QtWidgets.QFormLayout, cfg: dataclass, editors:dict):
+        '''Adds widgets to edit each field of a dataclass. Keeps them in a dict for the getter'''
+        for field in fields(cfg):
+            fname = field.name
+            ftype = field.type
+            fvalue = getattr(cfg, fname)
+            if ftype is int:
+                w = QtWidgets.QSpinBox()
+                w.setMaximum(10**9)
+                w.setValue(fvalue)
+            elif ftype is float:
+                w = QtWidgets.QDoubleSpinBox()
+                w.setDecimals(2)
+                w.setMaximum(1e9)
+                w.setValue(fvalue)
+            elif ftype is bool:
+                w = QtWidgets.QCheckBox()
+                w.setChecked(fvalue)
+            else:
+                w = QtWidgets.QLineEdit()
+                w.setText(fvalue)
+
+            editors[fname] = w
+            form.addRow(fname, w)
+
+    def get_config_from_form(self, cfg, editors):
+        '''updates a dataclass form a from'''
+        for field in fields(cfg):
+            fname = field.name
+            ftype = field.type
+            w = editors[fname]
+            if ftype in (int, float):
+                setattr(cfg, fname, ftype(w.value()))
+            elif ftype == bool:
+                setattr(cfg, fname, w.isChecked())
+            else:
+                setattr(cfg, fname, w.text())
 
     def cprint(self, *args):
         ts = datetime.datetime.now().isoformat(timespec='seconds')

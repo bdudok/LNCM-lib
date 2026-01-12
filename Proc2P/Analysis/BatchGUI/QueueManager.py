@@ -23,15 +23,16 @@ class Worker:
 class testworker(Process):
     __name__ = 'Test-Worker'
 
-    def __init__(self, queue, res_queue):
+    def __init__(self, queue, res_queue, n=0):
         super(testworker, self).__init__()
         self.queue = queue
         self.res_queue = res_queue
+        self.n = n
 
     def run(self):
         for data in iter(self.queue.get, None):
             print(data)
-            self.res_queue.put(data)
+            self.res_queue.put((self.__name__ + str(self.n), data))
 
 class QManager:
     '''
