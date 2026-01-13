@@ -159,7 +159,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.EditorTab.layout.addWidget(QtWidgets.QLabel('Click on a session to open the editor in a new window.'))
         open_button = QtWidgets.QPushButton('Open')
         open_button.clicked.connect(self.update_editor_callback)
-        self.GEVIRegTab.layout.addWidget(open_button)
+        self.EditorTab.layout.addWidget(open_button)
 
         apply_layout(self.EditorTab)
         self.tabs.addTab(self.EditorTab, Tabs.ROI.value)

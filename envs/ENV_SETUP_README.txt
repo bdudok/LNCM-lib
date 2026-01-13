@@ -16,7 +16,7 @@ conda install -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pand
 pip install sima
 
 # To use Suite2P for motion correction, we need a Python 3.9 env ("suite2p"):
-if you have a previous suite2p env, delete it (conda remove --name suite2p),
+if you have a previous suite2p env, delete it (conda env remove --name suite2p),
 and delete the remaining empty folder in envs called suite2p
 in conda powershell prompt:
     conda create --name suite2p python=3.9 -c defaults --strict-channel-priority --no-default-packages
