@@ -1,4 +1,7 @@
 import os
+
+import pandas
+
 os.environ["OMP_NUM_THREADS"] = "2"
 os.environ["MKL_NUM_THREADS"] = "2"
 os.environ["MKL_DISABLE_FAST_MM"] = "1"
@@ -19,7 +22,8 @@ conda activate suite2p
 pip install git+https://github.com/mouseland/suite2p.git
 '''
 
-# Process specified sessions: list them in quotes
+# Process specified sessions: list them in quotes or set the variable to None
+#note that each item in the list will be searched with 'contain', and all results will be included
 prefix_list = ['BL6-47_2026-01-09_KA-LFP_112', ]
 # prefix_list = None
 
@@ -36,15 +40,19 @@ overwrite_previous = True  # set if you want to delete old motion corrected movi
 overwrite_preproc = False  # set if you want to delete old pre-processed files (if False, skips to motion correct)
 mc_only = True  # set True if only motion correct, not running the rest os Suite2p pipeline (default: True)
 
-# the script should display this s2p version:
-# Running suite2p version 0.14.2.dev7+g118901a
-
 # get the list of sessions
 db = GetSessions()
-session_df = db.search(project=project, task=task, incltag=incltag)
+if prefix_list is None:
+    session_df = db.search(project=project, task=task, incltag=incltag)
+else:
+    sessions = []
+    for prefix in prefix_list:
+        sessions.append(db.get_session(prefix))
+    session_df = pandas.concat(sessions)
 print(session_df[['Image.ID', 'Processed.Path']])
 input(f"Press Enter to continue with these {len(session_df)} sessions")
 assert len(session_df)
+
 
 '''Below are general settings, only change if you know what you're doing'''
 # pipeline ops
