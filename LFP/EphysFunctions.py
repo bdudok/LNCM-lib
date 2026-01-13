@@ -5,8 +5,8 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=3):
     nyq = 0.5 * fs
     low = lowcut / nyq
     high = highcut / nyq
-    b, a = signal.butter(order, [low, high], btype='band')
-    y = signal.filtfilt(b, a, data)
+    filter = signal.butter(order, [low, high], btype='band', output='sos')
+    y = signal.sosfiltfilt(filter, data)
     return y
 
 def z_scored_power(trace, lowcut, highcut, fs):
