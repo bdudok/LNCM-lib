@@ -152,7 +152,7 @@ class Spatial:
             self.cells = self.cells[corder]
             self.loc = self.loc[corder]
             self.proximity_weighted_rates = self.proximity_weighted_rates[:, corder]
-        self.hash = hash(self.cells.tostring())
+        self.hash = hash(" ".join(self.cells.astype(str)))
 
     def det_PC(self, use_param='nnd'):
         assert self.session is not None
@@ -160,10 +160,16 @@ class Spatial:
         wh = self.get_run_frames()
         X = self.pos[wh]
         Y = self.session.getparam(use_param)[:, wh]
-        mis, statistical_is_placecell = self.calc_MI_cells(X, Y, bins=9, shuffle=30)
+        wh_nan = numpy.count_nonzero(numpy.isnan(Y), axis=0)
+        notna = numpy.logical_not(numpy.isnan(X)) & (wh_nan < (self.session.ca.cells / 2))
+        mis, statistical_is_placecell = self.calc_MI_cells(X[notna], Y[:, notna], bins=9, shuffle=30)
         # measure location dependent activity
         incl = numpy.where(statistical_is_placecell)[0]
-        self.set_PCs(incl, loc='pull', sort=True)
+        if len(incl):
+            self.set_PCs(incl, loc='pull', sort=True)
+            return 0
+        else:
+            return (mis, statistical_is_placecell)
 
     def get_run_frames(self):
         wh_mov = numpy.where(self.session.pos.movement[100:-100])[0] + 100 #limit to samples when mouse running
