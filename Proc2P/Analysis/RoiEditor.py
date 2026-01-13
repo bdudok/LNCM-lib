@@ -1,6 +1,7 @@
 import tifffile
 
 from Proc2P.Analysis.LoadPolys import FrameDisplay
+from Proc2P.Bruker.LoadRegistered import check_compatible_ops
 from Proc2P.utils import lprint, logger
 import matplotlib.path as mplpath
 import os
@@ -19,9 +20,28 @@ if sys.version_info < (3, 7):
 else:
     sima_available = False
     from Proc2P.Analysis.Autodetect_wrapper import roi_detector
+    from dataclasses import dataclass
+
+
+    @dataclass
+    class SIMAConfig:
+        # fields to be configurable from GUI
+        iPC_G: bool = True
+        PC_G: bool = True
+        STICA_G: bool = True
+        iPC_R: bool = True
+        PC_R: bool = True
+        STICA_R: bool = True
+        Start: int = 0  # first frame to include.
+        Stop: str | int = 'end'  # last frame to include (or anything that doesn't convert to an int to use all frames)
+        Diameter: float = 20  # args passed to SIMA
+        MinSize: float = 100  # args passed to SIMA
+        MaxSize: float = 200  # args passed to SIMA
+
 from multiprocessing import Process
 from Proc2P.Analysis.TkApps import SourceTarget, PickFromList, ShowMessage
 import copy
+
 
 '''
 The RoiEditor class in here is used by all BatchGU versions, including new (qt version) roi editor
@@ -47,9 +67,11 @@ class MouseTest:
 class Worker(Process):
     __name__ = 'RoiWorker'
 
-    def __init__(self, queue):
+    def __init__(self, queue, res_queue=None, n=0):
         super(Worker, self).__init__()
         self.queue = queue
+        self.res_queue = res_queue
+        self.n = n
 
     def run(self):
         for din in iter(self.queue.get, None):
@@ -64,9 +86,13 @@ class Worker(Process):
                     RoiEditor(path, prefix, ).autodetect(approach=apps, config=config, log=log)
                 else:
                     # if we're on Python 3.11, call the detector through the 3.6 executable
+                    check_compatible_ops(path, prefix)
                     lprint(self, roi_detector(path, prefix, apps, config))
+                if self.res_queue is not None:
+                    self.res_queue.put((self.__name__ + str(self.n), prefix))
             except Exception as e:
                 lprint(self, 'Autodetect failed with error:', e, )
+
 
 
 class Lasso:

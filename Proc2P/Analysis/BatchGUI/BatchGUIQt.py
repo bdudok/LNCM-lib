@@ -20,6 +20,7 @@ from Proc2P.Analysis.BatchGUI.RoiEditorQt import launch_in_subprocess as RoiEdit
 from Proc2P.Analysis.BatchGUI.QueueManager import Job, JobType
 from Proc2P.Analysis.GEVIReg.Register import RegConfig
 from Proc2P.Analysis.AnalysisClasses.NormalizeVm import PullVmConfig
+from Proc2P.Analysis.RoiEditor import SIMAConfig
 
 '''
 Gui for viewing and processing 2P data.
@@ -27,9 +28,10 @@ This file just defines widgets, all functions are imported from the analysis cla
 '''
 
 class Tabs(Enum):
-    ROI = "ROI Editor"
-    GEVIReg = "GEVIReg"
+    ROI = 'ROI Editor'
+    GEVIReg = 'GEVIReg'
     PullVm = 'PullVm'
+    SIMA = 'SIMA'
 
 
 def apply_layout(widget):
@@ -71,6 +73,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.tabs = QtWidgets.QTabWidget()
         self.n_tabs = 0
         self.make_gevireg_tab()
+        self.make_sima_tab()
         self.make_editor_tab()
         self.make_PullVm_tab()
         self.tabs.resize(int(100 * self.n_tabs), 100)
@@ -154,9 +157,10 @@ class GUI_main(QtWidgets.QMainWindow):
         self.EditorTab = QtWidgets.QWidget()
         self.EditorTab.layout = QtWidgets.QVBoxLayout()
         self.EditorTab.layout.addWidget(QtWidgets.QLabel('Click on a session to open the editor in a new window.'))
-        # self.editor_widget = QtWidgets.QWidget(self)
-        # self.editor_gui = RoiEditorGUI(self, parent_widget=self.editor_widget)
-        # self.EditorTab.layout.addWidget(self.editor_widget)
+        open_button = QtWidgets.QPushButton('Open')
+        open_button.clicked.connect(self.update_editor_callback)
+        self.GEVIRegTab.layout.addWidget(open_button)
+
         apply_layout(self.EditorTab)
         self.tabs.addTab(self.EditorTab, Tabs.ROI.value)
         self.active_tab = Tabs.ROI
@@ -261,6 +265,43 @@ class GUI_main(QtWidgets.QMainWindow):
         for prefix in self.active_prefix:
             self.cprint('PullVm:', prefix, 'queued.')
             self.Q.run_job(Job(JobType.PullVm, (self.wdir, prefix, cells_tag, overwrite, kwargs)))
+
+    def make_sima_tab(self):
+        self.SIMATab = QtWidgets.QWidget()
+        self.SIMATab.layout = QtWidgets.QVBoxLayout()
+        self.SIMATab.layout.addWidget(QtWidgets.QLabel('Select sessions to add to processing queue'))
+        SIMA_button = QtWidgets.QPushButton('Process')
+        SIMA_button.clicked.connect(self.SIMA_button_callback)
+        self.SIMATab.layout.addWidget(SIMA_button)
+
+        #add a form to edit config
+        self.SIMA_config_editors = {}
+        SIMA_Config_widget = QtWidgets.QWidget()
+        self.SIMA_config_form = QtWidgets.QFormLayout()
+        self.SIMA_config = SIMAConfig()
+        self.create_config_form(self.SIMA_config_form, self.SIMA_config, self.SIMA_config_editors)
+        SIMA_Config_widget.layout = self.SIMA_config_form
+        apply_layout(SIMA_Config_widget)
+        self.SIMATab.layout.addWidget(SIMA_Config_widget)
+
+        apply_layout(self.SIMATab)
+        self.tabs.addTab(self.SIMATab, Tabs.SIMA.value)
+        self.n_tabs += 1
+
+    def SIMA_button_callback(self):
+        self.get_config_from_form(self.SIMA_config, self.SIMA_config_editors)
+        kwargs = asdict(self.SIMA_config)
+        #convert chekcboxes to list of SIMA approaches
+        apps = []
+        for field in fields(self.SIMA_config):
+            if field.type is bool:
+                incl = kwargs.pop(field.name)
+                if incl:
+                    apps.append(field.name.replace('_', '-'))
+        for prefix in self.active_prefix:
+            self.Q.run_job(Job(JobType.SIMA, (self.wdir, prefix, apps, kwargs)))
+            self.cprint('SIMA:', prefix, 'queued.')
+
 
     def cprint(self, *args):
         ts = datetime.datetime.now().isoformat(timespec='seconds')
@@ -384,8 +425,9 @@ class GUI_main(QtWidgets.QMainWindow):
         self.FigCanvasRT.draw()
 
     def poll_result(self):
-        #empties the q and calls the handler function with each item. called by a timer, non_blocking.
-        self.Q.poll_result(self._handle_item_from_worker)
+        if self.Q is not None:
+            #empties the q and calls the handler function with each item. called by a timer, non_blocking.
+            self.Q.poll_result(self._handle_item_from_worker)
 
     def _handle_item_from_worker(self, item):
         worker_name, prefix = item

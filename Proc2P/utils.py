@@ -29,7 +29,7 @@ class logger:
         self.unsaved = 0
         self.message = ''
 
-    def set_handle(self, procpath, prefix,):
+    def set_handle(self, procpath, prefix, ):
         self.fn = os.path.join(procpath, prefix + '/', prefix + f'_{get_user()}_AnalysisLog.txt')
 
     def log(self, message):

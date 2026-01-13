@@ -3,6 +3,7 @@ import os
 from envs import CONFIG
 from Proc2P.utils import path_to_list
 from enum import Enum
+import pickle
 
 class Source(Enum):
     S2P = 0
@@ -26,8 +27,13 @@ class LoadRegistered():
         self.prefix = prefix
         self.source = source
         if source == Source.S2P:
-            lp = os.path.join(self.path, 'suite2p/plane0/ops.npy')
-            ops = numpy.load(lp, allow_pickle=True).item()
+            lp = os.path.join(self.path, 'suite2p/plane0/ops_compat.pkl')
+            if os.path.exists(lp):
+                with open(lp, "rb") as f:
+                    ops = pickle.load(f)
+            else:
+                lp = os.path.join(self.path, 'suite2p/plane0/ops.npy')
+                ops = numpy.load(lp, allow_pickle=True).item()
             self.n_frames = ops['frames_per_folder'][0]
             self.Ly = ops['Ly']
             self.Lx = ops['Lx']
@@ -115,3 +121,12 @@ class LoadRegistered():
             return self.data
         else:
             return self.data2
+
+def check_compatible_ops(procpath, prefix):
+    path = os.path.join(procpath, prefix)
+    in_file = os.path.join(path, 'suite2p/plane0/ops.npy')
+    out_file = os.path.join(path, 'suite2p/plane0/ops_compat.pkl')
+    if os.path.exists(in_file) and not os.path.exists(out_file):
+        ops = numpy.load(in_file, allow_pickle=True).item()
+        with open(out_file, "wb") as f:
+            pickle.dump(ops, f, protocol=3)
