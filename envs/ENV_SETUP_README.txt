@@ -22,7 +22,7 @@ in conda powershell prompt:
     conda create --name suite2p python=3.9 -c defaults --strict-channel-priority --no-default-packages
     conda activate suite2p
     pip install suite2p
-    pip install pandas, requests
+    pip install pandas requests
 
 open the job script in your project (no need to have a separate S2P project)
 for example, Proc2P/Analysis/S2P_template/20260113_BatchRun_MotionCorrect_Template.py (in LNCM-lib)
