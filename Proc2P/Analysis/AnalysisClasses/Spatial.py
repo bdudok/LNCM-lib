@@ -208,7 +208,7 @@ class Spatial:
 
     def save_named_set(self, tag):
         assert self.cells is not None
-        nfn = f'{self.prefix}-{self.tag}-{tag}'
+        nfn = f'{self.tag}-{tag}'
         if os.path.exists(self.dir + nfn + '.hash'):
             if not self.force_mode:
                 raise FileExistsError('tag exists. set force mode to overwrite')
@@ -226,7 +226,7 @@ class Spatial:
         self.setname = tag
 
     def load_named_set(self, tag):
-        nfn = f'{self.prefix}-{self.tag}-{tag}'
+        nfn = f'{self.tag}-{tag}'
         hfn = self.dir + nfn + '.hash'
         if not os.path.exists(hfn):
             return -1
@@ -241,7 +241,7 @@ class Spatial:
 
     def set_pos(self, x=None):
         '''store or load position. norm. 0-1, for each frame'''
-        pfn = self.dir + self.prefix + '.pos.npy'
+        pfn = self.dir + 'pos.npy'
         if os.path.exists(pfn):
             self.pos = numpy.load(pfn)
         else:
@@ -270,7 +270,7 @@ class Spatial:
         return numpy.argmax(rates, axis=0)
 
     def reldist_array(self):
-        nfn = f'{self.prefix}-{self.tag}-{self.setname}'
+        nfn = f'{self.tag}-{self.setname}'
         hfn = self.dir + nfn + f'_{self.hash}'
         rdfn = hfn + '.reldists.npy'
         if os.path.exists(rdfn):
@@ -289,7 +289,7 @@ class Spatial:
         self.cache['rd'] = rd
 
     def get_lut(self):
-        lfn = f'{self.dir + self.prefix}-{self.resolution}_distances.lut.npy'
+        lfn = f'{self.dir}{self.resolution}_distances.lut.npy'
         if os.path.exists(lfn):
             lut = numpy.load(lfn)
         else:
@@ -420,7 +420,7 @@ class Spatial:
         if save_tag is None:
             save_tag = 'self'
         fps = self.session.fps
-        nfn = f'{self.prefix}-{self.tag}-{self.setname}'
+        nfn = f'{self.tag}-{self.setname}'
         hfn = self.dir + nfn + f'_{self.hash}'
         if trim == 100:
             rdfn = hfn + f'.binnedsignals-{param}-{res}-{save_tag}-{where}.npy'
@@ -482,7 +482,7 @@ class Spatial:
         '''masks for each event, and distance form preferred loc'''
         if save_tag is None:
             save_tag = self.setname
-        nfn = f'{self.prefix}-{self.tag}-{self.setname}'
+        nfn = f'{self.tag}-{self.setname}'
         hfn = self.dir + nfn + f'_{self.hash}'
         mfn = hfn + f'.eventmasks-{w}-{save_tag}.npy'
         # -1 of mask is the cell index (index in list)
@@ -541,7 +541,7 @@ class Spatial:
             pull_cells = self.cells
         if save_tag is None:
             save_tag = 'self'
-        nfn = f'{self.prefix}-{self.tag}-{self.setname}'
+        nfn = f'{self.tag}-{self.setname}'
         hfn = self.dir + nfn + f'_{self.hash}'
         rdfn = hfn + f'.binnedsignals-event-{param}-{w}-{save_tag}.npy'
         if os.path.exists(rdfn) and not overwrite:
@@ -569,7 +569,7 @@ class Spatial:
             pull_cells = self.cells
         if save_tag is None:
             save_tag = 'self'
-        nfn = f'{self.prefix}-{self.tag}-{self.setname}'
+        nfn = f'{self.tag}-{self.setname}'
         hfn = self.dir + nfn + f'_{self.hash}'
         rdfn = hfn + f'.laps-{param}-{res}-{save_tag}-{where}.npy'
         if os.path.exists(rdfn) and not overwrite:
