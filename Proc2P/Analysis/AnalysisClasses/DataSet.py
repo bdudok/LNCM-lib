@@ -1,5 +1,6 @@
 import json
 import os
+import ast
 
 import pandas
 
@@ -64,6 +65,10 @@ class DataSet:
             # self.readonly_flag = True
         else:
             self.new_df()
+
+    @staticmethod
+    def asdict(literal):
+        return ast.literal_eval(literal)
 
     def save_df(self, ver='current'):
         if ver == 'excel':
