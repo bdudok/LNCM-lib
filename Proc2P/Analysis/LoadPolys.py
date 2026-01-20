@@ -108,12 +108,18 @@ class FrameDisplay(object):
             self.image = LoadImage(self.procpath, self.prefix, )
             self.image_loaded = True
 
-    def get_preview(self, ch=1):
+    def get_preview(self, ch=1, source=Source.S2P):
+        if source == Source.S2P:
+            suffix = '_preview.tif'
+        elif source == Source.GEVIReg:
+            suffix = '_GEVIRegPreview.tif'
         if self.preview is None:
-            preview_fn = self.procpath + self.prefix + '/' + self.prefix + '_preview.tif'
+            self.preview = {}
+        if suffix not in self.preview:
+            preview_fn = self.procpath + self.prefix + '/' + self.prefix + suffix
             print(preview_fn)
-            self.preview = tifffile.imread(preview_fn)
-        return self.preview
+            self.preview[suffix] = tifffile.imread(preview_fn)
+        return self.preview[suffix]
 
     def get_cell(self, frame, cell, channel=0):
         x1, x2, y1, y2 = self.polys.bounds(cell)

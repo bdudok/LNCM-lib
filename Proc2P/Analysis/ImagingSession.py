@@ -216,8 +216,8 @@ class ImagingSession(object):
                 kwargs[key] = value
         return startstop(self.pos.speed, **kwargs)
 
-    def get_preview(self):
-        return self.rois.get_preview()
+    def get_preview(self, *args, **kwargs):
+        return self.rois.get_preview(*args, **kwargs)
 
     def get_photons(self):
         fn = self.get_file_with_suffix('_PhotonTransfer.xlsx')
