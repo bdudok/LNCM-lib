@@ -264,7 +264,7 @@ class GUI_main(QtWidgets.QMainWindow):
         overwrite = kwargs.pop('overwrite')
         for prefix in self.active_prefix:
             self.cprint('PullVm:', prefix, 'queued.')
-            self.Q.run_job(Job(JobType.PullVm, (self.wdir, prefix, cells_tag, overwrite, kwargs)))
+            self.Q.run_job(Job(JobType.PullVM, (self.wdir, prefix, cells_tag, overwrite, kwargs)))
 
     def make_sima_tab(self):
         self.SIMATab = QtWidgets.QWidget()
