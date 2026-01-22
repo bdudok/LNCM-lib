@@ -12,6 +12,18 @@ from sklearn.decomposition import PCA
 from Proc2P.Bruker.ConfigVars import CF
 from matplotlib import pyplot as plt
 from Proc2P.Bruker.PreProc import SessionInfo
+from dataclasses import dataclass
+
+@dataclass
+class ProcessConfig:
+    # fields to be configurable from GUI
+    polynom_baseline: bool = True
+    exclude_from_frame: int = 0
+    exclude_until_frame: int = 0 #if 0, will include all
+    last_ROI_is_background: bool=False
+    seizure_mode: bool = False
+    invert_first_channel_G: bool = False
+    invert_second_channel_R: bool = False
 
 
 class CaTrace(object):

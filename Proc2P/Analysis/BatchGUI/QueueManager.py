@@ -8,6 +8,8 @@ from Proc2P.Analysis.GEVIReg.Register import Worker as GEVIReg_Worker
 from Proc2P.Analysis.AnalysisClasses.NormalizeVm import Worker as PullVM_Worker
 from Proc2P.Analysis.RoiEditor import Worker as SIMA_Worker
 from Proc2P.Analysis.PullSignals import Worker as Pull_Worker
+from Proc2P.Analysis.CaTrace import CaTrace, ProcessConfig
+from Proc2P.Analysis.CaTrace import Worker as Process_Cell_Worker
 
 class JobType(Enum):
     TEST = 0
@@ -40,6 +42,61 @@ class testworker(Process):
         for data in iter(self.queue.get, None):
             print(data)
             self.res_queue.put((self.__name__ + str(self.n), data))
+
+class ProcessSessionWorker(Process):
+    __name__ = 'Process-Session-Worker'
+
+    def __init__(self, queue, res_queue, n=0, worker_number=24):
+        super(ProcessSessionWorker, self).__init__()
+        self.session_queue = queue
+        self.session_res_queue = res_queue
+        self.queue = Queue()
+        self.result_queue = Queue()
+        self.ncpu = worker_number
+        self.nworker = 0
+        self.n = n
+
+    def run(self):
+        '''This process spawns and starts workers for single-cell traces to process a session.
+        Run is called with a config dataclass, and this worker parses it into CaTrace args'''
+        for data in iter(self.session_queue.get, None):
+            path, prefix, tag, config = data
+            config = ProcessConfig
+            #parse args
+            if config.polynom_baseline:
+                bsltype = 'poly'
+            else:
+                bsltype = 'original'
+            peakdet = False
+            last_bg =config.last_ROI_is_background
+            invert = [config.invert_first_channel_G, config.invert_second_channel_R]
+            excl = (config.exclude_from_frame, config.exclude_until_frame)
+            sz_mode = config.seizure_mode
+
+            #process cells
+            for ch in (0, 1):
+                session = CaTrace(path, prefix, bsltype=bsltype, exclude=excl, peakdet=peakdet, ch=ch, tag=tag,
+                            invert=invert[ch], last_bg=last_bg, ignore_saturation=sz_mode)
+                if session.open_raw() == -1:
+                    continue
+                if os.path.exists(session.pf):
+                    print(f'{session.pf} folder exists, skipping')
+                    continue
+                print('Processing', session.pf)
+                if sz_mode:
+                    session.ol_index = []
+                for c in range(session.cells):
+                    if self.ncpu and c >= self.nworker:
+                        Process_Cell_Worker(self.queue, self.result_queue).start()
+                        self.nworker += 1
+                        self.ncpu -= 1
+                    self.queue.put(session.pack_data(c))
+                for cell_data in iter(self.result_queue.get, None):
+                    finished = session.unpack_data(cell_data)
+                    if finished:
+                        break
+
+            self.session_res_queue.put((self.__name__, prefix))
 
 class QManager:
     '''
@@ -100,6 +157,7 @@ def BatchGUI_Q():
     Q.register_worker(JobType.PullVM, PullVM_Worker, 24)
     Q.register_worker(JobType.SIMA, SIMA_Worker, 2)
     Q.register_worker(JobType.PullSignals, Pull_Worker, 1)
+    Q.register_worker(JobType.ProcessROIs, ProcessSessionWorker, 1)
     return Q
 
 if __name__ == '__main__':

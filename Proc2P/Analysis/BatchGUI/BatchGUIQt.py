@@ -25,6 +25,7 @@ from Proc2P.Analysis.AnalysisClasses.NormalizeVm import PullVmConfig
 from Proc2P.Analysis.RoiEditor import SIMAConfig
 from Proc2P.Analysis.PullSignals import PullConfig
 from Proc2P.Bruker.LoadRegistered import Source
+from Proc2P.Analysis.CaTrace import ProcessConfig
 
 '''
 Gui for viewing and processing 2P data.
@@ -353,7 +354,33 @@ class GUI_main(QtWidgets.QMainWindow):
             self.cprint('Pull signals:', prefix, 'queued.')
 
     def make_process_tab(self):
-        pass
+        self.ProcessTab = QtWidgets.QWidget()
+        self.ProcessTab.layout = QtWidgets.QVBoxLayout()
+        self.ProcessTab.layout.addWidget(QtWidgets.QLabel('Select sessions to add to processing queue'))
+        button = QtWidgets.QPushButton('Process')
+        button.clicked.connect(self.process_button_callback)
+        self.ProcessTab.layout.addWidget(button)
+        # add a form to edit config
+        self.Process_config_editors = {}
+        config_widget = QtWidgets.QWidget()
+        self.Process_config_form = QtWidgets.QFormLayout()
+        self.Process_config = ProcessConfig()
+        self.create_config_form(self.Process_config_form, self.Process_config, self.Process_config_editors)
+        config_widget.layout = self.Process_config_form
+        apply_layout(config_widget)
+        self.ProcessTab.layout.addWidget(config_widget)
+
+        apply_layout(self.ProcessTab)
+        self.tabs.addTab(self.ProcessTab, Tabs.ProcessCa.value)
+        self.n_tabs += 1
+
+    def process_button_callback(self):
+        self.get_config_from_form(self.Process_config, self.Process_config_editors)
+        cells_tag = self.tag_label.text()
+        for prefix in self.active_prefix:
+            # path, prefix, bsltype, exclude, sz_mode, peakdet, last_bg, invert, tag
+            self.Q.run_job(Job(JobType.ProcessROIs, (self.wdir, prefix, cells_tag, self.Process_config)))
+            self.cprint('Pull signals:', prefix, 'queued.')
 
     def cprint(self, *args):
         ts = datetime.datetime.now().isoformat(timespec='seconds')
