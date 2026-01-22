@@ -1,8 +1,10 @@
 from PySide6 import QtGui, QtCore, QtWidgets
 import matplotlib
+
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib import pyplot as plt
+
 plt.rcParams['font.size'] = 8
 plt.rcParams['font.sans-serif'] = 'Arial'
 import numpy
@@ -21,24 +23,31 @@ from Proc2P.Analysis.BatchGUI.QueueManager import Job, JobType
 from Proc2P.Analysis.GEVIReg.Register import RegConfig
 from Proc2P.Analysis.AnalysisClasses.NormalizeVm import PullVmConfig
 from Proc2P.Analysis.RoiEditor import SIMAConfig
+from Proc2P.Analysis.PullSignals import PullConfig
+from Proc2P.Bruker.LoadRegistered import Source
 
 '''
 Gui for viewing and processing 2P data.
 This file just defines widgets, all functions are imported from the analysis classes or the legacy (Tk) BatchGUI app.
 '''
 
+
 class Tabs(Enum):
     ROI = 'ROI Editor'
     GEVIReg = 'GEVIReg'
-    PullVm = 'PullVm'
+    PullROIs = 'Pull signals'
+    ProcessCa = 'Process ROIs'
+    PullVm = 'Pull Vm'
     SIMA = 'SIMA'
 
 
 def apply_layout(widget):
     widget.setLayout(widget.layout)
 
+
 class GUI_main(QtWidgets.QMainWindow):
-    __name__= 'BatchGUI'
+    __name__ = 'BatchGUI'
+
     def __init__(self, app, title='BatchGUI', Q_manager=None):
         super().__init__()
         self.setWindowTitle(title)
@@ -47,10 +56,10 @@ class GUI_main(QtWidgets.QMainWindow):
         self.Q = Q_manager
 
         self.wdir = '.'
-        self.saved_fields = ('wdir', 'tag_label') #GUI values that are saved in a user-specific config file
-        self.selector_fields = () #list those of saved_fields which are single-select widgets
-        self.attr_fields = ('wdir', )#list those of saved_fields where we store the attribute value
-        #anything not in selector or attr fields is using the .text() of the corresponding widget
+        self.saved_fields = ('wdir', 'tag_label')  # GUI values that are saved in a user-specific config file
+        self.selector_fields = ()  # list those of saved_fields which are single-select widgets
+        self.attr_fields = ('wdir',)  # list those of saved_fields where we store the attribute value
+        # anything not in selector or attr fields is using the .text() of the corresponding widget
         self.settings_filename = self.config.settings_filename
         self.stripchars = "'+. *?~!@#$%^&*(){}:[]><,/" + '"' + '\\'
         self.separator = QtWidgets.QLabel("<hr>")
@@ -72,8 +81,11 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.tabs = QtWidgets.QTabWidget()
         self.n_tabs = 0
+        self.active_tab = Tabs.GEVIReg
         self.make_gevireg_tab()
         self.make_sima_tab()
+        self.make_pull_tab()
+        self.make_process_tab()
         self.make_editor_tab()
         self.make_PullVm_tab()
         self.tabs.resize(int(100 * self.n_tabs), 100)
@@ -83,11 +95,11 @@ class GUI_main(QtWidgets.QMainWindow):
         self.tabs.currentChanged.connect(self.on_tab_changed)
         apply_layout(self.table_widget)
 
-        #"console" for printing responses
+        # "console" for printing responses
         self.console_widget = QtWidgets.QPlainTextEdit(self)
         self.make_console_widget()
 
-        #add everything to main window layout
+        # add everything to main window layout
         self.main_widget = QtWidgets.QWidget(self)  # central widget
         self.main_widget.layout = QtWidgets.QVBoxLayout(self.table_widget)
         self.main_widget.layout.addWidget(self.session_bar)
@@ -141,7 +153,6 @@ class GUI_main(QtWidgets.QMainWindow):
         self.redirector = StdRedirector(self.console_widget)
         sys.stdout = self.redirector
 
-
     def make_filelist_widget(self):
         self.filelist_widget.setFixedWidth(self.config.PrefixFieldWidth)
         self.filelist_widget.layout = QtWidgets.QVBoxLayout()
@@ -163,7 +174,6 @@ class GUI_main(QtWidgets.QMainWindow):
 
         apply_layout(self.EditorTab)
         self.tabs.addTab(self.EditorTab, Tabs.ROI.value)
-        self.active_tab = Tabs.ROI
         self.n_tabs += 1
 
     def update_editor_callback(self):
@@ -177,7 +187,7 @@ class GUI_main(QtWidgets.QMainWindow):
         reg_button.clicked.connect(self.reg_button_callback)
         self.GEVIRegTab.layout.addWidget(reg_button)
 
-        #add a form to edit config
+        # add a form to edit config
         self.GEVI_config_editors = {}
         GEVI_Config_widget = QtWidgets.QWidget()
         self.GEVI_config_form = QtWidgets.QFormLayout()
@@ -197,7 +207,7 @@ class GUI_main(QtWidgets.QMainWindow):
             self.cprint('GEVIReg:', prefix, 'queued.')
             self.Q.run_job(Job(JobType.GEVIReg, (self.wdir, prefix, self.GEVI_config)))
 
-    def create_config_form(self, form: QtWidgets.QFormLayout, cfg: dataclass, editors:dict):
+    def create_config_form(self, form: QtWidgets.QFormLayout, cfg: dataclass, editors: dict):
         '''Adds widgets to edit each field of a dataclass. Keeps them in a dict for the getter'''
         for field in fields(cfg):
             fname = field.name
@@ -205,7 +215,7 @@ class GUI_main(QtWidgets.QMainWindow):
             fvalue = getattr(cfg, fname)
             if ftype is int:
                 w = QtWidgets.QSpinBox()
-                w.setMaximum(10**9)
+                w.setMaximum(10 ** 9)
                 w.setValue(fvalue)
             elif ftype is float:
                 w = QtWidgets.QDoubleSpinBox()
@@ -243,7 +253,7 @@ class GUI_main(QtWidgets.QMainWindow):
         PullVm_button.clicked.connect(self.PullVm_button_callback)
         self.PullVmTab.layout.addWidget(PullVm_button)
 
-        #add a form to edit config
+        # add a form to edit config
         self.PullVm_config_editors = {}
         PullVm_Config_widget = QtWidgets.QWidget()
         self.PullVm_config_form = QtWidgets.QFormLayout()
@@ -274,7 +284,7 @@ class GUI_main(QtWidgets.QMainWindow):
         SIMA_button.clicked.connect(self.SIMA_button_callback)
         self.SIMATab.layout.addWidget(SIMA_button)
 
-        #add a form to edit config
+        # add a form to edit config
         self.SIMA_config_editors = {}
         SIMA_Config_widget = QtWidgets.QWidget()
         self.SIMA_config_form = QtWidgets.QFormLayout()
@@ -291,7 +301,7 @@ class GUI_main(QtWidgets.QMainWindow):
     def SIMA_button_callback(self):
         self.get_config_from_form(self.SIMA_config, self.SIMA_config_editors)
         kwargs = asdict(self.SIMA_config)
-        #convert chekcboxes to list of SIMA approaches
+        # convert chekcboxes to list of SIMA approaches
         apps = []
         for field in fields(self.SIMA_config):
             if field.type is bool:
@@ -302,6 +312,48 @@ class GUI_main(QtWidgets.QMainWindow):
             self.Q.run_job(Job(JobType.SIMA, (self.wdir, prefix, apps, kwargs)))
             self.cprint('SIMA:', prefix, 'queued.')
 
+    def make_pull_tab(self):
+        self.PullTab = QtWidgets.QWidget()
+        self.PullTab.layout = QtWidgets.QVBoxLayout()
+        self.PullTab.layout.addWidget(QtWidgets.QLabel('Select sessions to add to processing queue'))
+        button = QtWidgets.QPushButton('Process')
+        button.clicked.connect(self.pull_button_callback)
+        self.PullTab.layout.addWidget(button)
+
+        # add selector for channel
+        channels = ('All', 'Green', 'Red')
+        labels = ('All available channels', 'Green-Ch2', 'Red-Ch1')
+        self.Pull_channel_selector = ModeSelector(channels, labels, self, self.PullTab, groupname='Channel')
+
+        # add selector for source
+        self.Pull_source_selector = ModeSelector(tuple(Source), tuple(m.name for m in Source), self, self.PullTab,
+                                                 groupname='Source')
+
+        # add a form to edit config
+        self.PullTab.layout.addWidget(QtWidgets.QLabel('Options'))
+        self.Pull_config_editors = {}
+        config_widget = QtWidgets.QWidget()
+        self.Pull_config_form = QtWidgets.QFormLayout()
+        self.Pull_config = PullConfig()
+        self.create_config_form(self.Pull_config_form, self.Pull_config, self.Pull_config_editors)
+        config_widget.layout = self.Pull_config_form
+        apply_layout(config_widget)
+        self.PullTab.layout.addWidget(config_widget)
+
+        apply_layout(self.PullTab)
+        self.tabs.addTab(self.PullTab, Tabs.PullROIs.value)
+        self.n_tabs += 1
+
+    def pull_button_callback(self):
+        self.get_config_from_form(self.Pull_config, self.Pull_config_editors)
+        cells_tag = self.tag_label.text()
+        for prefix in self.active_prefix:
+            self.Q.run_job(Job(JobType.PullSignals, (self.wdir, prefix, cells_tag, self.Pull_channel_selector.mode, False,
+                                              self.Pull_config.SNR_weighted, self.Pull_source_selector.mode)))
+            self.cprint('Pull signals:', prefix, 'queued.')
+
+    def make_process_tab(self):
+        pass
 
     def cprint(self, *args):
         ts = datetime.datetime.now().isoformat(timespec='seconds')
@@ -330,9 +382,7 @@ class GUI_main(QtWidgets.QMainWindow):
         vertical_layout.addWidget(self.FigCanvasRT)
         horizontal_layout.addLayout(vertical_layout)
 
-
         self.realTimeTab.layout.addLayout(horizontal_layout)
-
 
         self.realTimeTab.setLayout(self.realTimeTab.layout)
         self.tabs.addTab(self.realTimeTab, "RealTime")
@@ -386,7 +436,7 @@ class GUI_main(QtWidgets.QMainWindow):
             if fieldname in self.selector_fields:
                 v = getattr(self, fieldname).currentText()  # dropdowns
             elif fieldname in self.attr_fields:
-                v = getattr(self, fieldname) #attrs
+                v = getattr(self, fieldname)  # attrs
             else:
                 v = getattr(self, fieldname).text()  # simple entry
             self.settings_dict[fieldname] = v
@@ -415,7 +465,6 @@ class GUI_main(QtWidgets.QMainWindow):
         self.save_gui_state()
         event.accept()
 
-
     def update_trace(self, data):
         decdat = decimate(data, self.config.LiveLineDecimate)
         _, ydata = self.live_line.get_data()
@@ -426,12 +475,43 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def poll_result(self):
         if self.Q is not None:
-            #empties the q and calls the handler function with each item. called by a timer, non_blocking.
+            # empties the q and calls the handler function with each item. called by a timer, non_blocking.
             self.Q.poll_result(self._handle_item_from_worker)
 
     def _handle_item_from_worker(self, item):
         worker_name, prefix = item
-        self.cprint(worker_name+':', prefix, 'done.')
+        self.cprint(worker_name + ':', prefix, 'done.')
+
+
+class ModeSelector:
+
+    def __init__(self, values: tuple[str], labels: tuple[str], parent, widget, default_index=0, groupname=None):
+        '''
+        Create a buttongroup, have a .mode attribute that reflects state
+        :param values: the values self.mode will hold
+        :param labels: the labels displayed on the buttons
+        :param parent: call with the GUI's self
+        :param widget: the widget where the buttons will be added (needs to have a layout)
+        :param default_index: the option that will be active on creation
+        :param groupname: a label displayed above the group
+        '''
+        modegroup = QtWidgets.QButtonGroup(parent)
+        modegroup.setExclusive(True)
+        self._button_to_mode = {}
+        if groupname is not None:
+            widget.layout.addWidget(QtWidgets.QLabel(groupname))
+        for mode, label in zip(values, labels):
+            btn = QtWidgets.QRadioButton(label, parent)
+            widget.layout.addWidget(btn)
+            modegroup.addButton(btn)
+            self._button_to_mode[btn] = mode
+        modegroup.buttonClicked.connect(self._on_pull_mode_changed)
+        list(self._button_to_mode.keys())[default_index].setChecked(True)
+        self.mode = values[0]
+
+    def _on_pull_mode_changed(self, button):
+        self.mode = self._button_to_mode[button]
+
 
 class StdRedirector:
     def __init__(self, text_widget):
@@ -442,6 +522,7 @@ class StdRedirector:
 
     def flush(self):
         pass
+
 
 class SubplotsCanvas(FigureCanvasQTAgg):
 

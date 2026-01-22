@@ -10,18 +10,28 @@ from multiprocessing import Process
 from time import time
 import datetime
 from Proc2P.utils import logger, lprint
+from dataclasses import dataclass
+
+
+@dataclass
+class PullConfig:
+    # fields to be configurable from GUI
+    SNR_weighted: bool = False
+    # Use_raw: bool = False  - actually this is a selector of Source
 
 
 class Worker(Process):
     __name__ = 'PullSignals'
-    def __init__(self, queue):
+    def __init__(self, queue, res_queue=None, n=0):
         super(Worker, self).__init__()
         self.queue = queue
+        self.res_queue = res_queue
+        self.n = n
         self.log = logger()
 
     def run(self):
         for job in iter(self.queue.get, None):
-            path, prefix, roi, ch, szmode, snrw, useraw = job
+            path, prefix, roi, ch, szmode, snrw, source = job
             if roi == 'Auto':
                 #locate last saved roi file
                 exs = [1]
@@ -36,9 +46,11 @@ class Worker(Process):
             else:
                 tag = roi
             self.log.set_handle(path, prefix)
-            retval = pull_signals(path, prefix, tag=tag, ch=ch, snr_weighted=snrw, use_raw_movie=useraw)
+            retval = pull_signals(path, prefix, tag=tag, ch=ch, snr_weighted=snrw, use_movie=source)
             if retval:
                 lprint(self, retval, logger=self.log)
+            if self.res_queue is not None:
+                self.res_queue.put((self.__name__ + str(self.n), retval))
 
 
 def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_alt_path=True,

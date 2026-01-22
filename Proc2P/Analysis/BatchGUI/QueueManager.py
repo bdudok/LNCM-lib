@@ -7,12 +7,15 @@ from queue import Empty
 from Proc2P.Analysis.GEVIReg.Register import Worker as GEVIReg_Worker
 from Proc2P.Analysis.AnalysisClasses.NormalizeVm import Worker as PullVM_Worker
 from Proc2P.Analysis.RoiEditor import Worker as SIMA_Worker
+from Proc2P.Analysis.PullSignals import Worker as Pull_Worker
 
 class JobType(Enum):
     TEST = 0
     GEVIReg = 1
     PullVM = 2
     SIMA = 3
+    PullSignals = 4
+    ProcessROIs = 5
 
 @dataclass
 class Job:
@@ -96,6 +99,7 @@ def BatchGUI_Q():
     Q.register_worker(JobType.GEVIReg, GEVIReg_Worker, 5)
     Q.register_worker(JobType.PullVM, PullVM_Worker, 24)
     Q.register_worker(JobType.SIMA, SIMA_Worker, 2)
+    Q.register_worker(JobType.PullSignals, Pull_Worker, 1)
     return Q
 
 if __name__ == '__main__':
