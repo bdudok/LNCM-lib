@@ -26,6 +26,8 @@ from Proc2P.Analysis.RoiEditor import SIMAConfig
 from Proc2P.Analysis.PullSignals import PullConfig
 from Proc2P.Bruker.LoadRegistered import Source
 from Proc2P.Analysis.CaTrace import ProcessConfig
+import tifffile
+import cv2
 
 '''
 Gui for viewing and processing 2P data.
@@ -34,6 +36,7 @@ This file just defines widgets, all functions are imported from the analysis cla
 
 
 class Tabs(Enum):
+    Preview = 'Preview'
     ROI = 'ROI Editor'
     GEVIReg = 'GEVIReg'
     PullROIs = 'Pull signals'
@@ -82,13 +85,15 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.tabs = QtWidgets.QTabWidget()
         self.n_tabs = 0
-        self.active_tab = Tabs.GEVIReg
+        self.active_tab = Tabs.Preview
+        self.make_preview_tab()
         self.make_gevireg_tab()
         self.make_sima_tab()
         self.make_pull_tab()
         self.make_process_tab()
         self.make_editor_tab()
         self.make_PullVm_tab()
+
         self.tabs.resize(int(100 * self.n_tabs), 100)
 
         # add tabs to table
@@ -164,6 +169,76 @@ class GUI_main(QtWidgets.QMainWindow):
         self.filelist_widget.layout.addWidget(self.prefix_list)
 
         apply_layout(self.filelist_widget)
+
+    def make_preview_tab(self):
+        self.PreviewTab = QtWidgets.QWidget()
+        self.PreviewTab.layout = QtWidgets.QVBoxLayout()
+        self.preview_list = QtWidgets.QComboBox(self)
+        self.preview_list.currentIndexChanged.connect(self.update_preview_file)
+        self.PreviewTab.layout.addWidget(self.preview_list)
+        self.preview_label = QtWidgets.QLabel()
+        self.preview_label.setFrameStyle(QtWidgets.QFrame.NoFrame)
+        self.preview_label.setMargin(0)
+        self.preview_label.setContentsMargins(0, 0, 0, 0)
+        self.preview_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        self.PreviewTab.layout.addWidget(self.preview_label)
+
+        self.gamma = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.gamma_label = QtWidgets.QLabel('gamma')
+        self.gamma.setMinimum(1)
+        self.gamma.setMaximum(30)
+        self.gamma.setValue(15)
+        self.gamma.setTickPosition(QtWidgets.QSlider.TicksBelow)
+        self.PreviewTab.layout.addWidget(self.gamma)
+        self.gamma.valueChanged.connect(self.update_preview_file)
+
+        apply_layout(self.PreviewTab)
+        self.tabs.addTab(self.PreviewTab, Tabs.Preview.value)
+        self.n_tabs += 1
+
+    def update_preview_session(self):
+        wdir = self.wdir
+        prefix = self.active_prefix[0]
+        opPath = os.path.join(wdir, prefix)
+        self.preview_list.clear()
+        self.preview_w = self.preview_label.width()
+        self.preview_h = self.preview_label.height()
+        item_index = 0
+        def_index = 0
+        for fn in os.listdir(opPath):
+            if prefix in fn and fn.endswith('.tif'):
+                self.preview_list.addItem(fn[len(prefix) + 1:-4], fn)
+                if fn.endswith('_preview.tif'):
+                    def_index = item_index
+                item_index += 1
+        self.preview_list.setCurrentIndex(def_index)
+        self.update_preview_file()
+
+    def update_preview_file(self):
+        items = (self.wdir, self.active_prefix[0], self.preview_list.currentData())
+        if None in items:
+            return 0
+        preview_fn = os.path.join(*items)
+        img = tifffile.imread(preview_fn)
+        gamma = 15.0 / (self.gamma.value() + 1)
+        lut = numpy.array([((i / 255.0) ** gamma) * 255 for i in numpy.arange(0, 256)]).astype('uint8')
+        img = cv2.LUT(img.squeeze(), lut)
+        if len(img.shape) == 2:
+            h, w = img.shape
+            ch = 1
+        else:
+            h, w, ch = img.shape
+        qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
+
+        # Resize while preserving aspect ratio to fit QLabel width
+        aspect_ratio = h / w
+        rescale_factor = min(self.preview_w / w, self.preview_h / h)
+        target_width = min(self.preview_w-5, int(w * rescale_factor))
+        target_height = min(self.preview_h-5, int(target_width * aspect_ratio))
+
+        qimg_resized = qimg.scaled(target_width, target_height,
+                                   QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        self.preview_label.setPixmap(QtGui.QPixmap.fromImage(qimg_resized))
 
     def make_editor_tab(self):
         self.EditorTab = QtWidgets.QWidget()
@@ -416,6 +491,8 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def on_tab_changed(self, index):
         self.active_tab = Tabs(self.tabs.tabText(index))
+        if self.active_tab == Tabs.Preview:
+            self.update_preview_session()
 
     def save_gui_state(self):
         for fieldname in self.saved_fields:
@@ -446,6 +523,8 @@ class GUI_main(QtWidgets.QMainWindow):
         self.prefix_label.setText(self.active_prefix[0])
         if self.active_tab == Tabs.ROI:
             self.update_editor_callback()
+        elif self.active_tab == Tabs.Preview:
+            self.update_preview_session()
 
     def setup_live_fig(self):
         ca = self.FigCanvasRT.ax

@@ -144,7 +144,7 @@ class QManager:
     def poll_result(self, handler_function):
         while True:
             try:
-                item = self.Q_result.get_nowait()  # non-blocking [web:25]
+                item = self.Q_result.get_nowait()  # non-blocking
             except Empty:
                 break
             else:
