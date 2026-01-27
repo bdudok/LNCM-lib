@@ -1,7 +1,6 @@
 name: lncm
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - _libavif_api=1.3.0=h57928b3_2
   - _openmp_mutex=4.5=2_gnu
