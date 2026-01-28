@@ -10,6 +10,7 @@ from Proc2P.Analysis.RoiEditor import Worker as SIMA_Worker
 from Proc2P.Analysis.PullSignals import Worker as Pull_Worker
 from Proc2P.Analysis.CaTrace import CaTrace, ProcessConfig
 from Proc2P.Analysis.CaTrace import Worker as Process_Cell_Worker
+from Proc2P.Analysis.Ripples import Ripples
 
 class JobType(Enum):
     TEST = 0
@@ -18,6 +19,7 @@ class JobType(Enum):
     SIMA = 3
     PullSignals = 4
     ProcessROIs = 5
+    Ripples = 6
 
 @dataclass
 class Job:
@@ -42,6 +44,26 @@ class testworker(Process):
         for data in iter(self.queue.get, None):
             print(data)
             self.res_queue.put((self.__name__ + str(self.n), data))
+
+class RippleWorker(Process):
+    __name__ = 'Ripple-Worker'
+
+    def __init__(self, queue, res_queue, n=0):
+        super(RippleWorker, self).__init__()
+        self.queue = queue
+        self.res_queue = res_queue
+        self.n = n
+
+    def run(self):
+        for data in iter(self.queue.get, None):
+            wdir, prefix, kwargs = data
+            cfg={}
+            for key in ('tr1', 'tr2', 'y_scale'):
+                cfg[key] = kwargs[key]
+            r = Ripples(wdir, prefix, config=cfg, force=kwargs['overwrite_existing'],
+                                   ephys_channel=kwargs['channel'], tag=kwargs['tag'])
+            self.res_queue.put((self.__name__ + str(self.n), f'{prefix}: {r.count_included()} events saved.'))
+
 
 class ProcessSessionWorker(Process):
     __name__ = 'Process-Session-Worker'
@@ -158,6 +180,7 @@ def BatchGUI_Q():
     Q.register_worker(JobType.SIMA, SIMA_Worker, 2)
     Q.register_worker(JobType.PullSignals, Pull_Worker, 1)
     Q.register_worker(JobType.ProcessROIs, ProcessSessionWorker, 1)
+    Q.register_worker(JobType.Ripples, RippleWorker, 3)
     return Q
 
 if __name__ == '__main__':

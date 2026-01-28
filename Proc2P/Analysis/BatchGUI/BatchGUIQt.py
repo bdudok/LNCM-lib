@@ -26,6 +26,7 @@ from Proc2P.Analysis.RoiEditor import SIMAConfig
 from Proc2P.Analysis.PullSignals import PullConfig
 from Proc2P.Bruker.LoadRegistered import Source
 from Proc2P.Analysis.CaTrace import ProcessConfig
+from Proc2P.Analysis.Ripples import Ripples, RippleConfig
 import tifffile
 import cv2
 
@@ -43,6 +44,7 @@ class Tabs(Enum):
     ProcessCa = 'Process ROIs'
     PullVm = 'Pull Vm'
     SIMA = 'SIMA'
+    LFP = 'LFP'
 
 
 def apply_layout(widget):
@@ -93,6 +95,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.make_process_tab()
         self.make_editor_tab()
         self.make_PullVm_tab()
+        self.make_LFP_tab()
 
         self.tabs.resize(int(100 * self.n_tabs), 100)
 
@@ -233,8 +236,8 @@ class GUI_main(QtWidgets.QMainWindow):
         # Resize while preserving aspect ratio to fit QLabel width
         aspect_ratio = h / w
         rescale_factor = min(self.preview_w / w, self.preview_h / h)
-        target_width = min(self.preview_w-5, int(w * rescale_factor))
-        target_height = min(self.preview_h-5, int(target_width * aspect_ratio))
+        target_width = min(self.preview_w - 5, int(w * rescale_factor))
+        target_height = min(self.preview_h - 5, int(target_width * aspect_ratio))
 
         qimg_resized = qimg.scaled(target_width, target_height,
                                    QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
@@ -424,8 +427,9 @@ class GUI_main(QtWidgets.QMainWindow):
         self.get_config_from_form(self.Pull_config, self.Pull_config_editors)
         cells_tag = self.tag_label.text()
         for prefix in self.active_prefix:
-            self.Q.run_job(Job(JobType.PullSignals, (self.wdir, prefix, cells_tag, self.Pull_channel_selector.mode, False,
-                                              self.Pull_config.SNR_weighted, self.Pull_source_selector.mode)))
+            self.Q.run_job(
+                Job(JobType.PullSignals, (self.wdir, prefix, cells_tag, self.Pull_channel_selector.mode, False,
+                                          self.Pull_config.SNR_weighted, self.Pull_source_selector.mode)))
             self.cprint('Pull signals:', prefix, 'queued.')
 
     def make_process_tab(self):
@@ -456,6 +460,73 @@ class GUI_main(QtWidgets.QMainWindow):
             # path, prefix, bsltype, exclude, sz_mode, peakdet, last_bg, invert, tag
             self.Q.run_job(Job(JobType.ProcessROIs, (self.wdir, prefix, cells_tag, self.Process_config)))
             self.cprint('Pull signals:', prefix, 'queued.')
+
+    def make_LFP_tab(self):
+        self.LFPTab = QtWidgets.QWidget()
+        self.LFPTab.layout = QtWidgets.QVBoxLayout()
+        self.LFPTab.layout.addWidget(QtWidgets.QLabel('Select sessions to process for ripple detection.'))
+        # add a form to edit config
+        self.Ripple_config_editors = {}
+        config_widget = QtWidgets.QWidget()
+        self.Ripple_config_form = QtWidgets.QFormLayout()
+        self.Ripple_config = RippleConfig()
+        self.create_config_form(self.Ripple_config_form, self.Ripple_config, self.Ripple_config_editors)
+        config_widget.layout = self.Ripple_config_form
+        apply_layout(config_widget)
+        self.LFPTab.layout.addWidget(config_widget)
+
+        button = QtWidgets.QPushButton('Process')
+        button.clicked.connect(self.process_ripples_callback)
+        self.LFPTab.layout.addWidget(button)
+
+        self.ripples = None
+        self.LFPTab.layout.addWidget(QtWidgets.QLabel('Show ripple selector for current session:'))
+        buttons = {
+            'Display Ripples': self.display_ripples_callback,
+            'Detect recursively': self.ripples_rec_callback,
+            'Save Ripples with tag': self.ripples_save_callback,
+            'Save ripple times as .xlsx': self.ripples_export_callback}
+        for button_name, callback in buttons.items():
+            button = QtWidgets.QPushButton(button_name)
+            button.clicked.connect(callback)
+            self.LFPTab.layout.addWidget(button)
+
+        apply_layout(self.LFPTab)
+        self.tabs.addTab(self.LFPTab, Tabs.LFP.value)
+        self.n_tabs += 1
+
+    def process_ripples_callback(self):
+        self.get_config_from_form(self.Ripple_config, self.Ripple_config_editors)
+        kwargs = asdict(self.Ripple_config)
+        for prefix in self.active_prefix:
+            self.cprint('Ripples:', prefix, 'queued.')
+            self.Q.run_job(Job(JobType.Ripples, (self.wdir, prefix, kwargs)))
+
+    def load_ripple(self):
+        self.get_config_from_form(self.Ripple_config, self.Ripple_config_editors)
+        if (self.ripples is not None) and self.active_ripple_setting == json.dumps(asdict(self.Ripple_config)):
+            return 0
+        self.active_ripple_setting = json.dumps(asdict(self.Ripple_config))
+        cfg = {}
+        for key in ('tr1', 'tr2', 'y_scale'):
+            cfg[key] = getattr(self.Ripple_config, key)
+        self.ripples = Ripples(self.wdir, self.active_prefix[0], config=cfg,
+                               force=self.Ripple_config.overwrite_existing,
+                               ephys_channel=self.Ripple_config.channel, tag=self.Ripple_config.tag)
+
+    def display_ripples_callback(self):
+        self.load_ripple()
+        self.ripples.enum_ripples(no_save=True)
+
+    def ripples_rec_callback(self):
+        self.load_ripple()
+        self.ripples.rec_enum_ripples(exclude_spikes=self.Ripple_config.exclude_spikes)
+
+    def ripples_save_callback(self):
+        self.ripples.save_ripples(tag=self.Ripple_config.tag)
+
+    def ripples_export_callback(self):
+        self.ripples.export_ripple_times()
 
     def cprint(self, *args):
         ts = datetime.datetime.now().isoformat(timespec='seconds')
@@ -521,6 +592,7 @@ class GUI_main(QtWidgets.QMainWindow):
     def set_prefix(self):
         self.active_prefix = [x.text() for x in self.prefix_list.selectedItems()]
         self.prefix_label.setText(self.active_prefix[0])
+        self.ripples = None
         if self.active_tab == Tabs.ROI:
             self.update_editor_callback()
         elif self.active_tab == Tabs.Preview:
@@ -618,17 +690,23 @@ class ModeSelector:
     def _on_pull_mode_changed(self, button):
         self.mode = self._button_to_mode[button]
 
-
 class StdRedirector:
     def __init__(self, text_widget):
         self.text_space = text_widget
+        self._buffer = ""
 
     def write(self, string):
-        self.text_space.appendPlainText(string)
+        # Accumulate text until we see a newline
+        self._buffer += string
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            # appendPlainText adds a new block (line) in QPlainTextEdit
+            self.text_space.appendPlainText(line)
 
     def flush(self):
-        pass
-
+        if self._buffer:
+            self.text_space.appendPlainText(self._buffer)
+            self._buffer = ""
 
 class SubplotsCanvas(FigureCanvasQTAgg):
 

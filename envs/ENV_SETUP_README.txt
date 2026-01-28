@@ -4,7 +4,7 @@
 
 conda create --name lncm python=3.11 -c conda-forge --strict-channel-priority
 conda activate lncm
-conda install -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph pyedflib lsq-ellipse pandas-stubs pyarrow qt6-multimedia
+conda install -c conda-forge -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph pyedflib lsq-ellipse pandas-stubs pyarrow qt6-multimedia
 
 
 # To use SIMA for ROI detection in 2P movies, we need a Python 3.6 env ("lncm36"), 
@@ -12,7 +12,7 @@ conda install -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pand
 
 conda create --name lncm36 python=3.6 -c conda-forge --strict-channel-priority
 conda activate lncm36
-conda install -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph
+conda install -c conda-forge -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph
 pip install sima
 
 # To use Suite2P for motion correction, we need a Python 3.9 env ("suite2p"):
@@ -39,3 +39,6 @@ conda activate DEEPLABCUT
 conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
 python -m deeplabcut
 
+# For treadmill (PyControl_LNCM)
+the lncm env does not work for this (gui written for an older pyqtgraph binding),
+ use the default PyControl installation and add zmq if necessary

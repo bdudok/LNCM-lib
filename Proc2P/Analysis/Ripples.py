@@ -9,7 +9,18 @@ from PlotTools.Formatting import strip_ax
 from sklearn import cluster
 from Proc2P.Bruker.LoadEphys import Ephys
 from Proc2P.utils import lprint, logger
+from dataclasses import dataclass
 
+@dataclass
+class RippleConfig:
+    # fields to be configurable from GUI
+    tr1: float = 5
+    tr2: float = 3
+    y_scale: float = 1
+    tag: str = ''
+    overwrite_existing: bool = False
+    exclude_spikes: bool=False
+    channel: int = 1
 
 class Event(object):
     def __init__(self, ripples, p1, p2):
@@ -326,7 +337,8 @@ class Ripples(object):
         if self.extended_figure:
             self.fig = plt.subplots(3, 1, sharex=False)
             axes = self.fig[1]
-            axes[0].get_shared_x_axes().join(axes[0], axes[1])
+            axes[1].sharex(axes[0]) #for mpl > 3.8
+            # axes[0].get_shared_x_axes().join(axes[0], axes[1])
             y = decimate(self.envelope, 10)
             x = numpy.linspace(0, self.n, int(self.n / 10))
             axes[2].plot(x, y[:len(x)], color='black')
@@ -376,7 +388,7 @@ class Ripples(object):
         axes[1].axhline(self.tr1 * self.std, color='grey')
         axes[1].axhline(self.tr2 * self.std, color='black')
         if self.extended_figure:
-            self.pos_marker_line.set_xdata(p1)
+            self.pos_marker_line.set_xdata([p1])
         if self.redraw:
             plt.draw()
             self.redraw = False
@@ -461,13 +473,13 @@ class Ripples(object):
                     vline_lo = axes[2].axvline(selpos, color='orange')
                 elif self.rect is not None:
                     selpos = self.rect[0]
-                    vline_hi.set_xdata(selpos)
-                    vline_lo.set_xdata(selpos)
+                    vline_hi.set_xdata([selpos])
+                    vline_lo.set_xdata([selpos])
                 startpos = curr_xlim_pos * self.fs
                 for ai in (0, 1):
                     axes[ai].set_xlim(startpos, startpos + self.fs)
-                overview_start_marker.set_xdata(startpos)
-                overview_stop_marker.set_xdata(startpos + self.fs)
+                overview_start_marker.set_xdata([startpos])
+                overview_stop_marker.set_xdata([startpos + self.fs])
                 plt.draw()
             self.cursor.pressed = None
         return selpos
