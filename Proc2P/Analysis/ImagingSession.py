@@ -22,7 +22,6 @@ from Video.PullMotion import pull_motion_energy
 from sklearn.neighbors import KernelDensity
 
 
-
 class Pos:
     '''to hold attributes of movement, previously used by treadmill (Quad) class'''
 

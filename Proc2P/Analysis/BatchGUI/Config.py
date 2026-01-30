@@ -14,6 +14,12 @@ class GuiConfig:
     plot_canvas_size = (9, 3) #inches,
     ROI_preview_default = 'avgmax'
     zoomfactor = 4.0 #for ROI editor
+    SessionControlsHeight = 250
+    SessionPreviewWidth = 250
+    RunColor = '#4604D2'
+    GreenColor = '#04D246'
+    RedColor = '#D24604'
+    SzColor = '#FC9564'
 
 
 class State(Enum):

@@ -1,6 +1,8 @@
 import os
 import json
-
+from subprocess import Popen
+from pathlib import Path
+import argparse
 #plotting
 import matplotlib
 matplotlib.use('QtAgg')
@@ -31,17 +33,21 @@ from LFP.Pinnacle import ReadEDF
 
 class GUI_main(QtWidgets.QMainWindow):
     def __init__(self, app, path=None, savepath=None, prefix_list=None, setupID='LNCM',
-                 defaults=None):
+                 defaults=None, set_prefix=None):
         super().__init__()
 
         self.setWindowTitle(f'Detect spikes and seizures')
         self.setGeometry(30, 60, 3200, 1600) # Left, top, width, height.
         self.app = app
+        if defaults == 'hippocampus':
+            defaults = gui_defaults
         self.user_defaults = defaults
 
         #peristent settings
         self.wdir = path
-
+        self.set_prefix = set_prefix
+        if savepath is None:
+            savepath = path
         self.savepath = savepath
         self.input_prefix = prefix_list
         self.setup = setupID #'LNCM' or "Soltesz' or 'Pinnacle'
@@ -80,6 +86,10 @@ class GUI_main(QtWidgets.QMainWindow):
         self.centralWidget().setLayout(horizontal_layout)
         if path is not None:
             self.select_path_callback(path)
+        if set_prefix is not None:
+            self.active_prefix = set_prefix
+            self.new_plot = True
+            self.refresh_data()
         self.settings_saved = False
         self.show()
 
@@ -278,6 +288,8 @@ class GUI_main(QtWidgets.QMainWindow):
             self.wdir = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder') + '/'
             self.savepath = self.wdir
             # self.settings.setValue("LastFile", self.wdir)
+        else:
+            self.wdir = path
         self.path_label.setText(self.wdir)
         os.chdir(self.wdir)
         self.current_selected_i = None
@@ -294,6 +306,7 @@ class GUI_main(QtWidgets.QMainWindow):
             suffix = '_ephys.npy'
             self.dirpaths = {}
             prefix_list = []
+            available_pf = []
             for fn in flist:
                 dirpath = self.wdir+fn
                 if os.path.isdir(dirpath):
@@ -303,7 +316,7 @@ class GUI_main(QtWidgets.QMainWindow):
                             self.dirpaths[fn] = dirpath
                             prefix_list.append(fn)
             if self.input_prefix is not None:
-                prefix_list = [prefix for prefix in self.input_prefix if prefix in self.dirpaths]
+                prefix_list = [prefix for prefix in self.input_prefix if prefix in prefix_list]
         elif self.setup == 'Pinnacle':
             suffix = '.edf'
             prefix_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
@@ -544,14 +557,43 @@ class SubplotsCanvas(FigureCanvasQTAgg):
         self.fig, self.ax = plt.subplots(*args, **kwargs)
         super(SubplotsCanvas, self).__init__(self.fig)
 
-def launch_GUI(*args, **kwargs):
-    app = QtWidgets.QApplication(sys.argv)
+def main(*args, **kwargs):
+    app = QtWidgets.QApplication()
     app.setStyle('Fusion')
     font = QtGui.QFont()
     app.setFont(font)
-    gui_main = GUI_main(app, *args, **kwargs)
+
+    # SzProcGUI(self.wdir, 'LNCM', 'hippocampus', self.active_prefix[0])
+    path, setup_ID, defaults, prefix = sys.argv[1:]
+    gui_main = GUI_main(app, path=path, setupID=setup_ID, defaults=defaults, set_prefix=prefix)
     sys.exit(app.exec())
 
+gui_defaults = { #aiming to detect ripples and HFOs
+    'LoCut': 80, #band pass filter low cut (Hz)
+    'HiCut': 500, #band pass filter high cut (Hz)
+    'Tr1': 3, #spike treshold for spike width measurement (SD)
+    'Tr2': 5, #spike amplitude treshold for spike detection (SD)
+    'TrDiff': 5, #threshold for including broad spikes (based on abs diff, SD)
+    'Dur': 5, #spike minimum duration (ms)
+    'Dist': 50, #spike separation (ms)
+    'Sz.MinDur': 3, #spike cluster duration to be considered seizure (s)
+    'Sz.Gap': 3, #gap for merging neighboring spike clusters (s)
+    'SzDet.Framesize': 50, #resolution of output instantaneous spike rate trace (ms)
+    'fs': 5000, #sampling rate (read from input in case of Pinnacle EDF file)
+    'Channel': 1, #channel number (indexed from 1)
+    'PlotDur': 'all', #displayed trace length in minutes, or 'all'
+}
+
+def launch_in_subprocess(*args, **kwargs):
+    #can be called with args specifying the session to launch a standalone window
+    cli_args = list(args)
+    #avoiding kwargs so I don't have to parse
+    for k, v in kwargs.items():
+        flag = f"--{k.replace('_', '-')}"
+        cli_args.append(flag)
+        cli_args.append(str(v))
+    Popen([sys.executable, Path(__file__), *cli_args])
+
+launch_GUI = main
 if __name__ == '__main__':
-    path = 'D:\Shares\Data\_Processed\EEG\Tottering/'
-    launch_GUI(path)
+    main()

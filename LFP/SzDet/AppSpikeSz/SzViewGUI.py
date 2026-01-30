@@ -4,7 +4,8 @@ from PySide6 import QtGui, QtWidgets, QtCore
 import os.path
 import cv2
 import datetime
-
+from subprocess import Popen
+from pathlib import Path
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib import pyplot as plt
 from LFP.SzDet.AppSpikeSz.SzViewData import SzReviewData
@@ -582,15 +583,20 @@ class SelectorToolbar(NavigationToolbar2QT):
             self.main_gui.edit_sz_callback(self.event_type, event.xdata)
 
 
-def launch_GUI(*args, **kwargs):
+def main(*args, **kwargs):
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
-    app = QtWidgets.QApplication(sys.argv)
-    app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling)
+    app = QtWidgets.QApplication()
+    # app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling)
     app.setStyleSheet("QPushButton{font-size: 12pt;};QLabel{font-size: 12pt;};QListWidget{font-size: 14pt;}")
     app.setStyle('Fusion')
-    gui_main = GUI_main(app, *args, **kwargs)
+    setup_ID,  = sys.argv[1:]
+    gui_main = GUI_main(app, setupID=setup_ID)
     sys.exit(app.exec())
 
+def launch_in_subprocess(*args, **kwargs):
+    #can be called with args specifying the session to launch a standalone window
+    Popen([sys.executable, Path(__file__), *args])
 
+launch_GUI = main
 if __name__ == '__main__':
-    launch_GUI(setupID='LNCM')
+    main()

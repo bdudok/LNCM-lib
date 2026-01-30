@@ -16,9 +16,13 @@ from dataclasses import dataclass, fields, asdict
 
 from Proc2P.utils import logger, lprint
 from Proc2P.Analysis.BatchGUI.Config import *
-from Proc2P.Analysis.AssetFinder import AssetFinder
+from Proc2P.Analysis.AssetFinder import AssetFinder, get_processed_tags
 # from Proc2P.Analysis.BatchGUI.RoiEditorQt import GUI_main as RoiEditorGUI
 from Proc2P.Analysis.BatchGUI.RoiEditorQt import launch_in_subprocess as RoiEditorGUI
+from Proc2P.Analysis.BatchGUI.SessionGUIQt import launch_in_subprocess as SessionGUI
+from LFP.SzDet.AppSpikeSz.GUI_SpikeSzDet import launch_in_subprocess as SzProcGUI
+from LFP.SzDet.AppSpikeSz.SzViewGUI import launch_in_subprocess as SzViewGUI
+
 from Proc2P.Analysis.BatchGUI.QueueManager import Job, JobType
 from Proc2P.Analysis.GEVIReg.Register import RegConfig
 from Proc2P.Analysis.AnalysisClasses.NormalizeVm import PullVmConfig
@@ -38,6 +42,7 @@ This file just defines widgets, all functions are imported from the analysis cla
 
 class Tabs(Enum):
     Preview = 'Preview'
+    SessionGUI = 'View Trace'
     ROI = 'ROI Editor'
     GEVIReg = 'GEVIReg'
     PullROIs = 'Pull signals'
@@ -129,7 +134,6 @@ class GUI_main(QtWidgets.QMainWindow):
         self._queue_timer.setInterval(1000)
         self._queue_timer.timeout.connect(self.poll_result)
         self._queue_timer.start()
-
         self.show()
 
     def make_session_bar(self):
@@ -155,6 +159,10 @@ class GUI_main(QtWidgets.QMainWindow):
             self.tag_label.setText(str(self.settings_dict['tag_label']))
         self.tag_label.setFixedWidth(self.config.TagFieldWidth)
         self.session_bar.layout.addWidget(self.tag_label)
+
+        open_button = QtWidgets.QPushButton('View')
+        open_button.clicked.connect(self.open_viewer_callback)
+        self.session_bar.layout.addWidget(open_button)
 
     def make_console_widget(self):
         self.console_widget.setFixedHeight(self.config.ConsoleWidgetHeight)
@@ -187,7 +195,6 @@ class GUI_main(QtWidgets.QMainWindow):
         self.PreviewTab.layout.addWidget(self.preview_label)
 
         self.gamma = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-        self.gamma_label = QtWidgets.QLabel('gamma')
         self.gamma.setMinimum(1)
         self.gamma.setMaximum(30)
         self.gamma.setValue(15)
@@ -257,6 +264,16 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def update_editor_callback(self):
         RoiEditorGUI(self.wdir, self.active_prefix[0], self.tag_label.text())
+
+    def open_viewer_callback(self):
+        prefix = self.active_prefix[0]
+        tag = self.tag_label.text()
+        traces = get_processed_tags(self.wdir, prefix)
+        traces = ', '.join(set([x[0] for x in traces]))
+        if tag not in traces:
+            self.cprint(f'No processed data found for "{tag}". Available: {traces}')
+        else:
+            SessionGUI(self.wdir, self.active_prefix[0], tag)
 
     def make_gevireg_tab(self):
         self.GEVIRegTab = QtWidgets.QWidget()
@@ -459,7 +476,7 @@ class GUI_main(QtWidgets.QMainWindow):
         for prefix in self.active_prefix:
             # path, prefix, bsltype, exclude, sz_mode, peakdet, last_bg, invert, tag
             self.Q.run_job(Job(JobType.ProcessROIs, (self.wdir, prefix, cells_tag, self.Process_config)))
-            self.cprint('Pull signals:', prefix, 'queued.')
+            self.cprint('Process ROIs:', prefix, 'queued.')
 
     def make_LFP_tab(self):
         self.LFPTab = QtWidgets.QWidget()
@@ -490,6 +507,14 @@ class GUI_main(QtWidgets.QMainWindow):
             button = QtWidgets.QPushButton(button_name)
             button.clicked.connect(callback)
             self.LFPTab.layout.addWidget(button)
+
+        self.LFPTab.layout.addWidget(QtWidgets.QLabel('Run seizure analysis tools:'))
+        button = QtWidgets.QPushButton('Detect spikes')
+        button.clicked.connect(self.run_spikeszdet_callback)
+        self.LFPTab.layout.addWidget(button)
+        button = QtWidgets.QPushButton('Curate seizures')
+        button.clicked.connect(self.run_curate_sz_callback)
+        self.LFPTab.layout.addWidget(button)
 
         apply_layout(self.LFPTab)
         self.tabs.addTab(self.LFPTab, Tabs.LFP.value)
@@ -528,42 +553,22 @@ class GUI_main(QtWidgets.QMainWindow):
     def ripples_export_callback(self):
         self.ripples.export_ripple_times()
 
+    def run_spikeszdet_callback(self):
+        SzProcGUI(self.wdir, 'LNCM', 'hippocampus', self.active_prefix[0])
+
+    def run_curate_sz_callback(self):
+        SzViewGUI('LNCM')
+
     def cprint(self, *args):
         ts = datetime.datetime.now().isoformat(timespec='seconds')
         self.console_widget.appendPlainText(' '.join([str(x) for x in (ts, *args)]))
-
-    def make_realtime_tab(self):
-        self.realTimeTab = QtWidgets.QWidget()
-        self.realTimeTab.layout = QtWidgets.QVBoxLayout()
-
-        # control buttons
-        horizontal_layout = QtWidgets.QHBoxLayout()
-        self.record_baseline_button = QtWidgets.QPushButton('Record baseline', )
-        horizontal_layout.addWidget(self.record_baseline_button)
-        # self.record_baseline_button.clicked.connect(self.record_baseline_callback)
-
-        self.realTimeTab.layout.addLayout(horizontal_layout)
-
-        # real time plot area
-        self.realTimeTab.layout.addWidget(self.separator)
-        horizontal_layout = QtWidgets.QHBoxLayout()
-        vertical_layout = QtWidgets.QVBoxLayout()
-        self.FigCanvasRT = SubplotsCanvas(nrows=1, sharex=True, figsize=self.config.plot_canvas_size)
-        self.setup_live_fig()
-        toolbar = NavigationToolbar2QT(self.FigCanvasRT, self)
-        vertical_layout.addWidget(toolbar)
-        vertical_layout.addWidget(self.FigCanvasRT)
-        horizontal_layout.addLayout(vertical_layout)
-
-        self.realTimeTab.layout.addLayout(horizontal_layout)
-
-        self.realTimeTab.setLayout(self.realTimeTab.layout)
-        self.tabs.addTab(self.realTimeTab, "RealTime")
 
     def on_tab_changed(self, index):
         self.active_tab = Tabs(self.tabs.tabText(index))
         if self.active_tab == Tabs.Preview:
             self.update_preview_session()
+        elif self.active_tab == Tabs.ROI:
+            self.update_editor_callback()
 
     def save_gui_state(self):
         for fieldname in self.saved_fields:
@@ -625,7 +630,6 @@ class GUI_main(QtWidgets.QMainWindow):
         if os.path.exists(self.settings_filename):
             with open(self.settings_filename) as f:
                 self.settings_dict = json.load(f)
-            print(self.settings_dict)
         else:
             self.settings_dict = {}
 
@@ -642,14 +646,6 @@ class GUI_main(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         self.save_gui_state()
         event.accept()
-
-    def update_trace(self, data):
-        decdat = decimate(data, self.config.LiveLineDecimate)
-        _, ydata = self.live_line.get_data()
-        ydata[:-len(decdat)] = ydata[len(decdat):]
-        ydata[-len(decdat):] = decdat
-        self.live_line.set_ydata(ydata)
-        self.FigCanvasRT.draw()
 
     def poll_result(self):
         if self.Q is not None:
@@ -690,6 +686,7 @@ class ModeSelector:
     def _on_pull_mode_changed(self, button):
         self.mode = self._button_to_mode[button]
 
+
 class StdRedirector:
     def __init__(self, text_widget):
         self.text_space = text_widget
@@ -708,12 +705,6 @@ class StdRedirector:
             self.text_space.appendPlainText(self._buffer)
             self._buffer = ""
 
-class SubplotsCanvas(FigureCanvasQTAgg):
-
-    def __init__(self, *args, **kwargs):
-        self.fig, self.ax = plt.subplots(*args, **kwargs)
-        super(SubplotsCanvas, self).__init__(self.fig)
-
 
 def launch_GUI(*args, **kwargs):
     app = QtWidgets.QApplication(sys.argv)
@@ -722,6 +713,7 @@ def launch_GUI(*args, **kwargs):
     app.setFont(font)
     gui_main = GUI_main(app, *args, **kwargs)
     sys.exit(app.exec())
+    print('GUI opened.')
 
 
 if __name__ == '__main__':

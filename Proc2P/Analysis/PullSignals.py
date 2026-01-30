@@ -50,7 +50,7 @@ class Worker(Process):
             if retval:
                 lprint(self, retval, logger=self.log)
             if self.res_queue is not None:
-                self.res_queue.put((self.__name__ + str(self.n), retval))
+                self.res_queue.put((self.__name__ + str(self.n), prefix))
 
 
 def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_alt_path=True,
@@ -206,9 +206,8 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
     print(f'{prefix} finished in {minutes:.1f} minutes ({speed/1000:.1f} ms / frame)')
     # print(traces.shape)
     avgtype = ('simple', 'weighted')[snr_weighted]
-    message = f'Pulled {avgtype} average from {int(nframes)} frames ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}'
-    message += '\r\n' + f'Channel order is: {channels}'
-    message += '\r\n' + f'{use_movie} movie was used '
+    message = f'Pulled {avgtype} average from {int(nframes)} frames ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}.'
+    message += '\r\n' + f'Channel order is: {channels}, {use_movie} movie was used.'
     return message
 
 if __name__ == '__main__':

@@ -116,7 +116,7 @@ class FrameDisplay(object):
         if self.preview is None:
             self.preview = {}
         if suffix not in self.preview:
-            preview_fn = self.procpath + self.prefix + '/' + self.prefix + suffix
+            preview_fn = os.path.join(self.procpath, self.prefix, self.prefix + suffix)
             print(preview_fn)
             self.preview[suffix] = tifffile.imread(preview_fn)
         return self.preview[suffix]
