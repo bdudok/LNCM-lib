@@ -564,8 +564,8 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
 
         self.widget = QtWidgets.QWidget(self)
         self.widget.layout = QtWidgets.QVBoxLayout()
-        self.widget.setFixedWidth(self.image.width())
-        self.widget.setFixedHeight(self.image.height())
+        self.widget.setFixedWidth(self.image.width()+20)
+        self.widget.setFixedHeight(self.image.height()+20)
 
         self.label = QtWidgets.QLabel()
         self.label.setFrameStyle(QtWidgets.QFrame.NoFrame)
