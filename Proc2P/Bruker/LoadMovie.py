@@ -74,9 +74,18 @@ class LoadMovie():
     def load_data(self):
         if self.data_loaded:
             return True
-        self.data = self.f.asarray()
-        self.nframes = len(self.data)
-        self.sz = self.data.shape[1:]
+
+        #calling .asarray on each page is ~100x faster than on the TiffFile object
+        mmap = self.f.pages
+        n_pages = len(mmap)
+        frameshape = mmap[0].shape
+        data = numpy.empty((n_pages, *frameshape), dtype=mmap[0].dtype)
+        for i in range(n_pages):
+            data[i] = mmap[i].asarray()
+        self.data = data[..., ::-1, ::-2] #transposing so it's w,h
+
+        self.nframes = n_pages
+        self.sz = frameshape
         self.data_loaded = True
         lprint(self, 'Tif file loaded.')
         return True
@@ -98,12 +107,28 @@ class LoadMovie():
 
 
 if __name__ == '__main__':
-    path = 'D:\Shares\Data\_RawData\Bruker/testing/20230810_IMG/nm-test-08092023-1000-scan-029/'
-    prefix = 'nm-test-08092023-1000-scan-029_Cycle00001_Ch2_000001.ome.tif'
+    # path = 'D:\Shares\Data\_RawData\Bruker/2P/JEDI-IPSP/'
+    # prefix = 'JEDI-Sncg204_2026-01-21_lfp_opto_1765-000'
+    fn = r'D:\Shares\Data\_RawData\Bruker\JEDI-IPSP\JEDI-Sncg204_2026-01-21_lfp_opto_1765-000\JEDI-Sncg204_2026-01-21_lfp_opto_1765-000_Cycle00001_Ch2_000002.ome.tif'
 
-    f = LoadMovie(path + prefix, preload=True)
-    print(f.data.shape)
+    lprint(None, 'started reading')
+    f = LoadMovie(fn, preload=False)
+    # # data = f.f.asarray() # slow
+    # # data = f.f.asarray(out="memmap") # slow
+    # # data = f.f.series[0].asarray() # slow
+    #
+    # mmap = f.f.pages
+    # n_pages = len(mmap)
+    # frameshape = mmap[0].shape
+    # data = numpy.empty((n_pages, *frameshape), dtype=mmap[0].dtype)
+    # for i in range(n_pages):
+    #     data[i] = mmap[i].asarray()
+    # data = data[..., ::-1, ::-2]
+    #
+    # lprint(None, data.shape)
     im = f.preview()
+    lprint(None, f.data.shape)
+
     import matplotlib.pyplot as plt
 
     plt.imshow(im)

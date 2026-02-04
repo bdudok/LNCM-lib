@@ -211,22 +211,22 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
     return message
 
 if __name__ == '__main__':
-    path = r'D:\Shares\Data\_Processed\2P\eCB-GRAB/'
-    prefix = 'BL6-31_2025-08-07_e-stimdrug_201'
-    tag = 'rtest'
+    # path = r'D:\Shares\Data\_Processed\2P\eCB-GRAB/'
+    # prefix = 'BL6-31_2025-08-07_e-stimdrug_201'
+    # tag = 'rtest'
 
     path = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
-    prefix = 'JEDI-Sncg131_2025-06-19_burst_1016'
-    tag = 'GRtest'
+    prefix = 'JEDI-Sncg134_2025-06-05_stim_params_942'
+    tag = '2'
 
-    # opPath = os.path.join(path, prefix + '/')
-    # si = SessionInfo(opPath, prefix)
-    # info = si.load()
-    # movies = get_raw_movies(info)
-    # channelnames = si.info["channelnames"]
-    # chn = channelnames[0]
+    opPath = os.path.join(path, prefix + '/')
+    si = SessionInfo(opPath, prefix)
+    info = si.load()
+    movies = get_raw_movies(si)
+    channelnames = si.info["channelnames"]
+    chn = channelnames[0]
 
 
-    retval = pull_signals(path, prefix, tag=tag, ch='All', snr_weighted=True, use_movie=Source.GEVIReg)
-    print(retval)
+    retval = pull_signals(path, prefix, tag=tag, ch='All', snr_weighted=True, use_movie=Source.S2P)
+    # print(retval)
 
