@@ -9,6 +9,7 @@ conda install -c conda-forge -y scipy pyqt matplotlib opencv scikit-learn openpy
 
 # To use SIMA for ROI detection in 2P movies, we need a Python 3.6 env ("lncm36"), 
 # Note that calls to the functions that use this are made from the main env, and the path to the python 3.6 executable needs to be specified in envs/site_config.json
+# It is enough to set this env up for one user on the server, and have the config point to that executable for all users.
 
 conda create --name lncm36 python=3.6 -c conda-forge --strict-channel-priority
 conda activate lncm36
