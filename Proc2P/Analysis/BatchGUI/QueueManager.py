@@ -83,7 +83,6 @@ class ProcessSessionWorker(Process):
         Run is called with a config dataclass, and this worker parses it into CaTrace args'''
         for data in iter(self.session_queue.get, None):
             path, prefix, tag, config = data
-            config = ProcessConfig
             #parse args
             if config.polynom_baseline:
                 bsltype = 'poly'
