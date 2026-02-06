@@ -85,7 +85,6 @@ def register(proc_path, prefix, config=None):
 
     if config.scratch_path is not None:
         memmap_fn = os.path.join(config.scratch_path, prefix + '_raw.npy')
-        disps_fn = os.path.join(oPath, prefix + config.disps_suffix)
         if not os.path.exists(memmap_fn):
             if verbose:
                 lprint(None, 'Reading and cacheing raw movie')
@@ -97,6 +96,7 @@ def register(proc_path, prefix, config=None):
     else:
         movies = get_raw_movies(info)
         data = movies[ref_channel]
+    disps_fn = os.path.join(oPath, prefix + config.disps_suffix)
 
     n_frames = info["n_frames"]
     height, width = data.shape[1:]

@@ -79,10 +79,9 @@ class LoadMovie():
         mmap = self.f.pages
         n_pages = len(mmap)
         frameshape = mmap[0].shape
-        data = numpy.empty((n_pages, *frameshape), dtype=mmap[0].dtype)
+        self.data = numpy.empty((n_pages, *frameshape), dtype=mmap[0].dtype)
         for i in range(n_pages):
-            data[i] = mmap[i].asarray()
-        self.data = data[..., ::-1, ::-2] #transposing so it's w,h
+            self.data[i] = mmap[i].asarray()
 
         self.nframes = n_pages
         self.sz = frameshape
