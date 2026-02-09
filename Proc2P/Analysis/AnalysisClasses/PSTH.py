@@ -175,8 +175,9 @@ class PSTH:
         self.group_df = pandas.DataFrame.from_dict(self.group_dict, orient='index', dtype=None,
                                                    columns=self.group_names)
 
-    def pull_traces(self, other_tag=None, other_ch=None, other_match=False):
+    def pull_traces(self, other_tag=None, other_ch=None, other_match=False, mask_stim=None):
         '''open each session and save event triggered average'''
+
         # cycle through sessions
         for session_data, cell_data in self.pull_dict.items():
             path, prefix, tag, ch = session_data
@@ -297,7 +298,7 @@ class PSTH:
             else:
                 has_other = not ((other_ch is None) and (other_tag is None))
                 if not has_other:
-                    param = a.getparam(self.param_key)
+                    param = a.getparam(self.param_key, mask_stim=mask_stim)
                 else:
                     # other has to be same cells, but can have different tag and ch. masks from a will beused to pull b
                     if other_tag is None:

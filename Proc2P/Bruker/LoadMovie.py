@@ -22,6 +22,8 @@ def get_raw_movies(info):
         # check in each alt path and stop if found em
         for alt_path in CONFIG.alt_raw_paths:
             path2 = os.path.join(os.path.realpath(alt_path), *parent_folders)
+            if not os.path.exists(path2):
+                continue
             filelist = [fn for fn in os.listdir(path2) if ((prefix in fn) and ('.ome.tif' in fn))]
             if len(filelist):
                 print(f'Image data loaded from {path2}')

@@ -223,7 +223,7 @@ class ImagingSession(object):
         if os.path.exists(fn):
             return read_excel(fn)
 
-    def getparam(self, param):
+    def getparam(self, param, mask_stim=None):
         opn = param
         self.disc_param = False
         if type(param) == str:
@@ -271,17 +271,20 @@ class ImagingSession(object):
                 param[:, 1:] = numpy.diff(self.ewma_smooth(3, norm=False), axis=1)
             elif 'optomask' in param:
                 #pass with a number at the end of the string to mask n frames after stim
-                maskn=int(param[-1])+1
-                stims = numpy.where(self.opto)[0]
+                #deprecated, pass any param and a kw mask_stim instead
                 param=numpy.copy(self.ca.rel)
-                for t in stims:
-                    param[:, t:t+maskn] = numpy.nan
+                mask_stim = int(param[-1]) + 1
         elif type(param) == int:
             param = self.ewma_smooth(param)
 
         pm = numpy.nanmax(param)
         if not pm > 0:
             raise ValueError(f'All values for {opn} are zero')
+        if mask_stim is not None:
+            stims = numpy.where(self.opto)[0]
+            param = numpy.copy(param)
+            for t in stims:
+                param[:, t:t + mask_stim + 1] = numpy.nan
         return param
 
     def timetoframe(self, t: float, TimeRef='relativeTime'):

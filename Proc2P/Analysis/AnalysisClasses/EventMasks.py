@@ -17,7 +17,7 @@ def PhotoStimTrain(a, w):
     event_frames = numpy.load(a.get_file_with_suffix('_photostim_trains.npy'))
     return masks_from_list(a, w, event_frames)
 
-def PhotoStimPulse(a, w, exclude_move=True, exclude_start_seconds=0, mask_stim=None, filter_by_sz=None):
+def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_seconds=0, mask_stim=None, filter_by_sz=None):
     if a.opto is None:
         event_frames = []
     else:
@@ -29,6 +29,8 @@ def PhotoStimPulse(a, w, exclude_move=True, exclude_start_seconds=0, mask_stim=N
             event_frames[i] = stims[numpy.searchsorted(clustering[1], i)]
         if exclude_move and len(event_frames):
             event_frames = event_frames[~a.pos.movement[event_frames]]
+        elif only_move:
+            event_frames = event_frames[a.pos.movement[event_frames]]
         if exclude_start_seconds is not None:
             tmin = exclude_start_seconds * a.fps
             event_frames = event_frames[event_frames > tmin]

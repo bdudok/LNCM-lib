@@ -106,6 +106,8 @@ def register(proc_path, prefix, config=None):
         lprint(None, 'Computing reference')
     # take frames when mouse is stationary (complete with random frames if less than min number)
     exclude_move = gapless(session.pos.speed, int(fps), threshold=1, expand=int(fps))
+    if exclude_move is None:
+        exclude_move = numpy.zeros(n_frames, dtype='bool')
     bad_frames = session.ca.sync.load('opto', suppress=True)
     exclude_move[bad_frames] = True
     ref_margin = int(min(n_frames / 3, config.ref_margin * fps))
