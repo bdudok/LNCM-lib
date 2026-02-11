@@ -17,7 +17,9 @@ def PhotoStimTrain(a, w):
     event_frames = numpy.load(a.get_file_with_suffix('_photostim_trains.npy'))
     return masks_from_list(a, w, event_frames)
 
-def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_seconds=0, mask_stim=None, filter_by_sz=None):
+def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_seconds=0, mask_stim=None,
+                    stopresp_only=None,
+                   filter_by_sz=None):
     if a.opto is None:
         event_frames = []
     else:
@@ -28,12 +30,24 @@ def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_secon
         for i in range(n_trains):
             event_frames[i] = stims[numpy.searchsorted(clustering[1], i)]
         if exclude_move and len(event_frames):
+            #only events when mouse is immobile
             event_frames = event_frames[~a.pos.movement[event_frames]]
         elif only_move:
+            # only events when mouse is running
             event_frames = event_frames[a.pos.movement[event_frames]]
         if exclude_start_seconds is not None:
+            # remove events from first x seconds of the session
             tmin = exclude_start_seconds * a.fps
             event_frames = event_frames[event_frames > tmin]
+        if exclude_move and stopresp_only is not None:
+            #only include events during "stop responses" (x seconds after each stop)
+            # (x should be lower than startstop's duration, default 5)
+            tw = int(a.fps * stopresp_only)
+            starts, stops = a.startstop()
+            incl_mask = numpy.zeros(a.ca.frames, dtype='bool')
+            for t in stops:
+                incl_mask[t:t+tw] = True
+            event_frames = event_frames[incl_mask[event_frames]]
     if filter_by_sz is not None:
         event_frames = Filter_events_by_sz(a, event_frames, filter_by_sz)
     event, mask = masks_from_list(a, w, event_frames)

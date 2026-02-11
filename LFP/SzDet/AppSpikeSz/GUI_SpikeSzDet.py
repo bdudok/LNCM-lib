@@ -558,6 +558,7 @@ class SubplotsCanvas(FigureCanvasQTAgg):
         super(SubplotsCanvas, self).__init__(self.fig)
 
 def main(*args, **kwargs):
+    '''for launching in a subprocess'''
     app = QtWidgets.QApplication()
     app.setStyle('Fusion')
     font = QtGui.QFont()
@@ -594,6 +595,14 @@ def launch_in_subprocess(*args, **kwargs):
         cli_args.append(str(v))
     Popen([sys.executable, Path(__file__), *cli_args])
 
-launch_GUI = main
+def launch_GUI(*args, **kwargs):
+    '''For launcher script'''
+    app = QtWidgets.QApplication(sys.argv)
+    app.setStyle('Fusion')
+    font = QtGui.QFont()
+    app.setFont(font)
+    gui_main = GUI_main(app, *args, **kwargs)
+    sys.exit(app.exec())
+
 if __name__ == '__main__':
     main()

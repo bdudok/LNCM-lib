@@ -41,6 +41,8 @@ class IPSP:
 
     def purge(self):
         '''delete previously saved contents of the IPSP folder'''
+        if not os.path.exists(self.wdir):
+            return 0
         for f in os.listdir(self.wdir):
             os.remove(self.wdir + f)
 

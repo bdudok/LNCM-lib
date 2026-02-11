@@ -38,10 +38,15 @@ class logger:
         self.message += message
         self.unsaved += 1
         if self.unsaved > self.defer:
-            with open(self.fn, 'a') as f:
-                f.write(self.message)
-                self.unsaved = 0
-                self.message = ''
+            try:
+                with open(self.fn, 'a') as f:
+                    f.write(self.message)
+            except PermissionError:
+                ts = datetime.datetime.now().date().isoformat().replace('-', '')
+                with open(self.fn.replace('_AnalysisLog.txt', f'_AnalysisLog_{ts}.txt'), 'a') as f:
+                    f.write(self.message)
+            self.unsaved = 0
+            self.message = ''
 
     def flush(self):
         if self.unsaved > 0:
