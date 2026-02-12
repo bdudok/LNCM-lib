@@ -1,5 +1,7 @@
 import sys
 import re
+
+import pandas
 from PySide6 import QtGui, QtWidgets, QtCore
 import os.path
 import cv2
@@ -417,7 +419,7 @@ class GUI_main(QtWidgets.QMainWindow):
         return lut.get(color, 'grey')
 
     def next_callback(self):
-        if self.szdat.get_sz(self.active_sz) == '':  # if pressed next without marking it not sz, we set it as reviewed
+        if pandas.isna(self.szdat.get_sz(self.active_sz)):  # if pressed next without marking it not sz, we set it as reviewed
             self.szdat.set_sz(self.active_sz, True)
             self.mark_complete(self.current_selected_i, 'true')
             self.flag_unsaved()
@@ -436,16 +438,22 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def select_sz(self):
         current_item = self.sz_list.item(self.current_selected_i)
-        self.active_sz = current_item.text()
-        self.sz_list.setCurrentItem(current_item)
-        self.new_plot = True
-        self.refresh_data()
-        self.color_next_button()
+        if current_item is not None:
+            self.active_sz = current_item.text()
+            self.sz_list.setCurrentItem(current_item)
+            self.new_plot = True
+            self.refresh_data()
+            self.color_next_button()
+
+    def check_true(self, val, missing=False):
+        if pandas.isna(val) or val == '':
+            return missing
+        return bool(val)
 
     def color_next_button(self):
         sz = self.szdat.get_sz(self.active_sz, full=True)
-        is_sz = not (sz["Included"] is False)  # value can be missing
-        is_iis = (sz["Interictal"] is True)
+        is_sz = self.check_true(sz["Included"], True)  # value can be missing
+        is_iis = self.check_true(sz["Interictal"])
         if is_sz and not is_iis:
             self.next_button.setStyleSheet(f"background-color: {self.color_lut('true')}")
         elif is_sz and is_iis:
@@ -504,10 +512,10 @@ class GUI_main(QtWidgets.QMainWindow):
             self.next_callback()
         self.flag_unsaved()
         curr = self.szdat.get_sz(self.active_sz)
-        if curr == '' or curr:
+        if self.check_true(curr):
             self.szdat.set_sz(self.active_sz, False)
             self.mark_complete(self.current_selected_i, 'false')
-        elif curr == False:
+        else:
             self.szdat.set_sz(self.active_sz, True)
             self.mark_complete(self.current_selected_i, 'true')
         self.color_next_button()
@@ -518,10 +526,10 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.flag_unsaved()
         sz = self.szdat.get_sz(self.active_sz, full=True)
-        is_sz = sz["Included"] != False  # value can be ''
-        if is_sz and sz["Included"] == '':  # set to reviewed
+        is_sz = self.check_true(sz["Included"], False)  # value can be missing
+        if is_sz and not (sz["Included"] is True):  # set to reviewed
             self.szdat.set_sz(self.active_sz, value=True)
-        is_iis = sz["Interictal"] == True
+        is_iis =  self.check_true(sz["Interictal"])
         if is_sz and not is_iis:  # toggle ii
             self.szdat.set_sz(self.active_sz, value=True, key='Interictal')
             self.mark_complete(self.current_selected_i, 'interictal')

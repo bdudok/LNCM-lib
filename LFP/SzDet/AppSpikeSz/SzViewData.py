@@ -220,7 +220,7 @@ class SzReviewData:
     def get_sz(self, sz, full=False):
         if full:
             return self.output_sz.loc[sz].iloc[0]
-        return self.output_sz.loc[sz, 'Included'].values[0]
+        return self.output_sz.loc[sz, 'Included'].array[0]
 
     def read_video(self):
         ## PARSING OVERALL SEGMENT WINDOW FROM SEIZURE FILE NAME
