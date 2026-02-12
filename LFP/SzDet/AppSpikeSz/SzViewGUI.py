@@ -444,8 +444,8 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def color_next_button(self):
         sz = self.szdat.get_sz(self.active_sz, full=True)
-        is_sz = sz["Included"] != False  # value can be ''
-        is_iis = sz["Interictal"] == True
+        is_sz = not (sz["Included"] is False)  # value can be missing
+        is_iis = (sz["Interictal"] is True)
         if is_sz and not is_iis:
             self.next_button.setStyleSheet(f"background-color: {self.color_lut('true')}")
         elif is_sz and is_iis:
