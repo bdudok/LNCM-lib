@@ -22,7 +22,7 @@ from Proc2P.Treadmill import rsync
 from scipy import signal
 from scipy.ndimage import gaussian_filter
 from LFP.EphysFunctions import butter_bandpass_filter
-
+import traceback
 '''
 Manually review automatically detected seizures
 '''
@@ -198,16 +198,24 @@ class SzReviewData:
                         x = True
                     elif x in falsey_values:
                         x = False
-                    self.output_sz.loc[szname, fieldname] = x
+                    self.set_sz(szname, x, fieldname)
                 if 'Edited' in saved.columns and curated_sz['Edited'].item():
                     for fieldname in (
                             'Start', 'Stop', 'Duration(s)', 'SpikeCount', 'SpkFreq', 'PostIctalSuppression(s)'):
-                        self.output_sz.loc[szname, fieldname] = curated_sz[fieldname].item()
+                        self.set_sz(szname, curated_sz[fieldname].item(), fieldname)
 
         self.szlist = sznames
 
     def set_sz(self, sz, value, key='Included'):
-        self.output_sz.loc[sz, key] = value
+        try:
+            self.output_sz.loc[sz, key] = value
+        except Exception as e:
+            print('-----Error with setting sz data------')
+            print('Dtypes:', self.output_sz.dtypes)
+            print(f'{key} type:', type(self.output_sz[key].dtype))
+            print(f'Setting with: {value}({type(value)})')
+            print("Error:", e)
+            traceback.print_exc()
 
     def get_sz(self, sz, full=False):
         if full:
