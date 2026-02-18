@@ -603,16 +603,16 @@ class GUI_main(QtWidgets.QMainWindow):
         elif self.active_tab == Tabs.Preview:
             self.update_preview_session()
 
-    def setup_live_fig(self):
-        ca = self.FigCanvasRT.ax
-        ca.spines['right'].set_visible(False)
-        ca.spines['top'].set_visible(False)
-        duration_seconds = self.config.LiveLineDuration
-        data_len = int(duration_seconds * self.config.fs / self.config.LiveLineDecimate)
-        xdata = numpy.linspace(-duration_seconds, 0, data_len)
-        ydata = numpy.zeros(data_len)
-        self.live_line = ca.plot(xdata, ydata, color='black')[0]
-        ca.set_ylim(-self.config.PlotYScale, self.config.PlotYScale)
+    # def setup_live_fig(self):
+    #     ca = self.FigCanvasRT.ax
+    #     ca.spines['right'].set_visible(False)
+    #     ca.spines['top'].set_visible(False)
+    #     duration_seconds = self.config.LiveLineDuration
+    #     data_len = int(duration_seconds * self.config.fs / self.config.LiveLineDecimate)
+    #     xdata = numpy.linspace(-duration_seconds, 0, data_len)
+    #     ydata = numpy.zeros(data_len)
+    #     self.live_line = ca.plot(xdata, ydata, color='black')[0]
+    #     ca.set_ylim(-self.config.PlotYScale, self.config.PlotYScale)
 
     def save_gui_state(self):
         for fieldname in self.saved_fields:

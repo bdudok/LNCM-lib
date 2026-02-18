@@ -36,6 +36,7 @@ class TraceCodes(Enum):
     rel = 'DF/F'
     ntr = 'DF/F(z)'
     smtr = 'EWMA(z)'
+    nnd = 'NND'
     vm = 'vm'
 
 class GUI_main(QtWidgets.QMainWindow):
