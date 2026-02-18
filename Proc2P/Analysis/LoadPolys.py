@@ -103,9 +103,9 @@ class FrameDisplay(object):
             self.load_image()
         self.preview = None
 
-    def load_image(self):
+    def load_image(self, source=Source.S2P):
         if not self.image_loaded:
-            self.image = LoadImage(self.procpath, self.prefix, )
+            self.image = LoadImage(self.procpath, self.prefix, source)
             self.image_loaded = True
 
     def get_preview(self, ch=1, source=Source.S2P):

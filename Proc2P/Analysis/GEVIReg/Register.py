@@ -33,13 +33,15 @@ class RegConfig:
     filt_disps_suffix: str = '_disps_filt.npy'
     setting_suffix: str = '_regconfig.json'
     registered_suffix: str = '_registered.npy'
-    scratch_path: str | None = None #'E:\MCC\BD' if a path is specified, saves the raw data in a npy to avoid loading the TIFF
     overwrite: bool = False # if False, skips the job if the registered output file exists
     verbose: bool = False # if True, prints additional info
+    # no longer necessary since tiff reader speed issue is resolved
+    scratch_path: str | None = None #'E:\MCC\BD' if a path is specified, saves the raw data in a npy to avoid loading the TIFF
 
 
-proc_path = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
-prefix = 'JEDI-Sncg124_2025-04-24_burst_613'
+#
+# proc_path = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
+# prefix = 'JEDI-Sncg124_2025-04-24_burst_613'
 config = RegConfig()
 
 class Worker(Process):
@@ -65,7 +67,7 @@ def register(proc_path, prefix, config=None):
     if verbose:
         lprint(None, 'Opening input')
     # load raw movie
-    use_reference = 'S2P'
+    use_reference = 'S2P' #if previous reg exists, we'll align the new reference to it so ROI sets can be used on both
 
     ref_channel = config.ref_channel
     oPath = touch_path(proc_path, prefix, 'GEVIReg')
@@ -109,6 +111,8 @@ def register(proc_path, prefix, config=None):
     if exclude_move is None:
         exclude_move = numpy.zeros(n_frames, dtype='bool')
     bad_frames = session.ca.sync.load('opto', suppress=True)
+    if bad_frames is None:
+        bad_frames = []
     exclude_move[bad_frames] = True
     ref_margin = int(min(n_frames / 3, config.ref_margin * fps))
     ref_frames = numpy.where(~exclude_move[ref_margin:-ref_margin])[0] + ref_margin
@@ -134,9 +138,9 @@ def register(proc_path, prefix, config=None):
     d = norm_img(data, norm_min, norm_range)
     r = norm_img(first_ref, norm_min, norm_range)
     reg_offset = [0, 0]
-    if use_reference == 'S2P':
+    lp = os.path.join(proc_path, prefix, 'suite2p/plane0/ops.npy')
+    if use_reference == 'S2P' and os.path.exists(lp):
         # use previous registration result as reference, so segmentations can be reused
-        lp = os.path.join(proc_path, prefix, 'suite2p/plane0/ops.npy')
         ops = numpy.load(lp, allow_pickle=True).item()
         s2pr = ops['meanImg']
         norm_s2pr = norm_img(s2pr, s2pr.min(), s2pr.max() - s2pr.min())

@@ -4,6 +4,7 @@ import matplotlib.path as mplpath
 from Proc2P.Analysis.AnalysisClasses import PhotoStim, EventMasks, PSTH
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.Analysis.RoiEditor import RoiEditor
+from Proc2P.Bruker.LoadRegistered import Source
 import numpy
 
 '''
@@ -84,7 +85,11 @@ def pull_image_with_ROI(session:ImagingSession, image, c, show=False):
     if numpy.isnan(minsize) or minsize < 2:
         return None, None
     #trim to image size
-    session.rois.load_image()
+    try:
+        session.rois.load_image()
+    except:
+        print('Failed loading default registered image, retrying GEVIReg')
+        session.rois.load_image(source=Source.GEVIReg)
     poly = RoiEditor.trim_coords(numpy.array(poly), session.rois.image.info['sz'])
     mask = get_mask(poly, image)
     return numpy.nanmean(image[mask]), mask
