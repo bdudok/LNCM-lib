@@ -158,6 +158,8 @@ class DataSet:
         return list_prefix
 
     def get_field(self, prefix, key):
+        if key not in self.df.columns:
+            return False
         return self.df.loc[self.df["Prefix"].eq(prefix)].iloc[0][key]
 
     def check_key(self, key, value=None):

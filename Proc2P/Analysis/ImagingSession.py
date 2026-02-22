@@ -272,8 +272,8 @@ class ImagingSession(object):
             elif 'optomask' in param:
                 #pass with a number at the end of the string to mask n frames after stim
                 #deprecated, pass any param and a kw mask_stim instead
-                param=numpy.copy(self.ca.rel)
                 mask_stim = int(param[-1]) + 1
+                param=numpy.copy(self.ca.rel)
         elif type(param) == int:
             param = self.ewma_smooth(param)
 
