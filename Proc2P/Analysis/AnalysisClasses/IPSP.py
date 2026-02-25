@@ -94,16 +94,17 @@ class IPSP:
                 trim = max(int(self.session.fps), self.config.pre)
                 maxframe = self.session.ca.frames - max(trim, self.config.post)
                 for ri, current_frame in enumerate(self.stimframes):
-                    if current_frame < trim or current_frame > maxframe:
+                    if (current_frame < trim) or (current_frame > maxframe):
                         continue
                     mask[ri] = numpy.arange(current_frame - self.config.pre, current_frame + self.config.post)
 
                 # set the resp values
-                param = self.session.getparam(self.config.param)[:self.n_cells]
+                param = self.session.getparam(self.config.param)
                 for ei, indices in enumerate(mask):
                     loc = numpy.where(numpy.logical_not(numpy.isnan(indices)))[0]
                     if len(loc):
-                        Y[ei] = param[:, indices[loc].astype(numpy.int64)]
+                        res_view = Y[ei, :] #need to index in 2 steps otherwise
+                        res_view[:, loc] = param[:, indices[loc].astype(numpy.int64)]
 
                 # mask the after-stim frames with nan
                 Y[:, :, self.config.pre:self.config.pre + self.config.nan] = numpy.nan
@@ -247,13 +248,13 @@ class IPSP:
         The baseline is determined as the mean pre-stim trace with backwards gaussian weight decay
         '''
         Y = self.raw_resps[event_index, c][self.config.pre:]
+        bl = self.raw_resps[event_index, c][:self.config.pre]
         notna_bl = [i for i in range(self.config.pre) if
-                    ((i not in self.wh_nan[0]) and (not numpy.isnan(self.raw_resps[event_index, c, i])))]
+                    ((i not in self.wh_nan[0]) and (not numpy.isnan(bl[i])))]
         if not ((len(notna_bl) > 10) and (numpy.count_nonzero(numpy.logical_not(numpy.isnan(Y))) > 10)):
-            return Y, numpy.array(notna_bl).mean(), None
+            return Y, bl[notna_bl].mean(), None
         weights = self.get_baseline_kernel()
-        bl = self.raw_resps[event_index, c][notna_bl]
-        bl_mean = DescrStatsW(bl, weights[notna_bl], ddof=0)
+        bl_mean = DescrStatsW(bl[notna_bl], weights[notna_bl], ddof=0)
         fit = self.fit_response(Y, bl_mean.mean)
         return Y, bl_mean.mean, fit
 
