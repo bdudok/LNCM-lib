@@ -249,10 +249,15 @@ class IPSP:
         '''
         Y = self.raw_resps[event_index, c][self.config.pre:]
         bl = self.raw_resps[event_index, c][:self.config.pre]
-        notna_bl = [i for i in range(self.config.pre) if
-                    ((i not in self.wh_nan[0]) and (not numpy.isnan(bl[i])))]
-        if not ((len(notna_bl) > 10) and (numpy.count_nonzero(numpy.logical_not(numpy.isnan(Y))) > 10)):
-            return Y, bl[notna_bl].mean(), None
+        # notna_bl = [i for i in range(self.config.pre) if
+        #             ((i not in self.wh_nan[0]) and (not numpy.isnan(bl[i])))]
+        # if not ((len(notna_bl) > 10) and (numpy.count_nonzero(numpy.logical_not(numpy.isnan(Y))) > 10)):
+        #     return Y, bl[notna_bl].mean(), None
+        # weights = self.get_baseline_kernel()
+        # bl_mean = DescrStatsW(bl[notna_bl], weights[notna_bl], ddof=0)
+        notna_bl = numpy.logical_not(numpy.isnan(bl))
+        if (numpy.count_nonzero(numpy.logical_not(numpy.isnan(Y))) < 10) or (numpy.count_nonzero(notna_bl) < 10):
+            return Y, numpy.nanmean(bl), None
         weights = self.get_baseline_kernel()
         bl_mean = DescrStatsW(bl[notna_bl], weights[notna_bl], ddof=0)
         fit = self.fit_response(Y, bl_mean.mean)
@@ -276,10 +281,10 @@ class IPSP:
         return popt
 
 
-    def get_baseline_kernel(self, t=0, s=25):
+    def get_baseline_kernel(self, t=-4, s=10):
         '''
         get weights to measure baseline: an asymmetric, back-looking gaussian
-        :param t: gaussian center (ms relative to stim)
+        :param t: gaussian center (ms before to stim)
         :param s: gaussian sigma (ms)
         :return: weights to be used by DescrStatsW
         '''
@@ -314,7 +319,9 @@ class IPSP:
                     B = self.model[1]
                     D = self.model[3]
                     y_at_peak = self.alpha_func(B, fit[0], B, fit[1], D)
+                    #note because alpha puts the response on top of the baseline, bl-y_at_peak is the actual value.
                     self.responses[ci, ei] = self.stimframes[ei], bl, fit[0], bl - y_at_peak
+
 
         lprint(self, 'Pulled responses for', self.session.tag, 'with ', self.config, 'Model:',
                self.get_modstring(), logger=self.log)
