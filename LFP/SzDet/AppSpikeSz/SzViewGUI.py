@@ -17,7 +17,7 @@ from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtGui import QAction
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (QSlider, QStyle, QApplication, QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-                             QGroupBox, QListWidget,QAbstractItemView,)
+                             QGroupBox, QListWidget,QAbstractItemView, QLineEdit)
 
 from Proc2P.utils import *
 
@@ -74,7 +74,7 @@ class GUI_main(QtWidgets.QMainWindow):
             for key, value in self.user_defaults.items():
                 self.settings[key] = value
 
-    def get_prefix(self, ps):
+    def get_prefix(self, ps, use_tag=''):
         if self.setup == 'Pinnacle':
             s1 = '.edf_Ch'
             if s1 in ps:
@@ -94,7 +94,16 @@ class GUI_main(QtWidgets.QMainWindow):
         elif self.setup == 'LNCM':
             s1 = '_Ch'
             f1 = ps.find(s1)
-            return ps[:f1], ps[f1 + len(s1):][0], None
+            if use_tag in ('', None, 'None'):
+                return ps[:f1], ps[f1 + len(s1):][0], None
+            else:
+                try:
+                    f2 = ps.find(f'_{use_tag}_')
+                except:
+                    raise ValueError(f'Tag "{use_tag}" not in the filename')
+                return ps[:f2], ps[f1 + len(s1):][0], use_tag
+
+
 
     def make_szlist_groupbox(self):
         groupbox = QGroupBox('File list')
@@ -128,6 +137,14 @@ class GUI_main(QtWidgets.QMainWindow):
 
         # horizontal layout for buttons
         horizontal_layout = QHBoxLayout()
+
+        # tag field
+        horizontal_layout.addWidget(QtWidgets.QLabel('Tag:'))
+        self.tag_field = QLineEdit()
+        self.tag_field.setFixedWidth(80)
+        self.tag_field.setText('None')
+        horizontal_layout.addWidget(self.tag_field)
+
 
         # prev button
         left = "\u2190"
@@ -373,13 +390,14 @@ class GUI_main(QtWidgets.QMainWindow):
         self.wdir = os.path.dirname(fn[0])
         if self.setup == 'LNCM':
             self.wdir = os.path.dirname(self.wdir) + '/'
-        self.prefix, self.ch, self.tag = self.get_prefix(os.path.basename(fn[0]))
+        self.prefix, self.ch, self.tag = self.get_prefix(os.path.basename(fn[0]), use_tag=self.tag_field.text())
 
         self.path_label.setText(f'Loading data for {self.prefix} ... Please wait.')
         QApplication.processEvents()
         self.current_selected_i = None
 
         # load data
+        print(f'Calling szdat with prefix {self.prefix} ch {self.ch}, tag {self.tag}')
         self.szdat = SzReviewData(self.wdir, self.prefix, self.ch, tag=self.tag, setup=self.setup)
 
         # set list widget
