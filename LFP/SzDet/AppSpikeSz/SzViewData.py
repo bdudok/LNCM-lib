@@ -20,7 +20,8 @@ from Proc2P.Treadmill import rsync
 
 # analysis for sz curation
 from scipy import signal
-from scipy.ndimage import gaussian_filter
+# from scipy.ndimage import gaussian_filter #this is slow, don't use it it bogs the gui down
+from scipy.signal import bessel, sosfilt
 from LFP.EphysFunctions import butter_bandpass_filter
 import traceback
 '''
@@ -55,6 +56,7 @@ class SzReviewData:
         self.read_ephys()
         if not skip_gamma:
             self.get_session_gamma()
+            self.sos = bessel(N=3, Wn=1.0, btype='lowpass', analog=False, output='sos', fs=self.fs)
         if self.uses_video:
             self.read_video()
 
@@ -431,7 +433,8 @@ class SzReviewData:
         first_plot_sample = int(self.plot_delta * self.fs)
         last_plot_sample = int((self.plot_delta + t1 - t0) * self.fs)
         y_range = numpy.percentile(numpy.absolute(y), 99) * 1.5
-        sz_gamma = gaussian_filter(self.gamma_power[s0:s1], self.fs * 1.0)
+        # sz_gamma = gaussian_filter(self.gamma_power[s0:s1], self.fs * 1.0)
+        sz_gamma = sosfilt(self.sos, self.gamma_power[s0:s1])
 
         gamma_mask = sz_gamma < (sz_gamma.max() / self.settings["Curation.PISMultiplier"])
         gamma_mask[:last_plot_sample] = False
