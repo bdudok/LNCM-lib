@@ -11,7 +11,6 @@ from Proc2P.utils import logger, lprint
 from collections import namedtuple
 import scipy
 from scipy.optimize import curve_fit
-from scipy.ndimage import gaussian_filter
 from statsmodels.stats.weightstats import DescrStatsW
 
 import pandas
@@ -52,6 +51,16 @@ class IPSP:
             'post': int(self.session.fps * 200 / 1000),  # duration included after stim (frames)
             'param': 'rel',  # key of param for ImagingSession to use for traces ('rel')
             'nan': round(self.session.fps * 20 / 1000),  # duration excluded after stim (frames)
+            'order': 1 #if 1, a single function if fitted, if 2, a second, positive function is added.
+        }
+        self.constraints = {
+            # these are important because they constrain the possible waveform fit.
+            # for example, with the default, the IPSP peak cannot occur after 50 ms
+            'bounds': ([0.01, 3, -1, 0], [1, 100, 1, 50]),
+            'guesses': (0.1, 50, 0, 0),
+            'bounds.second': ([0.001, 0.1, -1, 0], [1, 200, 1, 200]),
+            'guesses.second': (0.1, 100, 0, 0),
+
         }
         self.baseline_kernels = {}
         if not os.path.exists(self.wdir):
@@ -70,10 +79,12 @@ class IPSP:
             f.write(json.dumps(config))
 
     def set_config(self, config):
-        Config = namedtuple('Config', 'pre, post, param, nan')
-        config = Config(config['pre'], config['post'], config['param'], config['nan'])
-        h = str(config.pre) + str(config.post) + str(config.param) + str(
-            config.nan)  # json serialization order not reliable
+        Config = namedtuple('Config', 'pre, post, param, nan, order')
+        config = Config(config['pre'], config['post'], config['param'], config['nan'], config['order'])
+        # json serialization order not reliable
+        h = str(config.pre) + str(config.post) + str(config.param) + str(config.nan)
+        if config.order != 1:
+            h += 'o' + str(config.order)
         self.confighash = h
         self.config = config
 
@@ -163,18 +174,63 @@ class IPSP:
         X = 1000 * numpy.arange(self.config.post) / self.session.fps
         fitX = X[notna]
         fitY = Y[notna]
-        bounds = ([0.01, 3, -1, 0], [1, 100, 1, 50])
-        guesses = (0.1, 25, 0, 0)
         maxval = numpy.nanmax(Y)
         # invert it for fitting
+        guesses = 'guesses'
+        bounds = 'bounds'
         try:
-            popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
+            popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY,
+                                   p0=self.constraints[guesses], bounds=self.constraints[bounds])
         except RuntimeError:
             print(f'Optimization failed for {self.session.prefix} c{ci}')
             popt = [numpy.nan, numpy.nan, 0, 0]
         return popt
 
     def fit_model(self, save=False, include_cells=None):
+        if self.config.order == 1:
+            self.fit_model_single_order(include_cells=include_cells)
+            fitX = self.X[self.notna]
+            plot_Y = self.Y_fit
+
+        elif self.config.order == 2:
+            first_model = self.fit_model_single_order(include_cells=include_cells)
+            fitX = self.X[self.notna]
+            fitY = self.Y[self.notna]
+            residual = fitY - self.Y_fit
+            minval = numpy.nanmin(residual)
+            guesses = 'guesses.second'
+            bounds = 'bounds.second'
+            popt, pcov = curve_fit(self.alpha_func, fitX, residual - minval,
+                                   p0=self.constraints[guesses], bounds=self.constraints[bounds])
+            second_fit = self.alpha_func(fitX, *popt) + minval
+            self.model_2 = popt
+            self.Y_fit_2 = second_fit
+            self.Y_fit_all = self.Y_fit + second_fit
+            plot_Y = self.Y_fit_all
+        if save:
+            modstring = self.get_modstring()
+            fname = self.get_fn('model')
+            fig, ax = plt.subplots()
+            ax.plot(fitX, plot_Y, color='red')
+            ax.scatter(self.X, self.Y)
+            figure_title = self.session.prefix + ' ' + self.session.tag + '\n' + modstring
+            if self.config.order == 2:
+                ax.plot(fitX,self.Y_fit, color='red', linestyle = ':')
+                figure_title += ('\n' + self.get_modstring(self.model_2))
+            fig.suptitle(figure_title)
+            with open(fname + '.txt', 'w') as f:
+                f.write(modstring + '\n' + str(self.model))
+                if self.config.order == 2:
+                    f.write('\n' + self.get_modstring(self.model_2))
+                    f.write('\n' + str(self.model_2))
+            ax.set_xlabel('Time (ms)')
+            ax.set_ylabel('Response (DF/F)')
+            plt.savefig(fname + '.png')
+            numpy.save(fname + '.npy', self.model)
+            plt.tight_layout()
+            self.fig = fig, ax
+
+    def fit_model_single_order(self, include_cells=None):
         # if loading a previously saved model, call get_ipsps
         Y = self.get_waveform(cells=include_cells)[self.config.pre:]
         notna = numpy.ones(len(Y), dtype='bool')
@@ -185,31 +241,20 @@ class IPSP:
         X = 1000 * numpy.arange(self.config.post) / self.session.fps
         fitX = X[notna]
         fitY = Y[notna]
-        bounds = ([0.01, 3, -1, 0], [1, 100, 1, 50])
-        guesses = (0.1, 25, 0, 0)
+        guesses = 'guesses'
+        bounds = 'bounds'
         maxval = numpy.nanmax(Y)
         # invert it for fitting
-        popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
+        popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY,
+                               p0=self.constraints[guesses], bounds=self.constraints[bounds])
         self.model = popt
-        modstring = self.get_modstring()
-        if save:
-            fname = self.get_fn('model')
-            fig, ax = plt.subplots()
-            ax.plot(fitX, 100 * (maxval - self.alpha_func(fitX, *popt)), color='red')
-            ax.scatter(X, Y * 100)
-            fig.suptitle(self.session.prefix + ' ' + self.session.tag + '\n' + modstring)
-            with open(fname + '.txt', 'w') as f:
-                f.write(modstring + '\n' + str(popt))
-            ax.set_xlabel('Time (ms)')
-            ax.set_ylabel('Response (DF/F %)')
-            plt.savefig(fname + '.png')
-            numpy.save(fname + '.npy', self.model)
-            self.fig = fig, ax
+        self.Y_fit = maxval - self.alpha_func(fitX, *popt)
         self.X = X  # times in ms of the post
-        return self.model
+        self.Y = Y
 
-    def get_modstring(self):
-        popt = self.model
+    def get_modstring(self, popt=None):
+        if popt is None:
+            popt = self.model
         return f'ampl:{popt[0] * 100:.2f}%, peak:{popt[1]:.1f} ms, bias:{popt[2] * 100:.1f}%, delay:{popt[3]:.1f}ms'
 
     def get_fn(self, suffix):
