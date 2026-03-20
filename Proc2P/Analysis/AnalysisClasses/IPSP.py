@@ -51,7 +51,7 @@ class IPSP:
             'post': int(self.session.fps * 200 / 1000),  # duration included after stim (frames)
             'param': 'rel',  # key of param for ImagingSession to use for traces ('rel')
             'nan': round(self.session.fps * 20 / 1000),  # duration excluded after stim (frames)
-            'order': 1 #if 1, a single function if fitted, if 2, a second, positive function is added.
+            'order': 1  # if 1, a single function if fitted, if 2, a second, positive function is added.
         }
         self.constraints = {
             # these are important because they constrain the possible waveform fit.
@@ -114,7 +114,7 @@ class IPSP:
                 for ei, indices in enumerate(mask):
                     loc = numpy.where(numpy.logical_not(numpy.isnan(indices)))[0]
                     if len(loc):
-                        res_view = Y[ei, :] #need to index in 2 steps otherwise
+                        res_view = Y[ei, :]  # need to index in 2 steps otherwise
                         res_view[:, loc] = param[:, indices[loc].astype(numpy.int64)]
 
                 # mask the after-stim frames with nan
@@ -176,17 +176,23 @@ class IPSP:
         fitY = Y[notna]
         maxval = numpy.nanmax(Y)
         # invert it for fitting
-        guesses = 'guesses'
-        bounds = 'bounds'
+        guesses = self.constraints['guesses']
+        bounds = self.constraints['bounds']
         try:
-            popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY,
-                                   p0=self.constraints[guesses], bounds=self.constraints[bounds])
+            popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
         except RuntimeError:
             print(f'Optimization failed for {self.session.prefix} c{ci}')
             popt = [numpy.nan, numpy.nan, 0, 0]
         return popt
 
     def fit_model(self, save=False, include_cells=None):
+        '''
+        Fit an alpha function to the average waveform across cells and events
+                # if loading a previously saved model, also call get_ipsps after this
+        :param save: plot the resulting fit
+        :param include_cells: list of indices to include
+        :return: None, saves files and sets attributes.
+        '''
         if self.config.order == 1:
             self.fit_model_single_order(include_cells=include_cells)
             fitX = self.X[self.notna]
@@ -198,10 +204,9 @@ class IPSP:
             fitY = self.Y[self.notna]
             residual = fitY - self.Y_fit
             minval = numpy.nanmin(residual)
-            guesses = 'guesses.second'
-            bounds = 'bounds.second'
-            popt, pcov = curve_fit(self.alpha_func, fitX, residual - minval,
-                                   p0=self.constraints[guesses], bounds=self.constraints[bounds])
+            guesses = self.constraints['guesses.second']
+            bounds = self.constraints['bounds.second']
+            popt, pcov = curve_fit(self.alpha_func, fitX, residual - minval, p0=guesses, bounds=bounds)
             second_fit = self.alpha_func(fitX, *popt) + minval
             self.model_2 = popt
             self.Y_fit_2 = second_fit
@@ -215,7 +220,8 @@ class IPSP:
             ax.scatter(self.X, self.Y)
             figure_title = self.session.prefix + ' ' + self.session.tag + '\n' + modstring
             if self.config.order == 2:
-                ax.plot(fitX,self.Y_fit, color='red', linestyle = ':')
+                ax.plot(fitX, self.Y_fit, color='red', linestyle=':')
+                ax.plot(fitX, self.Y_fit_2, color='green', linestyle=':')
                 figure_title += ('\n' + self.get_modstring(self.model_2))
             fig.suptitle(figure_title)
             with open(fname + '.txt', 'w') as f:
@@ -231,7 +237,6 @@ class IPSP:
             self.fig = fig, ax
 
     def fit_model_single_order(self, include_cells=None):
-        # if loading a previously saved model, call get_ipsps
         Y = self.get_waveform(cells=include_cells)[self.config.pre:]
         notna = numpy.ones(len(Y), dtype='bool')
         for x in self.wh_nan[0]:
@@ -241,12 +246,11 @@ class IPSP:
         X = 1000 * numpy.arange(self.config.post) / self.session.fps
         fitX = X[notna]
         fitY = Y[notna]
-        guesses = 'guesses'
-        bounds = 'bounds'
+        guesses = self.constraints['guesses']
+        bounds = self.constraints['bounds']
         maxval = numpy.nanmax(Y)
         # invert it for fitting
-        popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY,
-                               p0=self.constraints[guesses], bounds=self.constraints[bounds])
+        popt, pcov = curve_fit(self.alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
         self.model = popt
         self.Y_fit = maxval - self.alpha_func(fitX, *popt)
         self.X = X  # times in ms of the post
@@ -284,6 +288,11 @@ class IPSP:
         D = self.model[3]
         return self.alpha_func(x, A, B, C, D)
 
+    def ampl_func_2(self, x, A, C):
+        B = self.model_2[1]
+        D = self.model_2[3]
+        return self.alpha_func(x, A, B, C, D)
+
     def fit_event(self, c, event_index):
         '''
         fit a single trial trace to the IPSP model
@@ -294,12 +303,6 @@ class IPSP:
         '''
         Y = self.raw_resps[event_index, c][self.config.pre:]
         bl = self.raw_resps[event_index, c][:self.config.pre]
-        # notna_bl = [i for i in range(self.config.pre) if
-        #             ((i not in self.wh_nan[0]) and (not numpy.isnan(bl[i])))]
-        # if not ((len(notna_bl) > 10) and (numpy.count_nonzero(numpy.logical_not(numpy.isnan(Y))) > 10)):
-        #     return Y, bl[notna_bl].mean(), None
-        # weights = self.get_baseline_kernel()
-        # bl_mean = DescrStatsW(bl[notna_bl], weights[notna_bl], ddof=0)
         notna_bl = numpy.logical_not(numpy.isnan(bl))
         if (numpy.count_nonzero(numpy.logical_not(numpy.isnan(Y))) < 10) or (numpy.count_nonzero(notna_bl) < 10):
             return Y, numpy.nanmean(bl), None
@@ -308,6 +311,32 @@ class IPSP:
         fit = self.fit_response(Y, bl_mean.mean)
         return Y, bl_mean.mean, fit
 
+    def fit_event_second_component(self, Y, bl, first_fit):
+        '''call with the output of fit_event to get the ampl of the second component'''
+        assert self.config.order == 2
+        incl = self.notna & numpy.logical_not(numpy.isnan(Y))
+        fitX = self.X[incl]
+        first_Y = bl - self.ampl_func(fitX, *first_fit)
+        residual = Y[incl] - first_Y
+        minval = numpy.nanmin(residual)
+        bounds = tuple([[x[0], x[2]] for x in self.constraints['bounds.second']])
+        guesses = (self.model_2[0], self.model_2[2])
+        popt, pcov = curve_fit(self.ampl_func_2, fitX, residual, p0=guesses, bounds=bounds)
+        second_fit = popt
+        second_Y = self.ampl_func_2(fitX, *second_fit)
+        # plt.scatter(fitX, Y[incl])
+        # plt.plot(fitX, first_Y, color='red')
+        # plt.plot(fitX, second_Y, color='green')
+        # plt.plot(fitX, first_Y + second_Y, color='orange')
+        return fitX, second_fit, first_Y, second_Y
+
+
+
+
+        plt.scatter(fitX, Y[incl])
+        plt.plot(fitX, bl - self.ampl_func(fitX, *first_fit))
+        plt.plot(fitX, residual)
+
     def fit_response(self, Y, bl):
         '''
         fit a trace with the IPSP model, constrained to the peak time and delay of the model
@@ -315,7 +344,7 @@ class IPSP:
         :param bl: baseline of the response
         :return: opts of the fit
         '''
-        bounds = ([0.01, -1], [1, 1])
+        bounds = tuple([[x[0], x[2]] for x in self.constraints['bounds']])
         guesses = (self.model[0], self.model[2])
         x = self.X[self.notna]
         y = (bl - Y)[self.notna]
@@ -324,7 +353,6 @@ class IPSP:
             return None
         popt, pcov = curve_fit(self.ampl_func, x[incl], y[incl], p0=guesses, bounds=bounds)
         return popt
-
 
     def get_baseline_kernel(self, t=-4, s=10):
         '''
@@ -341,37 +369,56 @@ class IPSP:
             self.baseline_kernels[key] = weights
         return self.baseline_kernels[key]
 
-    def pull_ipsps(self):
+    def pull_ipsps(self, order=1, save_fitforms=False):
         '''
         store baseline and amplitude for each stim in each cell
         using the parameter of the fit as amplitude. NB that alternatively, we could add the bias,
          or compute the diff of where the fit curve min is relative to baseline.
+         :param order: 1 to only fit the first, 2 to also fit the second alpha model
+         :param save_fitforms: also save an array of the fitted responses
          :return: array of frame, baseline, response, amplitude for each c, e
          NB don't use "response" for analysis. use "amplitude"-"baseline" to get response values (y at peak)
         '''
-        #response is ampl parameter of the fit, compared to where it returns to
-        #amplitude is the peak value minus baseline value
-        self.responses = numpy.empty((self.n_cells, self.n_stims, 4))  # frame, baseline, response, amplitude
-
+        # response is ampl parameter of the fit, compared to where it returns to
+        # amplitude is the peak value minus baseline value
+        assert order <= self.config.order
+        add_cols = (order-1) * 2 #also add fit[0], peakval for 2nd order
+        if save_fitforms and (order > 1):
+            fitforms = numpy.empty((self.n_cells, self.n_stims, self.config.post, order))
+            #this could also make sense to save with order ==1, but rn only implemented for 2.
+            fitforms[:] = numpy.nan
+        self.responses = numpy.empty((self.n_cells, self.n_stims, 4+add_cols))  # frame, baseline, response, amplitude
         self.responses[:] = numpy.nan
         for ci in range(self.n_cells):
             for ei in range(self.n_stims):
+                self.responses[ci, ei, 0] = self.stimframes[ei]
                 Y, bl, fit = self.fit_event(ci, ei)  # bl is in DF/F actual, response (fit[0]) in DF/F change.
                 if fit is None:
-                    self.responses[ci, ei] = self.stimframes[ei], numpy.nan, numpy.nan, numpy.nan
+                    self.responses[ci, ei, 1:] = numpy.nan
                 else:
                     # peak value:
                     B = self.model[1]
                     D = self.model[3]
                     y_at_peak = self.alpha_func(B, fit[0], B, fit[1], D)
-                    #note because alpha puts the response on top of the baseline, bl-y_at_peak is the actual value.
-                    self.responses[ci, ei] = self.stimframes[ei], bl, fit[0], bl - y_at_peak
-
+                    # note because alpha puts the response on top of the baseline, bl-y_at_peak is the actual value.
+                    self.responses[ci, ei, 1:4] = bl, fit[0], bl - y_at_peak
+                    if order > 1:
+                        fitX, second_fit, first_Y, second_Y = self.fit_event_second_component(Y, bl, fit)
+                        B = self.model_2[1]
+                        D = self.model_2[3]
+                        y_at_peak = self.alpha_func(B, second_fit[0], B, second_fit[1], D)
+                        self.responses[ci, ei, -2:] = second_fit[0], bl - y_at_peak
+                        if save_fitforms:
+                            ind_x = (fitX * self.session.fps / 1000).astype('int64')
+                            fitforms[ci, ei, ind_x, 0] = first_Y
+                            fitforms[ci, ei, ind_x, 1] = second_Y
 
         lprint(self, 'Pulled responses for', self.session.tag, 'with ', self.config, 'Model:',
                self.get_modstring(), logger=self.log)
         fn = self.get_fn('ipsps.npy')
         numpy.save(fn, self.responses)
+        if save_fitforms:
+            numpy.save(fn.replace('s.npy', '_fits.npy'), fitforms)
         return self.responses
 
     def get_ipsps(self):
