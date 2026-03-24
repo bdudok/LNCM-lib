@@ -9,6 +9,8 @@ from Proc2P.Bruker.SyncTools import Sync
 from Proc2P.utils import lprint, gapless, outlier_indices, logger
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
+from sklearn.mixture import GaussianMixture
+import warnings
 from Proc2P.Bruker.ConfigVars import CF
 from matplotlib import pyplot as plt
 from Proc2P.Bruker.PreProc import SessionInfo
@@ -30,7 +32,7 @@ class CaTrace(object):
     __name__ = 'CaTrace'
 
     def __init__(self, path, prefix, verbose=False, bsltype='poly', exclude=(0, 0), peakdet=False, ch=0, invert=False,
-                 tag=None, last_bg=None, ignore_saturation=False):
+                 tag=None, last_bg=None, ignore_saturation=False, find_immobile_baseline=False):
         '''
         :param bsltype: 'poly' for a 3-order polynom fit. 'original': sliding window minimum,
          'MonotonicMin': past minimum. Sz_mode switches to MonotonicMin. Don't use for inverted sensor (GEVI)
@@ -41,6 +43,7 @@ class CaTrace(object):
         :param tag: roi tag
         :param last_bg: if True, the last ROI's trace is subtracted from other ROIs' traces.
         :param ignore_saturation: sz_mode. does not exclude outlier frames.
+        :param find_immobile_baseline: if true, unmixes frames to use for fitting the baseline in polynom mode
         '''
         if verbose:
             print(f'Firing called with ch={ch}, tag={tag}')
@@ -75,6 +78,7 @@ class CaTrace(object):
         self.exclude = exclude
         self.invert = invert
         self.ignore_saturation = ignore_saturation
+        self.find_immobile_baseline = find_immobile_baseline
         if verbose:
             print(prefix, 'firing init')
         self.version_info = {}  # should contain only single strings as values
@@ -154,7 +158,8 @@ class CaTrace(object):
                 raise ValueError(f'{self.last_bg} not implemented for bg correction')
         else:
             tr = self.trace[c]
-        return c, tr, self.fps, self.bsltype, self.movement, self.exclude, self.peakdet, self.ol_index, self.ignore_saturation
+        return (c, tr, self.fps, self.bsltype, self.movement, self.exclude, self.peakdet, self.ol_index,
+                self.ignore_saturation, self.find_immobile_baseline)
 
     def unpack_data(self, data):
         channel = 0
@@ -291,7 +296,7 @@ class Worker(Process):
 
     def run(self):
         for data in iter(self.queue.get, None):
-            c, data, fps, bsltype, movement, exclude, peakdet, ol_index, ignore_saturation = data
+            c, data, fps, bsltype, movement, exclude, peakdet, ol_index, ignore_saturation, find_immobile_baseline = data
             if self.verbose:
                 lprint(self, 'Starting cell ' + str(c))
             t1, t2, frames = int(2.5 * fps), int(25 * fps), len(data)
@@ -355,10 +360,28 @@ class Worker(Process):
                             # exclude excluded part
                             if not exclude[0] < t <= exclude[1]:
                                 x.append(t)
-                    y = numpy.nan_to_num(smw[x])
+                    x = numpy.array(x)
+                    x = x[~numpy.isnan(smw[x])]
+                    y = smw[x]
+                    if find_immobile_baseline:
+                        #check if we have a mix of 2 values, if yes use the one that's more common in immobility
+                        gX = y.reshape(-1, 1)
+                        gmm2 = GaussianMixture(n_components=2, covariance_type="full", random_state=0)
+                        gmm2.fit(gX)
+                        gmm1 = GaussianMixture(n_components=1, covariance_type="full", random_state=0)
+                        gmm1.fit(gX)
+                        if gmm2.bic(gX) < gmm1.bic(gX):
+                            lprint(self, f'Unmixing baseline is necessary in cell {c}', )
+                            labels = gmm2.predict(gX).astype('bool')
+                            immo_counts = []
+                            for mi in (0, 1):
+                                immo_counts.append(numpy.count_nonzero(~movement[x[labels==mi]]))
+                            better_label = labels == (immo_counts[1] > immo_counts[0])
+                            x = x[better_label]
+                            y = y[better_label]
+
                     poly = numpy.polyfit(x, y, 3)
-                    for i in range(frames):
-                        bsl[i] = numpy.polyval(poly, i)
+                    bsl = numpy.polyval(poly, numpy.arange(frames))
                     if numpy.any(bsl < 0):
                         lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline', )
                         bsltype = 'original'
