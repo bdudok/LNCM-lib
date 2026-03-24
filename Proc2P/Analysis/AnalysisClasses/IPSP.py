@@ -1,3 +1,4 @@
+import copy
 import json
 import os.path
 
@@ -21,10 +22,12 @@ class IPSP:
     __name__ = 'IPSP'
     '''Detect and fit optically evoked IPSPs in a voltage imaging session'''
 
-    def __init__(self, session: ImagingSession, config=None, purge=False):
+    def __init__(self, session: ImagingSession, config=None, purge=False, shuffle=False):
         '''initialize with an ImagingSession
         :param config: a dict with optional keys 'pre, post, param, nan'
         :param purge: if True, will delete cached results
+        :param shuffle: if True, replace actual stim frames with random frames (picked between the firs and last stim,
+         not including post-stim periods). Needs to be set at init. does not overwrite stored stimtimes.
         '''
         self.session = session
         self.wdir = self.session.path + 'IPSP/'
@@ -33,7 +36,7 @@ class IPSP:
             self.n_cells -= 1
         if purge:
             self.purge()
-        self.set_defaults(config)
+        self.set_defaults(config, shuffle)
         self.log = logger()
         self.log.set_handle(self.session.procpath, self.session.prefix)
         self.is_saved = os.path.exists(self.get_fn('model.npy'))
@@ -45,13 +48,14 @@ class IPSP:
         for f in os.listdir(self.wdir):
             os.remove(self.wdir + f)
 
-    def set_defaults(self, user_config):
+    def set_defaults(self, user_config, shuffle=False):
         default_config = {
             'pre': int(self.session.fps * 100 / 1000),  # duration included before stim (frames)
             'post': int(self.session.fps * 200 / 1000),  # duration included after stim (frames)
             'param': 'rel',  # key of param for ImagingSession to use for traces ('rel')
             'nan': round(self.session.fps * 20 / 1000),  # duration excluded after stim (frames)
-            'order': 1  # if 1, a single function if fitted, if 2, a second, positive function is added.
+            'order': 1  # if 1, a single function if fitted, if 2, a second, positive function is added,
+            # if 7: a 2-component fit is done (7 parameters).
         }
         self.constraints = {
             # these are important because they constrain the possible waveform fit.
@@ -60,12 +64,13 @@ class IPSP:
             'guesses': (0.1, 50, 0, 0),
             'bounds.second': ([0.001, 0.1, -1, 0], [1, 200, 1, 200]),
             'guesses.second': (0.1, 100, 0, 0),
-
+            'bounds.dual': ([-1, 0.1, 0], [0.001, 300, 200]),
+            'guesses.dual': (-0.1, 100, 25),
         }
+        self.shuffle=shuffle
         self.baseline_kernels = {}
         if not os.path.exists(self.wdir):
             os.mkdir(self.wdir)
-        self.get_stimtimes()
         if user_config is None:
             config = {}
         else:
@@ -77,6 +82,7 @@ class IPSP:
         self.set_config(config)
         with open(self.get_fn('config.json'), 'w') as f:
             f.write(json.dumps(config))
+        self.get_stimtimes()
 
     def set_config(self, config):
         Config = namedtuple('Config', 'pre, post, param, nan, order')
@@ -85,6 +91,8 @@ class IPSP:
         h = str(config.pre) + str(config.post) + str(config.param) + str(config.nan)
         if config.order != 1:
             h += 'o' + str(config.order)
+        if self.shuffle:
+            h+= '_shuffle'
         self.confighash = h
         self.config = config
 
@@ -140,6 +148,13 @@ class IPSP:
                     0]  # ignoring intensities. these are not reliable with current PreProc.
                 numpy.save(stimname + '.npy', stimframes)
                 pandas.DataFrame({'StimFrames': stimframes}).to_excel(stimname + '.xlsx')
+            if self.shuffle:
+                frame_pool = numpy.ones(stimframes[-1], dtype='bool')
+                frame_pool[:stimframes[0]] = 0
+                for i in stimframes[:-1]:
+                    frame_pool[i:i+self.config.post] = 0
+                stimframes = numpy.random.choice(numpy.where(frame_pool)[0], len(stimframes), replace=False)
+                stimframes.sort()
             self.stimframes = stimframes
         self.n_stims = len(self.stimframes)
         return self.stimframes
@@ -185,7 +200,7 @@ class IPSP:
             popt = [numpy.nan, numpy.nan, 0, 0]
         return popt
 
-    def fit_model(self, save=False, include_cells=None):
+    def fit_model(self, save=False, include_cells=None, waveform=None):
         '''
         Fit an alpha function to the average waveform across cells and events
                 # if loading a previously saved model, also call get_ipsps after this
@@ -194,35 +209,66 @@ class IPSP:
         :return: None, saves files and sets attributes.
         '''
         if self.config.order == 1:
-            self.fit_model_single_order(include_cells=include_cells)
+            self.fit_model_single_order(include_cells=include_cells, waveform=waveform)
+            modstring = self.get_modstring()
             fitX = self.X[self.notna]
             plot_Y = self.Y_fit
-
-        elif self.config.order == 2:
-            first_model = self.fit_model_single_order(include_cells=include_cells)
+        elif self.config.order > 1:
+            first_model = self.fit_model_single_order(include_cells=include_cells, waveform=waveform)
             fitX = self.X[self.notna]
             fitY = self.Y[self.notna]
-            residual = fitY - self.Y_fit
-            minval = numpy.nanmin(residual)
-            guesses = self.constraints['guesses.second']
-            bounds = self.constraints['bounds.second']
-            popt, pcov = curve_fit(self.alpha_func, fitX, residual - minval, p0=guesses, bounds=bounds)
-            second_fit = self.alpha_func(fitX, *popt) + minval
+            if self.config.order == 2:
+                residual = fitY - self.Y_fit
+                minval = numpy.nanmin(residual)
+                guesses = self.constraints['guesses.second']
+                bounds = self.constraints['bounds.second']
+                popt, pcov = curve_fit(self.alpha_func, fitX, residual - minval, p0=guesses, bounds=bounds)
+                second_fit = self.alpha_func(fitX, *popt) + minval
+                self.Y_fit_all = self.Y_fit + second_fit
+            elif self.config.order == 7:
+                maxval = numpy.nanmax(fitY)
+                # constrain the bound sbased ona  first fit to the negative peak
+                #populate with defaults
+                guesses = list(copy.copy(self.model))
+                bounds = [copy.copy(x) for x in self.constraints['bounds']]
+                guesses.extend(self.constraints['guesses.dual'])
+                for b_i in (0, 1):
+                    bounds[b_i].extend(self.constraints['bounds.dual'][b_i])
+                #negative amplitude will be +- 50% from the first fit
+                bounds[0][0] = self.model[0] * 0.5
+                bounds[1][0] = min(self.constraints['bounds'][1][0], self.model[0] * 1.5)
+                #negative peak will be +- 5 ms from the first fit
+                bounds[0][1] = self.model[1] - 5
+                bounds[1][1] = self.model[1] + 5
+                #bias will be no more than the first model
+                bounds[1][2] = self.model[2] + 5
+                #delay of first peak will be +- 50% of the first fit
+                bounds[0][3] = max(self.constraints['bounds'][0][3], self.model[3] * 0.5)
+                bounds[1][3] = min(self.constraints['bounds'][1][3], self.model[3] * 1.5)
+                #positive peak will be after the negative
+                bounds[0][5] = max(self.constraints['bounds.dual'][0][1], self.model[1] + 5)
+                #delay of second component will be after the first peak
+                bounds[0][6] = max(self.constraints['bounds.dual'][0][2], self.model[1])
+                guesses = self.constrain_guesses(guesses, bounds)
+                popt, pcov = curve_fit(self.dual_alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
+                second_fit = maxval - self.dual_alpha_func(fitX, *popt)
+                self.Y_fit_all = second_fit
             self.model_2 = popt
             self.Y_fit_2 = second_fit
-            self.Y_fit_all = self.Y_fit + second_fit
             plot_Y = self.Y_fit_all
+            modstring = self.get_modstring(popt)
         if save:
-            modstring = self.get_modstring()
             fname = self.get_fn('model')
             fig, ax = plt.subplots()
-            ax.plot(fitX, plot_Y, color='red')
             ax.scatter(self.X, self.Y)
+            ax.plot(fitX, plot_Y, color='red')
             figure_title = self.session.prefix + ' ' + self.session.tag + '\n' + modstring
             if self.config.order == 2:
                 ax.plot(fitX, self.Y_fit, color='red', linestyle=':')
                 ax.plot(fitX, self.Y_fit_2, color='green', linestyle=':')
                 figure_title += ('\n' + self.get_modstring(self.model_2))
+            elif self.config.order == 7:
+                ax.plot(fitX, self.Y_fit, color='red', linestyle=':')
             fig.suptitle(figure_title)
             with open(fname + '.txt', 'w') as f:
                 f.write(modstring + '\n' + str(self.model))
@@ -232,12 +278,21 @@ class IPSP:
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('Response (DF/F)')
             plt.savefig(fname + '.png')
-            numpy.save(fname + '.npy', self.model)
+            # numpy.save(fname + '.npy', self.model) #this is never used and can be parsed from json in the text file
             plt.tight_layout()
             self.fig = fig, ax
 
-    def fit_model_single_order(self, include_cells=None):
-        Y = self.get_waveform(cells=include_cells)[self.config.pre:]
+    def constrain_guesses(self, guesses, bounds):
+        ret_guesses = []
+        for i, x in enumerate(guesses):
+            ret_guesses.append(max(min(x, bounds[1][i]), bounds[0][i]))
+        return ret_guesses
+
+    def fit_model_single_order(self, include_cells=None, waveform=None):
+        if waveform is not None:
+            Y = waveform
+        else:
+            Y = self.get_waveform(cells=include_cells)[self.config.pre:]
         notna = numpy.ones(len(Y), dtype='bool')
         for x in self.wh_nan[0]:
             if x >= self.config.pre:
@@ -259,6 +314,8 @@ class IPSP:
     def get_modstring(self, popt=None):
         if popt is None:
             popt = self.model
+        if len(popt) > 4:
+            return f'ampl1:{popt[0] * 100:.2f}%, peakt1:{popt[1]:.1f} ms, delay1:{popt[3]:.1f}ms, ampl2:{popt[4] * 100:.2f}%, peakt2:{popt[5]:.1f} ms'
         return f'ampl:{popt[0] * 100:.2f}%, peak:{popt[1]:.1f} ms, bias:{popt[2] * 100:.1f}%, delay:{popt[3]:.1f}ms'
 
     def get_fn(self, suffix):
@@ -280,6 +337,35 @@ class IPSP:
         '''
         return A * (x - D) / B * numpy.exp(1 - (x - D) / B) + C
 
+    def dual_alpha_func(self, x, A1, B1, C1, D1, A2, B2, D2):
+        y1 = A1 * (x - D1) / B1 * numpy.exp(1 - (x - D1) / B1) + C1
+        #we clip the EPSP so it's not negative, otherwise constraining the initial response is very fragile
+        y2 = numpy.clip(A2 * (x - D2) / B2 * numpy.exp(1 - (x - D2) / B2), max=0)
+        return y1 + y2
+
+    # def dual_fit(self, include_cells=None):
+            #now included in fit_model
+    #     '''Try optimizing both functions in 1 shot (7 df)'''
+    #     first_model = self.fit_model_single_order(include_cells=include_cells)
+    #     fitX = self.X[self.notna]
+    #     fitY = self.Y[self.notna]
+    #     guesses = list(self.model)
+    #     bounds = self.constraints['bounds']
+    #     for add_i in (0, 1, 3):
+    #         guesses.append(self.constraints['guesses.second'][add_i])
+    #         for b_i in (0, 1):
+    #             bounds[b_i].append(self.constraints['bounds.second'][b_i][add_i])
+    #     maxval = numpy.nanmax(fitY)
+    #     popt, pcov = curve_fit(self.dual_alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
+    #     second_fit = maxval - self.dual_alpha_func(fitX, *popt)
+    #     self.model_2 = popt
+    #     self.Y_fit_2 = second_fit
+    #     plot_Y = self.Y_fit_2
+    #     plt.plot(fitX, self.Y_fit, color='red', linestyle=':')
+    #     plt.plot(fitX, self.Y_fit_2, color='orange')
+
+
+
     def ampl_func(self, x, A, C):
         '''
         fit the alpha using the shape of the IPSP model (see gen_alpha)
@@ -293,7 +379,14 @@ class IPSP:
         D = self.model_2[3]
         return self.alpha_func(x, A, B, C, D)
 
-    def fit_event(self, c, event_index):
+    def ampl_func_7(self, x, A1, C, A2):
+        B1 = self.model[1]
+        D1 = self.model[3]
+        B2 = self.model_2[1]
+        D2 = self.model_2[3]
+        return self.dual_alpha_func(x, A1, B1, C, D1, A2, B2, D2)
+
+    def fit_event(self, c, event_index, order=1):
         '''
         fit a single trial trace to the IPSP model
         :param c:
@@ -308,7 +401,7 @@ class IPSP:
             return Y, numpy.nanmean(bl), None
         weights = self.get_baseline_kernel()
         bl_mean = DescrStatsW(bl[notna_bl], weights[notna_bl], ddof=0)
-        fit = self.fit_response(Y, bl_mean.mean)
+        fit = self.fit_response(Y, bl_mean.mean, order=order)
         return Y, bl_mean.mean, fit
 
     def fit_event_second_component(self, Y, bl, first_fit):
@@ -324,34 +417,47 @@ class IPSP:
         popt, pcov = curve_fit(self.ampl_func_2, fitX, residual, p0=guesses, bounds=bounds)
         second_fit = popt
         second_Y = self.ampl_func_2(fitX, *second_fit)
-        # plt.scatter(fitX, Y[incl])
-        # plt.plot(fitX, first_Y, color='red')
-        # plt.plot(fitX, second_Y, color='green')
-        # plt.plot(fitX, first_Y + second_Y, color='orange')
         return fitX, second_fit, first_Y, second_Y
 
+    def fit_event_7(self, Y, bl, first_fit):
+        '''call with the output of fit_event to get the ampl of the second (dual) mnodel'''
+        assert self.config.order == 7
+        incl = self.notna & numpy.logical_not(numpy.isnan(Y))
+        fitX = self.X[incl]
+        first_Y = bl - self.ampl_func(fitX, *first_fit)
+        second_fit = self.fit_response(Y, bl, order=7)
+        if second_fit is None:
+            second_fit = [x for x in first_fit]
+            second_fit.append(0)
+        second_Y = bl - self.ampl_func_7(fitX, *second_fit)
+        return fitX, second_fit, first_Y, second_Y
 
-
-
-        plt.scatter(fitX, Y[incl])
-        plt.plot(fitX, bl - self.ampl_func(fitX, *first_fit))
-        plt.plot(fitX, residual)
-
-    def fit_response(self, Y, bl):
+    def fit_response(self, Y, bl, order=1):
         '''
         fit a trace with the IPSP model, constrained to the peak time and delay of the model
         :param Y: same len as self.X
         :param bl: baseline of the response
         :return: opts of the fit
         '''
-        bounds = tuple([[x[0], x[2]] for x in self.constraints['bounds']])
-        guesses = (self.model[0], self.model[2])
         x = self.X[self.notna]
         y = (bl - Y)[self.notna]
         incl = numpy.logical_not(numpy.isnan(x) + numpy.isnan(y))
         if numpy.count_nonzero(incl) < 10:
             return None
-        popt, pcov = curve_fit(self.ampl_func, x[incl], y[incl], p0=guesses, bounds=bounds)
+        if order == 1:
+            bounds = tuple([[x[0], x[2]] for x in self.constraints['bounds']])
+            guesses = (self.model[0], self.model[2])
+            popt, pcov = curve_fit(self.ampl_func, x[incl], y[incl], p0=guesses, bounds=bounds)
+        elif order == 7:
+            bounds = [[x[0], x[2]] for x in self.constraints['bounds']]
+            guesses = (self.model_2[0], self.model_2[2], self.model_2[4])
+            for b_i in (0, 1):
+                bounds[b_i].append(self.constraints['bounds.dual'][b_i][0])
+            guesses = self.constrain_guesses(guesses, bounds)
+            try:
+                popt, pcov = curve_fit(self.ampl_func_7, x[incl], y[incl], p0=guesses, bounds=bounds)
+            except RuntimeError:
+                return None #if didn't converge
         return popt
 
     def get_baseline_kernel(self, t=-4, s=10):
@@ -374,7 +480,7 @@ class IPSP:
         store baseline and amplitude for each stim in each cell
         using the parameter of the fit as amplitude. NB that alternatively, we could add the bias,
          or compute the diff of where the fit curve min is relative to baseline.
-         :param order: 1 to only fit the first, 2 to also fit the second alpha model
+         :param order: 1 to only fit the first, 2 to also fit the second alpha model, 7 to use a dual model
          :param save_fitforms: also save an array of the fitted responses
          :return: array of frame, baseline, response, amplitude for each c, e
          NB don't use "response" for analysis. use "amplitude"-"baseline" to get response values (y at peak)
@@ -382,17 +488,22 @@ class IPSP:
         # response is ampl parameter of the fit, compared to where it returns to
         # amplitude is the peak value minus baseline value
         assert order <= self.config.order
-        add_cols = (order-1) * 2 #also add fit[0], peakval for 2nd order
         if save_fitforms and (order > 1):
-            fitforms = numpy.empty((self.n_cells, self.n_stims, self.config.post, order))
-            #this could also make sense to save with order ==1, but rn only implemented for 2.
+            order_dims = 2
+            if order == 7:
+                order_dims += 2
+            fitforms = numpy.empty((self.n_cells, self.n_stims, self.config.post, order_dims))
             fitforms[:] = numpy.nan
+        if order > 1:
+            add_cols = 2 #also add fit[0](ampl), peakval for 2nd fit
+        else:
+            add_cols = 0
         self.responses = numpy.empty((self.n_cells, self.n_stims, 4+add_cols))  # frame, baseline, response, amplitude
         self.responses[:] = numpy.nan
         for ci in range(self.n_cells):
             for ei in range(self.n_stims):
                 self.responses[ci, ei, 0] = self.stimframes[ei]
-                Y, bl, fit = self.fit_event(ci, ei)  # bl is in DF/F actual, response (fit[0]) in DF/F change.
+                Y, bl, fit = self.fit_event(ci, ei, order=1)  # bl is in DF/F actual, response (fit[0]) in DF/F change.
                 if fit is None:
                     self.responses[ci, ei, 1:] = numpy.nan
                 else:
@@ -402,16 +513,32 @@ class IPSP:
                     y_at_peak = self.alpha_func(B, fit[0], B, fit[1], D)
                     # note because alpha puts the response on top of the baseline, bl-y_at_peak is the actual value.
                     self.responses[ci, ei, 1:4] = bl, fit[0], bl - y_at_peak
-                    if order > 1:
+                    if order == 2:
                         fitX, second_fit, first_Y, second_Y = self.fit_event_second_component(Y, bl, fit)
                         B = self.model_2[1]
                         D = self.model_2[3]
                         y_at_peak = self.alpha_func(B, second_fit[0], B, second_fit[1], D)
                         self.responses[ci, ei, -2:] = second_fit[0], bl - y_at_peak
-                        if save_fitforms:
-                            ind_x = (fitX * self.session.fps / 1000).astype('int64')
-                            fitforms[ci, ei, ind_x, 0] = first_Y
-                            fitforms[ci, ei, ind_x, 1] = second_Y
+                    elif order == 7:
+                        fitX, second_fit, first_Y, second_Y = self.fit_event_7(Y, bl, fit)
+                        use_model = [x for x in self.model_2]
+                        for fi, mi in enumerate((0, 2, 4)): #A1, C, A2
+                            use_model[mi] = second_fit[fi]
+                        y_at_peak1 = self.dual_alpha_func(self.model_2[1], *use_model) #predict at B1
+                        y_at_peak2 = self.dual_alpha_func(self.model_2[5], *use_model) #predict at B2
+                        self.responses[ci, ei, -4:] = second_fit[0], bl - y_at_peak1, second_fit[-1], bl - y_at_peak2
+                    if save_fitforms:
+                        ind_x = (fitX * self.session.fps / 1000).astype('int64')
+                        fitforms[ci, ei, ind_x, 0] = first_Y
+                        fitforms[ci, ei, ind_x, 1] = second_Y
+                        if order == 7:
+                            e_model = [x for x in use_model]
+                            e_model[0] = 0
+                            i_model = [x for x in use_model]
+                            i_model[4] = 0
+                            fitforms[ci, ei, ind_x, 2] = self.dual_alpha_func(fitX, *i_model)
+                            fitforms[ci, ei, ind_x, 3] = self.dual_alpha_func(fitX, *e_model)
+
 
         lprint(self, 'Pulled responses for', self.session.tag, 'with ', self.config, 'Model:',
                self.get_modstring(), logger=self.log)
