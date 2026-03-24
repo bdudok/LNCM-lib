@@ -22,10 +22,12 @@ class IPSP:
     __name__ = 'IPSP'
     '''Detect and fit optically evoked IPSPs in a voltage imaging session'''
 
-    def __init__(self, session: ImagingSession, config=None, purge=False):
+    def __init__(self, session: ImagingSession, config=None, purge=False, shuffle=False):
         '''initialize with an ImagingSession
         :param config: a dict with optional keys 'pre, post, param, nan'
         :param purge: if True, will delete cached results
+        :param shuffle: if True, replace actual stim frames with random frames (picked between the firs and last stim,
+         not including post-stim periods). Needs to be set at init. does not overwrite stored stimtimes.
         '''
         self.session = session
         self.wdir = self.session.path + 'IPSP/'
@@ -34,7 +36,7 @@ class IPSP:
             self.n_cells -= 1
         if purge:
             self.purge()
-        self.set_defaults(config)
+        self.set_defaults(config, shuffle)
         self.log = logger()
         self.log.set_handle(self.session.procpath, self.session.prefix)
         self.is_saved = os.path.exists(self.get_fn('model.npy'))
@@ -46,7 +48,7 @@ class IPSP:
         for f in os.listdir(self.wdir):
             os.remove(self.wdir + f)
 
-    def set_defaults(self, user_config):
+    def set_defaults(self, user_config, shuffle=False):
         default_config = {
             'pre': int(self.session.fps * 100 / 1000),  # duration included before stim (frames)
             'post': int(self.session.fps * 200 / 1000),  # duration included after stim (frames)
@@ -65,6 +67,7 @@ class IPSP:
             'bounds.dual': ([-1, 0.1, 0], [0.001, 300, 200]),
             'guesses.dual': (-0.1, 100, 25),
         }
+        self.shuffle=shuffle
         self.baseline_kernels = {}
         if not os.path.exists(self.wdir):
             os.mkdir(self.wdir)
@@ -88,6 +91,8 @@ class IPSP:
         h = str(config.pre) + str(config.post) + str(config.param) + str(config.nan)
         if config.order != 1:
             h += 'o' + str(config.order)
+        if self.shuffle:
+            h+= '_shuffle'
         self.confighash = h
         self.config = config
 
@@ -143,6 +148,13 @@ class IPSP:
                     0]  # ignoring intensities. these are not reliable with current PreProc.
                 numpy.save(stimname + '.npy', stimframes)
                 pandas.DataFrame({'StimFrames': stimframes}).to_excel(stimname + '.xlsx')
+            if self.shuffle:
+                frame_pool = numpy.ones(stimframes[-1], dtype='bool')
+                frame_pool[:stimframes[0]] = 0
+                for i in stimframes[:-1]:
+                    frame_pool[i:i+self.config.post] = 0
+                stimframes = numpy.random.choice(numpy.where(frame_pool)[0], len(stimframes), replace=False)
+                stimframes.sort()
             self.stimframes = stimframes
         self.n_stims = len(self.stimframes)
         return self.stimframes
