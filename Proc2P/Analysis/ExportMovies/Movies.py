@@ -27,7 +27,7 @@ Updating the Panel classes is work in progress.
 In the previous (Scanbox) implementation the slider units were frames / refresh * fps
 In LNCM implementation, the slider is time in seconds.
 Expect that every Panel's init and update functions need to be modified and tested.
-Currently tested:  
+Currently tested:  Panel_MouseCam, Sliding_LFP, Movie, Clock, Panel_2PMovie
 '''
 
 

@@ -355,7 +355,7 @@ class IPSP:
 
     def dual_alpha_func(self, x, A1, B1, C1, D1, A2, B2, D2):
         y1 = A1 * (x - D1) / B1 * numpy.exp(1 - (x - D1) / B1) + C1
-        #we clip the EPSP so it's not negative, otherwise constraining the initial response is very fragile
+        #we clip the (inverted) EPSP so it's not negative, otherwise constraining the initial response is very fragile
         y2 = numpy.clip(A2 * (x - D2) / B2 * numpy.exp(1 - (x - D2) / B2), max=0)
         return y1 + y2
 
