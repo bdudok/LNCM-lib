@@ -2,10 +2,8 @@
 
 # To create the main env used in most analysis GUIs and scripts ("lncm"), use Python 3.11 and stick to conda-forge channel.
 
-conda create --name lncm python=3.11 -c conda-forge --strict-channel-priority
+conda create --name lncm python=3.11 -c conda-forge --strict-channel-priority -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph pyedflib lsq-ellipse pandas-stubs pyarrow qt6-multimedia
 conda activate lncm
-conda install -c conda-forge -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph pyedflib lsq-ellipse pandas-stubs pyarrow qt6-multimedia
-
 
 # To use SIMA for ROI detection in 2P movies, we need a Python 3.6 env ("lncm36"), 
 # Note that calls to the functions that use this are made from the main env, and the path to the python 3.6 executable needs to be specified in envs/site_config.json

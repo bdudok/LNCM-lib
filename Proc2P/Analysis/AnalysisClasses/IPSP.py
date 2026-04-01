@@ -243,7 +243,7 @@ class IPSP:
                 self.Y_fit_all = self.Y_fit + second_fit
             elif self.config.order == 7:
                 maxval = numpy.nanmax(fitY)
-                # constrain the bound sbased ona  first fit to the negative peak
+                # constrain the bounds based on a first fit to the negative peak
                 #populate with defaults
                 guesses = list(copy.copy(self.model))
                 bounds = [copy.copy(x) for x in self.constraints['bounds']]
@@ -343,7 +343,7 @@ class IPSP:
         Source: Guzman SJ, Schlögl A, Schmidt-Hieber C (2014)
         Stimfit: quantifying electrophysiological data with Python. Front Neuroinform doi: 10.3389/fninf.2014.00016
         But a delay parameter was added.
-        use non-negative, positive peak (inverted for IPSP)
+        use non-negative trace, positive peak (inverted for IPSP)
         scale, shape needs to be > 0, start with guess 1,1,0
         when input X is in ms and Y in DF/F (inverted but not rescaled), A can be interpreted as peak amplitude,
         B can be interpreted as peak time, D as onset delay in ms.

@@ -34,7 +34,7 @@ Currently tested:  Panel_MouseCam, Sliding_LFP, Movie, Clock, Panel_2PMovie
 class Movie:
     def __init__(self, panels, refresh_rate, trig, slider=0, session=None, tag=None, add_sliders=(), title='Movie',
                  start=0, render=None, output_filename=None, cell=-1, testing=False, timetoframe_mode='precise',
-                 vres=(1280, 720), playback_speed=1, ):
+                 vres=(1280, 720), playback_speed=1, codec='avc1'):
         '''
         Create the main movie window using the list of panels.
         :param panels: a list of initialized Panel classes
@@ -47,13 +47,14 @@ class Movie:
         :param title: window title
         :param start: where playback will start (sec)
         :param render: if True, render each frame between start and stop and save to file. otherwise, interactive
-        :param output_filename: '.avi'
+        :param output_filename: '.mp4' or '.avi', see codec.
         :param cell: to set the cell index (ImagingSession)
         :param testing: if True, does not start playback after init.
         :param timetoframe_mode: if 'precise', uses ImagingSession.timetoframe. if 'fps',
          uses 2P fps. suitable for 20 Hz Ca imaging.
         :param vres: resolution of the output (whether on screen or in file)
-        :param playback_speed: default is 1: real time. can speed up or slow down the step size by this factor.
+        :param playback_speed: default is 1: real time. can speed up or slow down the step size by this factor
+        :param codec: avc1 (filename .mp4) is good for presentations. DIVX (filename .avi) is also good for local files to play with VLC.
         '''
         if not render:
             render = None
@@ -115,8 +116,8 @@ class Movie:
             vrate = self.refresh_rate
             start, stop = render
             if output_filename is None:
-                output_filename = prefix + '_movie.avi'
-            fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+                output_filename = prefix + '_movie.mp4'
+            fourcc = cv2.VideoWriter_fourcc(*codec)
             out = cv2.VideoWriter(output_filename, fourcc, vrate, vres)
             prog = 0
             self.time = start
