@@ -33,6 +33,7 @@ def get_processed_tags(procpath, prefix, which_level='processed'):
     :param prefix:
     :param which_level: 'processed' for trace, 'roi' for just roi
     :return: list of tuples (roi tag, channel) that exist
+    Note: this doesn't work if ROI name includes - hyphen or _ underscore
     '''
     spath = os.path.join(procpath, prefix + '/')
     if not os.path.exists(spath):

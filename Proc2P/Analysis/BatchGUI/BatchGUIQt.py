@@ -268,12 +268,15 @@ class GUI_main(QtWidgets.QMainWindow):
     def open_viewer_callback(self):
         prefix = self.active_prefix[0]
         tag = self.tag_label.text()
-        traces = get_processed_tags(self.wdir, prefix)
-        traces = ', '.join(set([x[0] for x in traces]))
-        if tag not in traces:
-            self.cprint(f'No processed data found for "{tag}". Available: {traces}')
-        else:
+        try:
             SessionGUI(self.wdir, self.active_prefix[0], tag)
+        except:
+            traces = get_processed_tags(self.wdir, prefix)
+            traces = ', '.join(set([x[0] for x in traces]))
+            if tag not in traces:
+                self.cprint(f'No processed data found for "{tag}". Available: {traces}')
+            else:
+                raise #raise the original error of SessionGUI
 
     def make_gevireg_tab(self):
         self.GEVIRegTab = QtWidgets.QWidget()

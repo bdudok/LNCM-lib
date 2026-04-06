@@ -1,9 +1,11 @@
 import numpy
 from sklearn import cluster
-
-
 from Proc2P.utils import read_excel
 from sklearn.cluster import dbscan
+from sklearn.preprocessing import StandardScaler
+from scipy import signal
+from scipy.signal import bessel, sosfiltfilt
+
 # from EyeTracking import clean_movement_map, clean_whisker_map, parse_triggers
 # from SCA_reader import get_spikes, find_clusters
 # from OEphys_reader import get_OEphys_events, get_tonepuff_events
@@ -346,6 +348,73 @@ def all_ripples_immobility(a, w, cluster_eps = 1):
 
     return events, mask
 
+def SingleCell_Peaks(a, w, lowpass = 10, decay=1, peak_size=5, param_key='rel', exclude_movement=False):
+    '''
+    Find peaks on single-cell traces, then filter out overlap on the session level.
+    This is intended to generate a PSTH where amplitude depends both on the single-cell peak height,
+     and the degree of synchrony.
+     If interested in the single cell peaks purely, use something like ECB-Spatial Ca Transients instead
+    :param a: session
+    :param w: mask width
+    :param lowpass: filter cutoff, Hz
+    :param decay: a low pass filtering (seconds)
+    :param peak_size: binning width fro deduplicating peaks on the session level (seconds)
+    :param param_key: which trace to use
+    :return: events, masks
+    '''
+    fps = a.fps
+    nyq = 0.5 * fps
+    cutoff = float(lowpass) / nyq
+
+    #detect single cell peaks
+    all_peaks = []
+    all_heights = []
+    filter = bessel(3, cutoff, btype='lowpass', output='sos')
+    filt_trace = numpy.empty(a.ca.frames)
+    Y = a.getparam(param_key)
+    for c in range(a.ca.cells):
+        y = Y[c]
+        filt_trace[:] = numpy.nan
+        notna = numpy.logical_not(numpy.isnan(y))
+        filt_trace[notna] = sosfiltfilt(filter, y[notna])
+        y = StandardScaler().fit_transform(filt_trace.reshape(-1, 1))
+        peaks, _ = signal.find_peaks(y[:, 0], height=1, distance=int(peak_size * fps + 1))
+        rp = numpy.where(notna)[0][peaks]
+        all_peaks.extend(rp)
+        all_heights.extend(filt_trace[peaks])
+
+    #we need to sort out the session_level events.
+    #clustering is problematic because if there are many events, we will be clustering everything together.
+    # otoh if we cluster with small eps, we keep many very small peaks.
+    # custom algo: start from highest peak, include it and mask out nearby peaks. continue until all are eliminated
+    decay = int(fps*decay)
+    all_peaks = numpy.array(all_peaks)
+    all_heights = numpy.array(all_heights)
+    all_indices = numpy.arange(len(all_peaks), dtype='uint64')
+    used_peak_mask = numpy.ones(len(all_peaks), dtype='bool')
+    events = []
+    n_iter = 0
+
+    while numpy.count_nonzero(used_peak_mask):
+        # print(f'Iter {n_iter}: {numpy.count_nonzero(used_peak_mask)} peaks left')
+        #find highest peak
+        peaks = all_peaks[used_peak_mask]
+        heights = all_heights[used_peak_mask]
+        indices = all_indices[used_peak_mask]
+        p0 = peaks[numpy.argmax(heights)]
+        events.append(p0)
+        # exclude any that are very close to this one
+        p_end = min(a.ca.frames, p0 + decay*peak_size)
+        p_start = max(0, p0-decay*peak_size)
+        for pi, peak in enumerate(peaks):
+            if p_start <= peak <= p_end:
+                used_peak_mask[indices[pi]] = False
+        # repeat
+        n_iter += 1
+        if n_iter > len(all_peaks):
+            break
+    events.sort()
+    return masks_from_list(a, w, events, exclude_movement=exclude_movement)
 
 if __name__ == '__main__':
     processed_path = 'D:\Shares\Data\_Processed/2P\PVTot/'
