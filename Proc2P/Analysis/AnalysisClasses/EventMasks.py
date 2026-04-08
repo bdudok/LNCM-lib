@@ -416,6 +416,38 @@ def SingleCell_Peaks(a, w, lowpass = 10, decay=1, peak_size=5, param_key='rel', 
     events.sort()
     return masks_from_list(a, w, events, exclude_movement=exclude_movement)
 
+def SessionPeaks(a, w, lowpass = 10, peak_size=5, param_key='rel', exclude_movement=False):
+    '''
+    Find peaks on the average trace
+    :param a: session
+    :param w: mask width
+    :param lowpass: filter cutoff, Hz
+    :param decay: a low pass filtering (seconds)
+    :param peak_size: binning width fro deduplicating peaks on the session level (seconds)
+    :param param_key: which trace to use
+    :return: events, masks
+    '''
+    fps = a.fps
+    nyq = 0.5 * fps
+    cutoff = float(lowpass) / nyq
+
+    #detect single cell peaks
+    all_peaks = []
+    all_heights = []
+    filter = bessel(3, cutoff, btype='lowpass', output='sos')
+    filt_trace = numpy.empty(a.ca.frames)
+    Y = a.getparam(param_key)
+
+    y = numpy.nanmean(Y, axis=0)
+    filt_trace[:] = numpy.nan
+    notna = numpy.logical_not(numpy.isnan(y))
+    filt_trace[notna] = sosfiltfilt(filter, y[notna])
+    y = StandardScaler().fit_transform(filt_trace.reshape(-1, 1))
+    peaks, _ = signal.find_peaks(y[:, 0], height=1, distance=int(peak_size * fps + 1))
+    peaks = numpy.where(notna)[0][peaks]
+    peaks.sort()
+    return masks_from_list(a, w, peaks, exclude_movement=exclude_movement)
+
 if __name__ == '__main__':
     processed_path = 'D:\Shares\Data\_Processed/2P\PVTot/'
     prefix = 'PVTot7_2024-02-07_lfpOpto_178'

@@ -8,7 +8,8 @@ from .Batch_Utils import mad_based_outlier
 from .Ripples import Ripples
 import time
 from scipy import stats
-
+import os
+import numpy
 # very legacy
 # from EyeTracking import load_mikko_trace
 
@@ -57,7 +58,7 @@ class ImagingSession(object):
         self.rates = {}
         self.colors = {}
         self.path = os.path.join(os.getcwd(), '')
-        self.eye = load_mikko_trace(self.path, self.prefix)
+        # self.eye = load_mikko_trace(self.path, self.prefix)
 
         # load opto if available:
         ofn = self.prefix + '_opto.npy'

@@ -19,7 +19,7 @@ class SplitQuad(object):
         mod1 = 10000
         raw = spio.loadmat(prefix + '_quadrature.mat', struct_as_record=False, squeeze_me=True)['quad_data']
         # read array 0:ttl, 1:pos
-        self.data = numpy.empty((2, len(raw)), dtype=numpy.int)
+        self.data = numpy.empty((2, len(raw)), dtype='int')
         self.data[:, :] = divmod(raw, mod1)
         # fix resets
         for i in range(1, len(raw)):
