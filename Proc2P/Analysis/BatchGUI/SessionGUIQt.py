@@ -86,6 +86,13 @@ class GUI_main(QtWidgets.QMainWindow):
             Y = butter_bandpass_filter(self.session.ephys.trace, 1, 500, self.session.si['fs'])
             ca.plot(numpy.linspace(0, self.X[-1], len(Y)), Y, color='black')
             ca.set_ylabel('LFP (mV)')
+
+        if self.session.opto is not None:
+            self.TraceCanvas.ax[1].plot(self.X, self.session.opto, color=self.config.OptoColor)
+            for e in numpy.where(numpy.diff(self.session.opto > 0.5))[0] + 1:
+                for ai in (0, 1):
+                    self.TraceCanvas.ax[ai].axvline(self.X[e], color=self.config.OptoColor, alpha=0.4)
+
         self.TraceCanvas.ax[-1].set_xlabel('Time (s)')
         self.TraceCanvas.fig.tight_layout()
 

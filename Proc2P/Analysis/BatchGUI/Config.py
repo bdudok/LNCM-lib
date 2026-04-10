@@ -20,6 +20,7 @@ class GuiConfig:
     GreenColor = '#04D246'
     RedColor = '#D24604'
     SzColor = '#FC9564'
+    OptoColor= '#1E90FF'
 
 
 class State(Enum):
