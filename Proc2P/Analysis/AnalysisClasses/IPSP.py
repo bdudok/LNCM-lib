@@ -346,7 +346,8 @@ class IPSP:
         use non-negative trace, positive peak (inverted for IPSP)
         scale, shape needs to be > 0, start with guess 1,1,0
         when input X is in ms and Y in DF/F (inverted but not rescaled), A can be interpreted as peak amplitude,
-        B can be interpreted as peak time, D as onset delay in ms.
+        B can be interpreted as time constant in ms, D as onset delay in ms.
+        Peak will occur at B+D ms, while B also determines the onset and decay kinetics
         :param x: time (ms)
         :param opts: scale, shape, shift, delay
         :return: array (predicted amplitude for each time point)
