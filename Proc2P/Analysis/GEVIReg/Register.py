@@ -126,8 +126,8 @@ def register(proc_path, prefix, config=None):
         add_frames = numpy.random.choice(more_frames, min(config.ref_size - len(ref_frames), len(more_frames)),
                                          replace=False)
         ref_frames = numpy.concatenate((ref_frames, add_frames))
-
-    print(f'After checking for size, {len(ref_frames)} ref frames')
+    if debug:
+        print(f'After checking for size, {len(ref_frames)} ref frames')
     first_ref = numpy.average(data[ref_frames], axis=0).squeeze()
     norm_min = numpy.percentile(data[ref_frames], 1)
     norm_range = numpy.percentile(data[ref_frames], 99) - norm_min
@@ -153,7 +153,8 @@ def register(proc_path, prefix, config=None):
     snr = numpy.nan_to_num(numpy.average(d, axis=(1, 2)) / numpy.std(d, axis=(1, 2)))
     snr_lim = min(1, numpy.nanpercentile(snr[ref_frames], 25))
     ref_frames = [x for x in ref_frames if snr[x] > snr_lim]
-    print(f'After exclude low snr, {len(ref_frames)} ref frames')
+    if debug:
+        print(f'After exclude low snr, {len(ref_frames)} ref frames')
     max_offset = max([abs(x) for x in reg_offset])  # to add to limit for keeping frames as stable reference
     avgs = numpy.zeros([len(ref_frames), *first_ref.shape])
     n_roll = round(config.rolling_avg_size / 1000 * fps)
@@ -169,12 +170,15 @@ def register(proc_path, prefix, config=None):
         if max([abs(x) for x in displacements[0]]) < (config.ref_displacement_limit + max_offset):
             stable_refs.append(i)
     sr_size = int(config.min_ref_size / 2)
-    print(f'{len(stable_refs)} stable ref frames, min is {sr_size}')
+    if debug:
+        print(f'{len(stable_refs)} stable ref frames, min is {sr_size}')
     if len(stable_refs) < sr_size:
         add_sr = [x for x in range(len(ref_frames)) if x not in stable_refs]
-        print(len(add_sr))
+        if debug:
+            print(len(add_sr))
         stable_refs.extend(numpy.random.choice(add_sr, sr_size - len(stable_refs), replace=False))
-        print(f'After adding, {len(stable_refs)} "stable" ref frames')
+        if debug:
+            print(f'After adding, {len(stable_refs)} "stable" ref frames')
     for i in stable_refs:
         f = ref_frames[i]
         tforms = transform.SimilarityTransform(translation=disps[i])
