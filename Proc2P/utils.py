@@ -70,12 +70,21 @@ def get_user():
     return os.environ.get('USERNAME')
 
 
-def norm(d):
+def norm(d, q=None):
+    '''
+    q: 2-tuple for low and high percentile of data to normalize for (1, 99)
+        If q is None,  use min and 99 percentile
+    :return a copy of the data normalized to 0-1 range and clipped'''
     wh_notna = numpy.logical_not(numpy.isnan(d))
     y = numpy.empty(d.shape)
     y[:] = numpy.nan
-    a = d[wh_notna] - numpy.min(d[wh_notna])
-    y[wh_notna] = numpy.minimum(a / numpy.percentile(a, 99, axis=0), 1)
+    if q is None:
+        a = d[wh_notna] - numpy.min(d[wh_notna])
+        q2 = 99
+    else:
+        a = d[wh_notna] - numpy.percentile(d[wh_notna], q[0], axis=0)
+        q2 = q[1]
+    y[wh_notna] = numpy.minimum(a / numpy.percentile(a, q2, axis=0), 1)
     return y
 
 

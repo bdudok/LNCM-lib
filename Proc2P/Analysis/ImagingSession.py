@@ -249,6 +249,9 @@ class ImagingSession(object):
                     self.ca.keys.append('vm')
                     self.ca.load()
                 param = self.ca.vm
+            elif param == 'vms':
+                #only available if saved by script
+                param = numpy.load(os.path.join(self.ca.pf, 'vms_interp.npy'))
             elif 'custom' in param:
                 ckey = param.split('custom')[1]
                 param = self.ca.get_custom(ckey)

@@ -86,10 +86,18 @@ def LFPSpikes(a, w, ch=0, from_session=True, exclude_move=True, filter_by_sz=Non
     return nonoverlap_from_list(a, w, event_frames, decay=int(a.fps*0.2), eps=int(a.fps),
                                 exclude_move=exclude_move)
 
-def Seizures(a, w, ch=1, eps=1):
+def Seizures(a, w, ch=1, eps=1, min_dur=5):
     df = read_excel(a.get_file_with_suffix(f'_ch{ch}_seizure_times.xlsx'))
     st = df['Sz.Start(s)'].values
-    event_frames = [a.timetoframe(x) for x in st]
+    event_frames = []
+    for i, sz in df.iterrows():
+        t0 = sz['Sz.Start(s)']
+        t1 = sz['Sz.Stop(s)']
+        if numpy.isnan(sz['Sz.Start(s)']) or numpy.isnan(sz['Sz.Stop(s)']):
+            continue
+        if t0 < 1 or t1 > (a.ftimes[-1, 0] - min_dur):
+            continue
+        event_frames.append(a.timetoframe(t0))
     return nonoverlap_from_list(a, w, event_frames, decay=int(a.fps*0.2), eps=int(a.fps*eps), exclude_move=True)
 
 def curated_sz_times(a, w, ch=0): #ch is 0 indexed
