@@ -289,7 +289,7 @@ class IPSP:
             with open(fname + '.txt', 'w') as f:
                 f.write(modstring + '\n' + str(self.model))
                 if self.config.order == 2:
-                    f.write('\n' + self.get_modstring(self.model_2))
+                    f.write('\n' + self.get_modstring(self.model))
                     f.write('\n' + str(self.model_2))
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('Response (DF/F)')
