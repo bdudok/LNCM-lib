@@ -71,9 +71,11 @@ class CropVideo:
         ax.tick_params(axis='y', which='both', right='off', left='off', labelleft='off')
         self.rect = None
         self.rs = RectangleSelector(ax, self.line_select_callback,
-                                    drawtype='box', useblit=False, button=[1],
+                                    useblit=False, button=[1],
                                     minspanx=5, minspany=5, spancoords='pixels',
-                                    interactive=True)
+                                    interactive=True,
+                                    # drawtype='box',
+                                    )
         self.b_save = Button(axes[1], 'Save Eye')
         self.b_save.on_clicked(self.save_eye_crop)
         self.m_save = Button(axes[2], 'Save Motion')
