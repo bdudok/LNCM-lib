@@ -126,13 +126,20 @@ class FitEye:
                 nan_frames.append(f)
         ED_filt = numpy.copy(ED)
         #filter each ellipse paramater
+        #actually, we don't filter the ellipse, it breaks accurate tracking of fast pupil responses
         # ED_filt = numpy.empty(ED.shape)
         # ED_filt[:] = numpy.nan
         # for i in range(ED.shape[1]):
         #     ED_filt[:, i] = arima_filtfilt(ED[:, i])
+
         numpy.save(self.ellipse_fn, ED_filt)
         ellipse_diameter = (ED_filt[:, 2]+ED_filt[:, 3])/2
+        # instead, mask outliers
+        diff_indices = [x for x in outlier_indices(ellipse_diameter)]
         ellipse_diameter[nan_frames] = numpy.nan
+        ellipse_diameter[diff_indices] = numpy.nan
+        ellipse_diameter[[x - 1 for x in diff_indices if x > 0]] = numpy.nan
+        ellipse_diameter[[x + 1 for x in diff_indices if x < (len(ellipse_diameter) - 1)]] = numpy.nan
         numpy.save(self.eye_trace_fn, ellipse_diameter) #pupil diameter in each frame
 
     def fit_ellipse_raw(self):
@@ -195,7 +202,7 @@ class FitEye:
             )
             ca.add_patch(ellipse)
         fig.tight_layout()
-        fig.savefig(save_fn, dpi=300)
+        fig.savefig(save_fn)
         plt.close()
 
 def arima_filtfilt(trace, z=None, thr=0.2):

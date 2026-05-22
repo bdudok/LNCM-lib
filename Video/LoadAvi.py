@@ -1,3 +1,5 @@
+import os.path
+
 import cv2
 
 
@@ -5,6 +7,7 @@ class LoadAvi:
     __name__ = 'LoadAvi'
 
     def __init__(self, vid_fn):
+        assert os.path.exists(vid_fn)
         self.im = cv2.VideoCapture(vid_fn)
         self.frame_buffer = {}
         ret, frame = self.im.read()
