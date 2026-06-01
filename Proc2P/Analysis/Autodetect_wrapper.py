@@ -14,11 +14,11 @@ PY36_SCRIPT = os.path.join(Path(__file__).parent,  'Autodetect_worker.py')
 
 def _run_py36_job(path, prefix, apps, config):
 
-    payoad = {"path": path, "prefix":prefix, "apps":apps, "config":config}
+    job = {"path": path, "prefix":prefix, "apps":apps, "config":config}
 
     try:
         result = subprocess.run(' '.join([os.path.realpath(x) for x in (PY36_PYTHON, PY36_SCRIPT)]),
-            input=json.dumps(payoad),
+            input=json.dumps(job),
             text=True,              # send/receive str instead of bytes
             capture_output=True,    # capture stdout/stderr
             check=True,             # raise CalledProcessError on non-zero return code

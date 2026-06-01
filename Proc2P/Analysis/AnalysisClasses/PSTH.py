@@ -1,6 +1,6 @@
 import os.path
 from Proc2P.Analysis.ImagingSession import ImagingSession
-from Proc2P.Analysis.AnalysisClasses.NormalizeVm import arima_filtfilt
+from Proc2P.Analysis.NormalizeVm import arima_filtfilt
 from Proc2P.utils import lprint, outlier_indices
 from datetime import datetime
 import pandas

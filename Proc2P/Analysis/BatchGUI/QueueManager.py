@@ -5,10 +5,10 @@ from multiprocessing import Queue, Process, freeze_support, set_start_method
 from queue import Empty
 #import worker functions
 from Proc2P.Analysis.GEVIReg.Register import Worker as GEVIReg_Worker
-from Proc2P.Analysis.AnalysisClasses.NormalizeVm import Worker as PullVM_Worker
+from Proc2P.Analysis.NormalizeVm import Worker as PullVM_Worker
 from Proc2P.Analysis.RoiEditor import Worker as SIMA_Worker
 from Proc2P.Analysis.PullSignals import Worker as Pull_Worker
-from Proc2P.Analysis.CaTrace import CaTrace, ProcessConfig
+from Proc2P.Analysis.CaTrace import CaTrace
 from Proc2P.Analysis.CaTrace import Worker as Process_Cell_Worker
 from Proc2P.Analysis.Ripples import Ripples
 

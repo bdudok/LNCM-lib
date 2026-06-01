@@ -2,19 +2,16 @@ from PySide6 import QtGui, QtCore, QtWidgets
 import matplotlib
 
 matplotlib.use('QtAgg')
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib import pyplot as plt
 
 plt.rcParams['font.size'] = 8
 plt.rcParams['font.sans-serif'] = 'Arial'
 import numpy
-import os
 import json
 import sys
 import datetime
 from dataclasses import dataclass, fields, asdict
 
-from Proc2P.utils import logger, lprint
 from Proc2P.Analysis.BatchGUI.Config import *
 from Proc2P.Analysis.AssetFinder import AssetFinder, get_processed_tags
 # from Proc2P.Analysis.BatchGUI.RoiEditorQt import GUI_main as RoiEditorGUI
@@ -25,7 +22,7 @@ from LFP.SzDet.AppSpikeSz.SzViewGUI import launch_in_subprocess as SzViewGUI
 
 from Proc2P.Analysis.BatchGUI.QueueManager import Job, JobType
 from Proc2P.Analysis.GEVIReg.Register import RegConfig
-from Proc2P.Analysis.AnalysisClasses.NormalizeVm import PullVmConfig
+from Proc2P.Analysis.NormalizeVm import PullVmConfig
 from Proc2P.Analysis.RoiEditor import SIMAConfig
 from Proc2P.Analysis.PullSignals import PullConfig
 from Proc2P.Bruker.LoadRegistered import Source

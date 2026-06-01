@@ -13,13 +13,10 @@ def main():
 
     job = json.loads(sys.stdin.read())
 
-    # Call your existing 3.6-only function here.
-    # result = real_processing_function(args.input, args.output, args.option_flag)
     path = job["path"] #string to processed path
     prefix = job["prefix"]
     apps = job["apps"] # segmentation approaches to run. a list converted to string with json.dumps
     config = job["config"]
-
 
     log = logger()
     log.set_handle(path, prefix)
