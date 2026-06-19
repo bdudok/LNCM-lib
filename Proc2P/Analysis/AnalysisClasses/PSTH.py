@@ -202,7 +202,7 @@ class PSTH:
             else:
                 events, mask = events
             fill_line = False
-            if self.param_key == 'pupil':
+            if 'pupil' in self.param_key:
                 line = a.map_eye(model_name=self.pull_function_kwargs.get('model_name', 'final'))
                 fill_line = True
             # elif self.param_key == 'face':
@@ -321,6 +321,9 @@ class PSTH:
             if self.pull_function_kwargs.get('fillnan'):
                 line = arima_filtfilt(line)
             if fill_line:
+                if 'Diff' in self.param_key:
+                    line[1:] = numpy.diff(numpy.nan_to_num(line))
+                    line[0] = 0
                 param = numpy.zeros(a.ca.rel.shape)
                 l_dat = min(len(line), a.ca.frames)
                 param[:, :l_dat] = line[:l_dat]
