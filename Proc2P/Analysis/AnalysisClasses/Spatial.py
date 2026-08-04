@@ -64,7 +64,9 @@ def match_cells(a: ImagingSession, b: ImagingSession, cells: list):
                 continue
             # rebuild tree from remaining cells
             if rebuild:
-                targets = scipy.spatial.cKDTree([target_cms[pi] for pi in range(b.ca.cells) if not used[pi]])
+                remaining_cells = [target_cms[pi] for pi in range(b.ca.cells) if not used[pi]]
+                if len(remaining_cells):
+                    targets = scipy.spatial.cKDTree(remaining_cells)
                 rebuild = False
             # nearest cm
             d, nn = targets.query(cms[ci])

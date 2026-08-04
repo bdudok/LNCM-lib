@@ -124,7 +124,8 @@ def masks_from_list(a, w, event_list, exclude_movement=False):
         w0 = im
         w1 = i1 - current_frame
         # set actual indices
-        mask[ri, w - w0:w + w1] = numpy.arange(current_frame - w0, current_frame + w1)
+        if w0 + w1 > 1:
+            mask[ri, w - w0:w + w1] = numpy.arange(current_frame - w0, current_frame + w1)
     if exclude_movement:
         speed_mask = numpy.nan_to_num(mask.astype('int16'))
         mov_mask = a.pos.movement[speed_mask]
@@ -443,9 +444,7 @@ def SessionPeaks(a, w, lowpass = 10, peak_size=5, param_key='rel', exclude_movem
     nyq = 0.5 * fps
     cutoff = float(lowpass) / nyq
 
-    #detect single cell peaks
-    all_peaks = []
-    all_heights = []
+    #detect peaks on average trace
     filter = bessel(3, cutoff, btype='lowpass', output='sos')
     filt_trace = numpy.empty(a.ca.frames)
     Y = a.getparam(param_key)
