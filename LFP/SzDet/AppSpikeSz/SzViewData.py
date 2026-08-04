@@ -107,7 +107,8 @@ class SzReviewData:
 
     def read_ephys(self):
         if self.setup == 'Pinnacle':
-            self.ephys = ReadEDF.EDF(self.path, self.prefix, ch=int(self.ch) - 1)
+            self.ephys = ReadEDF.EDF(self.path, self.prefix, ch=int(self.ch) - 1, rejection_ops=self.settings)
+            assert int(self.ephys.fs) == int(float(self.settings['fs'])), 'fs setting in config does not match the data'
             # ttls = self.ephys.get_TTL()
             startdate = self.ephys.d[-1]['startdate']
             print(startdate)

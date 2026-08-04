@@ -48,17 +48,18 @@ class EDF:
         self.active_channel = self.channels[chi]
         if self.rejection_ops is not None and 'rejection_value' in self.rejection_ops:
             tr = numpy.copy(self.data[chi])
-            rejection_value = self.rejection_ops['rejection_value']
-            rejection_step = int(self.rejection_ops['rejection_step'] * self.fs)
-            rejection_tail = int(self.rejection_ops['rejection_tail'] * self.fs)
-            rejection_factor = self.rejection_ops['rejection_factor']
+            rejection_value = float(self.rejection_ops['rejection_value'])
+            rejection_step = int(float(self.rejection_ops['rejection_step']) * self.fs)
+            rejection_tail = int(float(self.rejection_ops['rejection_tail']) * self.fs)
+            rejection_factor = float(self.rejection_ops['rejection_factor'])
             if rejection_factor > 1.1:
                 min_n = int(rejection_factor) #use factor as n of samples
             else:
                 min_n = int(rejection_step * rejection_factor) #use factor as ratio
 
             bad_index = numpy.where(numpy.absolute(tr) > rejection_value)[0]
-            if len(bad_index) > min_n:
+            # print(f'starting clustering, {len(bad_index)} indices of {len(tr)}')
+            if len(tr)*0.1 > len(bad_index) > min_n:
                 clustering = cluster.DBSCAN(eps=rejection_step, min_samples=min_n).fit(bad_index.reshape(-1, 1))
                 labels = clustering.labels_
                 for cid in range(labels.max() + 1):

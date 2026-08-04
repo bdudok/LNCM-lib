@@ -531,6 +531,7 @@ class GUI_main(QtWidgets.QMainWindow):
             trace = r.trace
         #get example trace
         self.fs = int(self.param['fs'])
+        self.param_fields['fs'].setText(str(self.param['fs']))
         plotdur = self.get_field('PlotDur')
 
         if hasattr(r, 'raw_trace'):
