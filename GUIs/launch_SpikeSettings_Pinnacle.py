@@ -15,7 +15,7 @@ settings = {
     'Sz.MinDur': 5, #spike cluster duration to be considered seizure (s)
     'Sz.Gap': 5, #gap for merging neighboring spike clusters (s)
     'SzDet.Framesize': 50, #resolution of output instantaneous spike rate trace (ms)
-    # 'fs': 2000, #sampling rate (read from input in case of Pinnacle EDF file)
+    'fs': 2000, #sampling rate (read from input in case of Pinnacle EDF file)
     'Channel': 3, #channel number (indexed from 1)
     'rejection_value': 3000, #absolute voltage threshold for outlier samples. default:3000
     'rejection_step': 1, #clustering distance for outlier samples (s). dafault:1
