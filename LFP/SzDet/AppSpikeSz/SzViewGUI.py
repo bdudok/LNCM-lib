@@ -42,7 +42,9 @@ class GUI_main(QtWidgets.QMainWindow):
         # main groupbox (horizonal)
         self.szlist_groupbox = self.make_szlist_groupbox()
         self.display_traces_groupbox = self.make_traces_groupbox()
-        self.video_groupbox = self.make_video_groupbox()
+        self.disable_video_vidgets = True # hide video, as these as not used.
+        if not self.disable_video_vidgets:
+            self.video_groupbox = self.make_video_groupbox()
 
         # central widget
         centralwidget = QWidget(self)
@@ -51,7 +53,8 @@ class GUI_main(QtWidgets.QMainWindow):
         # add main layouts
         horizontal_layout.addWidget(self.szlist_groupbox)
         horizontal_layout.addWidget(self.display_traces_groupbox)
-        horizontal_layout.addWidget(self.video_groupbox)
+        if not self.disable_video_vidgets:
+            horizontal_layout.addWidget(self.video_groupbox)
 
         self.setCentralWidget(centralwidget)
         self.centralWidget().setLayout(horizontal_layout)
@@ -339,6 +342,8 @@ class GUI_main(QtWidgets.QMainWindow):
         self.show_frame(self.frames[self.frame_index])
 
     def reset_video_player(self):
+        if self.disable_video_vidgets:
+            return 0
         self.frameTimer.stop()
         self.frames = []
         self.frame_index = 0
@@ -349,7 +354,8 @@ class GUI_main(QtWidgets.QMainWindow):
         self.playButton.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
 
     def video_callback(self):
-
+        if self.disable_video_vidgets:
+            return 0
         # considering the case that alignment did not work or
         # user has not yet picked a specific seizure
         if self.szdat.align is None or self.active_sz is None:
