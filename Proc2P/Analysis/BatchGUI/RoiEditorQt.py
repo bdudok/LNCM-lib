@@ -143,6 +143,22 @@ class GUI_main(QtWidgets.QMainWindow):
         self.min_size.setValue(1)
         self.max_size.setValue(30)
         self.gamma.setValue(15)
+
+        #add channel boxes
+        self.channel_selectors = {}
+        self.channels_widget = QtWidgets.QWidget(self)
+        self.channels_widget.layout = QtWidgets.QHBoxLayout()
+        self.channels_widget.setFixedHeight(self.config.TextWidgetHeight)
+        for channel in 'RGB':
+            self.channels_widget.layout.addWidget(QtWidgets.QLabel(channel))
+            checkbox = QtWidgets.QCheckBox()
+            checkbox.setChecked(True)
+            checkbox.toggled.connect(self.update_preview)
+            self.channel_selectors[channel] = checkbox
+            self.channels_widget.layout.addWidget(checkbox)
+        apply_layout(self.channels_widget)
+        self.slider_window.layout.addWidget(self.channels_widget)
+
         apply_layout(self.slider_window)
         self.widget.layout.addWidget(self.slider_window)
 
@@ -257,6 +273,10 @@ class GUI_main(QtWidgets.QMainWindow):
                 ch = 1
             else:
                 h, w, ch = img.shape
+                #turn off channels as set by channels checkboxes
+                for chi, chn in enumerate('RGB'):
+                    if not self.channel_selectors[chn].isChecked():
+                        img[..., chi] = 0
             self.image_h, self.image_w = h, w
             qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
 
@@ -680,8 +700,8 @@ def test_launcher():
     #
     wdir = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
     prefix = 'JEDI-Sncg124_2025-05-06_opto_burst_665'
-    # # wdir = 'D:\Shares\Data\_Processed/2P\CCK/'
-    # # prefix = 'Sncg146_2025-07-29_optostim_127'
+    # wdir = 'D:\Shares\Data\_Processed/2P\CCK/'
+    # prefix = 'Sncg146_2025-07-29_optostim_127'
     #
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle('Fusion')
