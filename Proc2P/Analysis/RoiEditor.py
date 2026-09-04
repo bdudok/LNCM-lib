@@ -881,7 +881,7 @@ class RoiEditor(object):
 
     @staticmethod
     def save_roi(roi_list, fn, image_shape, translate=(0, 0)):
-        rois_chunk = 1000
+        rois_chunk = 10000
         rois = numpy.zeros((rois_chunk, 3), dtype='int32')
         roi_counter = 0
         junk_roi = numpy.ones((3, 3))
