@@ -2,15 +2,18 @@ import numpy, os
 import tifffile
 from matplotlib import pyplot as plt
 from matplotlib.widgets import RectangleSelector, Button
+from Video.PullMotion import pull_motion_energy
+from Proc2P.utils import lprint
 # import h5py
 import json
 # from multiprocessing import Process, Queue
 # from datetime import datetime
 import cv2
-from scipy.signal import resample
+# from scipy.signal import resample
 
 
 class CropVideo:
+    __name__ = 'CropVideo'
     def __init__(self, cam_file, savepath):
         self.fn = cam_file
         self.im = None
@@ -52,11 +55,14 @@ class CropVideo:
         while self.frame is not None and self.i < self.buffer_size:
             self.next_frame()
 
-    def crop(self):
-        if self.im is None:
-            self.open_video()
-        f0 = min(100, self.n_frames)
-        fr = self.data[f0 - 10:f0, :, :].mean(axis=0)
+    def crop(self, preview=None, save_key=None):
+        if preview is None:
+            if self.im is None:
+                self.open_video()
+            f0 = min(100, self.n_frames)
+            fr = self.data[f0 - 10:f0, :, :].mean(axis=0)
+        else:
+            fr = preview
         self.preview = fr
         fig_w = 9
         fig_h = fig_w * fr.shape[1] / fr.shape[0]
@@ -76,10 +82,15 @@ class CropVideo:
                                     interactive=True,
                                     # drawtype='box',
                                     )
-        self.b_save = Button(axes[1], 'Save Eye')
-        self.b_save.on_clicked(self.save_eye_crop)
-        self.m_save = Button(axes[2], 'Save Motion')
-        self.m_save.on_clicked(self.save_motion_crop)
+        if save_key is None:
+            self.b_save = Button(axes[1], 'Save Eye')
+            self.b_save.on_clicked(self.save_eye_crop)
+            self.m_save = Button(axes[2], 'Save Motion')
+            self.m_save.on_clicked(self.save_motion_crop)
+        else:
+            self.m_save = Button(axes[2], f'Save {save_key}')
+            self.save_key = save_key
+            self.m_save.on_clicked(self.save_custom_crop)
         self.fig = fig
         plt.show(block=True)
 
@@ -105,6 +116,14 @@ class CropVideo:
                 self.m_save.label.set_text('Motion Saved')
                 print(self.rect, 'saved.')
 
+    def save_custom_crop(self, *args):
+        if self.rect is not None:
+            with open(self.savepath + f'_{self.save_key}-crop.json', 'w') as f:
+                self.motion_rect = self.rect
+                json.dump(self.rect, f)
+                self.m_save.label.set_text(f' {self.save_key} saved')
+                print(self.rect, 'saved.')
+
     def load_eye_crop(self):
         fn = self.savepath + '_eye-crop.json'
         self.eye_rect = self.load(fn)
@@ -123,6 +142,7 @@ class CropVideo:
         return self.load(fn)
 
     def compute_eye_trace(self):
+        '''this is not updated, won't work. first fixing motion map, then this to be updated following the same pattern'''
         crop = self.load_eye_crop()
         if crop is False:
             print('Motion crop not saved, not computing...')
@@ -152,4 +172,54 @@ class CropVideo:
         numpy.save(self.savepath + 'eye_trace.npy', drop_loc)
         print(self.savepath, 'eye trace saved')
 
+    def compute_motion_map(self):
+        '''uses Video.PullMotion'''
+        output_fn = self.savepath + '_motion_energy.npy'
+        if os.path.exists(output_fn):
+            return numpy.load(output_fn)
+        crop = self.load_motion_crop()
+        if not crop:
+            print('Crop face area first using CropVideo.crop()')
+        else:
+            return pull_motion_energy(vid_fn=self.fn, output_fn=output_fn, crop=crop,
+                                      keep_map=True, save_preview=True)
+
+
+        # crop = self.load_motion_crop()
+        # if crop is False:
+        #     print('Motion crop not saved, not computing...')
+        #     return -1
+        # crop = numpy.array(crop).astype('int')
+        # crop[[1, 3]] += 1
+        # IM = numpy.empty((self.n_frames, crop[1]-crop[0], crop[3]-crop[2]),
+        #                             dtype=self.frame.dtype)
+        # self.im.set(cv2.CAP_PROP_POS_FRAMES, -1)
+        # lprint(self, 'Reading full video file...')
+        # for i in range(self.n_frames):
+        #     ret, frame = self.im.read()
+        #     y = frame[..., 0].transpose()
+        #     IM[i] = y[crop[0]:crop[1], crop[2]:crop[3]]
+        # # downsample IM
+        # lprint(self, 'Downsampling...')
+        # IM = IM[2 - len(IM) % 2:]
+        # IM = IM.reshape(len(IM) // 2, 2, *IM.shape[1:]).mean(axis=1)
+        # lprint(self, 'Computing motion map...')
+        # alpha = 0.3
+        # BG = numpy.empty(IM.shape)
+        # BG[0] = IM[:2].mean(axis=0)
+        # for fr in range(len(IM) - 1):
+        #     i = fr + 1
+        #     BG[i] = alpha * IM[i] + (1 - alpha) * BG[i - 1]
+        # D = numpy.abs(IM - BG)
+        # motion_map = numpy.empty(D.shape)
+        # motion_map[0] = D[:2].mean(axis=0)
+        # beta = 0.9
+        # for fr in range(len(D) - 1):
+        #     i = fr + 1
+        #     motion_map[i] = beta * D[i] + (1 - beta) * motion_map[i - 1]
+        # lprint(self, 'Saving motion map...')
+        # # normalize 0-1 and save as 8 bits
+        # motion_map = (motion_map * 255 / motion_map.max()).astype('uint8')
+        # numpy.save(os.path.join(self.savepath, '_motion_map.npy'), motion_map)
+        # lprint(self, 'motion map saved')
 

@@ -17,7 +17,7 @@ from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel
 from Proc2P.Analysis.Ripples import Ripples
 import time
 from scipy import stats
-from Proc2P.Bruker.Video import CropVideo
+from Proc2P.Bruker.FaceVideo import CropVideo
 from Video.PullMotion import pull_motion_energy
 from sklearn.neighbors import KernelDensity
 
@@ -162,23 +162,32 @@ class ImagingSession(object):
         return self.face_path
 
     def map_face(self):
+        '''
+        calculates motion energy in full camera field, saves trace only (not the movement images)
+        It is to be used az an optical measure of movement.
+        for whisker pad motion, use map_whiskers
+        '''
         self.get_face_path()
         trace_file = self.face_path + '_motion_energy.npy'
         if os.path.exists(trace_file):
             self.mm_trace = numpy.load(trace_file)
         else:
-            #open the video and make sure face is cropped.
+            # open the video and make sure face is cropped.
             cam_file = self.si.info['cam_file']
-            movie = CropVideo(cam_file, self.face_path)
-            if movie.load_motion_crop() == False:
-                movie.crop()
-            #then call motion energy trace proceesing
-            lprint(self, 'Pulling motion energy from cropped face field',)
+            #NB is nice we load the crop, but it's not passed to pull_motion_energy in the current version
+            # check the crop param of pull_motion_energy if we want to implement that
+            # movie = CropVideo(cam_file, self.face_path)
+            # if movie.load_motion_crop() == False:
+            #     movie.crop()
+            # then call motion energy trace proceesing
+            lprint(self, 'Pulling motion energy',)
             mm_trace = pull_motion_energy(cam_file, trace_file)
             self.mm_trace = mm_trace
         self.camtimes = self.ca.sync.load('cam')
         assert len(self.mm_trace) == len(self.camtimes)
         return self.camtimes, self.mm_trace
+
+
 
     def map_eye(self, thr=0.2, model_name='final'):
         if model_name == 'final':

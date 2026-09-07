@@ -53,7 +53,7 @@ class EyeTracing:
                 break
         if reader_type is None:
             print(f'Eye file not found for {prefix} in these locations:{incl_folders}')
-            return -1
+            return None
         elif '.mat' in reader_type:
             self.eye = h5py.File(eye_path, 'r')['data']
             self.ftype = '.mat'

@@ -15,13 +15,16 @@ from sklearn.naive_bayes import MultinomialNB
 
 
 
-def match_cells(a: ImagingSession, b: ImagingSession, cells: list):
+def match_cells(a: ImagingSession, b: ImagingSession, cells: list, b_rois=None):
     '''
     takes a list of cells in a, returns the indices of the same cells from b
     robust to missing cells and mismatched indices.
+    if you don't have an ImagingSession for the second set, pass None and pass the list of polys in b_rois
     '''
+    if b_rois is None:
+        b_rois = b.rois.polys
     cms = [(a.rois.polys[pi].min(axis=0) + a.rois.polys[pi].max(axis=0)) / 2 for pi in cells]
-    target_cms = [(b.rois.polys[pi].min(axis=0) + b.rois.polys[pi].max(axis=0)) / 2 for pi in range(b.ca.cells)]
+    target_cms = [(b_rois[pi].min(axis=0) + b_rois[pi].max(axis=0)) / 2 for pi in range(b.ca.cells)]
     targets = scipy.spatial.cKDTree(target_cms)
     found = numpy.zeros(len(cells), dtype='bool')
     used = numpy.zeros(b.ca.cells, dtype='bool')
@@ -32,7 +35,7 @@ def match_cells(a: ImagingSession, b: ImagingSession, cells: list):
         if c >= b.ca.cells:
             continue
         if c not in polys:
-            polys[c] = Polygon(b.rois.polys[c])
+            polys[c] = Polygon(b_rois[c])
         if polys[c].contains_point(cms[ci]):
             matches[ci] = c
             found[ci] = True
@@ -49,7 +52,7 @@ def match_cells(a: ImagingSession, b: ImagingSession, cells: list):
             if used[nn]:
                 continue
             if nn not in polys:
-                polys[nn] = Polygon(b.rois.polys[nn])
+                polys[nn] = Polygon(b_rois[nn])
             if polys[nn].contains_point(cms[ci]):
                 matches[ci] = nn
                 found[ci] = True
@@ -73,7 +76,7 @@ def match_cells(a: ImagingSession, b: ImagingSession, cells: list):
             if d > 20:
                 continue
             if nn not in polys:
-                polys[nn] = Polygon(b.rois.polys[nn])
+                polys[nn] = Polygon(b_rois[nn])
             if polys[nn].contains_point(cms[ci]):
                 matches[ci] = nn
                 found[ci] = True
@@ -84,12 +87,14 @@ def match_cells(a: ImagingSession, b: ImagingSession, cells: list):
     return numpy.array(cells)[found], matches[found]
 
 
-def exclude_overlap(a: ImagingSession, b: ImagingSession, cells: list, dmax=20):
+def exclude_overlap(a: ImagingSession, b: ImagingSession, cells: list, dmax=20, b_rois=None):
     '''
     takes a list of cells in a, returns the subset of these that are not overlapping with any cells in b.
     '''
+    if b_rois is None:
+        b_rois = b.rois.polys
     cms = [(a.rois.polys[pi].min(axis=0) + a.rois.polys[pi].max(axis=0)) / 2 for pi in cells]
-    target_cms = [(b.rois.polys[pi].min(axis=0) + b.rois.polys[pi].max(axis=0)) / 2 for pi in range(b.ca.cells)]
+    target_cms = [(b_rois[pi].min(axis=0) + b_rois[pi].max(axis=0)) / 2 for pi in range(b.ca.cells)]
     targets = scipy.spatial.cKDTree(target_cms)
     incl = []
     for ci, c in enumerate(cells):
