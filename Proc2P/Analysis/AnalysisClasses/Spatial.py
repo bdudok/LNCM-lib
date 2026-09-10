@@ -93,8 +93,9 @@ def exclude_overlap(a: ImagingSession, b: ImagingSession, cells: list, dmax=20, 
     '''
     if b_rois is None:
         b_rois = b.rois.polys
+    b_len = len(b_rois.data)
     cms = [(a.rois.polys[pi].min(axis=0) + a.rois.polys[pi].max(axis=0)) / 2 for pi in cells]
-    target_cms = [(b_rois[pi].min(axis=0) + b_rois[pi].max(axis=0)) / 2 for pi in range(b.ca.cells)]
+    target_cms = [(b_rois[pi].min(axis=0) + b_rois[pi].max(axis=0)) / 2 for pi in range(b_len)]
     targets = scipy.spatial.cKDTree(target_cms)
     incl = []
     for ci, c in enumerate(cells):
