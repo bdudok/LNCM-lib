@@ -2,6 +2,7 @@ import json
 import os
 import ast
 
+import numpy
 import pandas
 
 from BaserowAPI.BaserowRequests import GetSessions
@@ -187,7 +188,13 @@ class DataSet:
             if cells == None:
                 clist = cells
             else:
-                old_list = json.loads(self.get_field(prefix, cellfield))
+                old_val = self.get_field(prefix, cellfield)
+                if old_val is None or numpy.isnan(old_val):
+                    old_list = None
+                elif type(old_val) == str:
+                    old_list = json.loads(old_val)
+                else:
+                    old_list = None
                 if old_list == None:
                     clist = cells
                 elif type(old_list) == list:
