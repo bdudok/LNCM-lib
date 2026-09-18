@@ -62,7 +62,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.make_traces_widget()
 
         self.X = numpy.load(self.session.get_file_with_suffix('_FrameTimes.npy'))[:, 0]
-        for start, stop in zip(*self.session.startstop()):
+        for start, stop in zip(*self.session.get_mobility_periods()):
             for ca in self.TraceCanvas.ax[:2]:
                 ca.axvspan(self.X[start], self.X[stop], facecolor=self.config.RunColor, edgecolor=None, alpha=0.4)
         ca = self.TraceCanvas.ax[1]

@@ -224,6 +224,31 @@ class ImagingSession(object):
                 kwargs[key] = value
         return startstop(self.pos.speed, **kwargs)
 
+    def get_mobility_periods(self, sign=True, expand=2, return_mask=False):
+        '''
+                # find extended periods of immobility or mobility
+        Args:
+            sign: True - mobile; False -immobile
+            expand: if pulling immobility, expand movement periods by this many secs
+            return_trace: if True, also returns the boolean mask for the session
+
+        Returns: starts, stops of the periods
+        '''
+        v = gapless(numpy.abs(self.pos.smspd), threshold=1, expand=int(self.fps * expand))
+        if not sign:
+            v = numpy.logical_not(v)
+        count_starts = numpy.cumsum(numpy.diff(v) > 0)
+        periods = count_starts * v[1:]
+        starts, stops = [], []
+        for p in range(count_starts[-1]):
+            wh = numpy.where(periods == (p + 1))[0]
+            if len(wh) > 2:
+                starts.append(wh[0])
+                stops.append(wh[-1])
+        if return_mask:
+            return starts, stops, v
+        return starts, stops
+
     def get_preview(self, *args, **kwargs):
         return self.rois.get_preview(*args, **kwargs)
 
