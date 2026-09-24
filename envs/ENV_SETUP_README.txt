@@ -19,10 +19,11 @@ pip install sima
 # To use Suite2P for motion correction, we need a Python 3.9 env ("suite2p"):
 if you have a previous suite2p env, delete it (conda env remove --name suite2p),
 and delete the remaining empty folder in envs called suite2p
+note: s2p 1.0 has breaking changes, we stick to an older version until the pipeline is updated. 0.14.6 works.
 in conda powershell prompt:
     conda create --name suite2p python=3.9 -c defaults --strict-channel-priority --no-default-packages
     conda activate suite2p
-    pip install suite2p
+    pip install suite2p=0.14.6
     pip install pandas requests openpyxl
 
 open the job script in your project (no need to have a separate S2P project)
