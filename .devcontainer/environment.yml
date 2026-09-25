@@ -1,0 +1,34 @@
+name: analysis
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - opencv
+  - scikit-learn
+  - openpyxl
+  - pandas
+  - h5py
+  - statsmodels
+  - xlrd
+  - tifffile
+  - matplotlib
+  - pyqt
+  - jinja2
+  - shapely
+  - requests
+  - lsq-ellipse
+  - pyqtgraph
+  - pandas-stubs
+  - pyarrow
+  - scipy
+  - numba
+  - oasis
+  - scikit-image
+  - jupyter
+  - qt6-multimedia
+  - pygam
+  - pynwb
+  - pip
+  - pip:
+      - scipy-stubs
+      - pyedflib
