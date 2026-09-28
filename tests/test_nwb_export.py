@@ -4,6 +4,7 @@ Run from the LNCM-lib folder: python -m pytest
 Test data: the _test_data folder next to LNCM-lib, or set the LNCM_TEST_DATA environment variable.
 Skipped if the folder is missing.
 '''
+import itertools
 import json
 import os
 from pathlib import Path
@@ -60,13 +61,18 @@ def session(db_entry, mouse):
         yield session
 
 
-def export(session, output_dir, **include):
-    '''run the exporter with the lean config, writing to output_dir. include: overrides of the include section'''
+def export(session, output_dir, roi_sets=True, **include):
+    '''
+    run the exporter with the lean config, writing to output_dir.
+    roi_sets: False to leave out the ROI sets. include: overrides of the include section
+    '''
     with open(LEAN_CONFIG, 'r') as f:
         config = yaml.safe_load(f)
     config['output']['directory'] = str(output_dir)
     config['session']['use_db'] = False
     config['include'].update(include)
+    if not roi_sets:
+        config['roi_sets'] = []
     config_path = Path(output_dir) / 'config.yaml'
     with open(config_path, 'w') as f:
         yaml.safe_dump(config, f)
@@ -164,6 +170,31 @@ def test_video_export(session, tmp_path, monkeypatch):
         assert video_frames.timestamps.name == '/acquisition/Video/timestamps'
         numpy.testing.assert_array_equal(video_frames.data[:], session.export_video_frames())
     numpy.testing.assert_array_equal(video_times, session.export_video_times())
+
+
+def test_movie_and_video_export(session, tmp_path, monkeypatch):
+    '''2P movie and video from the real files, cut to the first 100 frames of each'''
+    n = 100
+    movies = [movie[:n] for movie in session.export_2p_movie()]
+    video = list(itertools.islice(session.export_video(), n))
+    video_times = session.export_video_times()[:n]
+    video_frames = session.export_video_frames()[:n]
+    monkeypatch.setattr(session, 'export_frame_times', lambda: session.ftimes[:n, 0])
+    monkeypatch.setattr(session, 'export_2p_movie', lambda: movies)
+    monkeypatch.setattr(session, 'export_video', lambda: iter(video))
+    monkeypatch.setattr(session, 'export_video_times', lambda: video_times)
+    monkeypatch.setattr(session, 'export_video_frames', lambda: video_frames)
+    path = export(session, tmp_path, roi_sets=False, speed=False, abspos=False, **{'2p_movie': True, 'video': True})
+    assert validate(path=path) == []
+    with NWBHDF5IO(path, 'r') as io:
+        acquisition = io.read().acquisition
+        for name, movie in zip(['TwoPhotonSeries_Ch1_Red', 'TwoPhotonSeries_Ch2_Green'], movies):
+            series = acquisition[name]
+            assert series.timestamps.name == '/acquisition/ImagingFrameTimes/timestamps'
+            numpy.testing.assert_array_equal(series.data[:], movie)
+        numpy.testing.assert_array_equal(acquisition['Video'].data[:], numpy.stack(video))
+        numpy.testing.assert_array_equal(acquisition['Video'].timestamps[:], video_times)
+        numpy.testing.assert_array_equal(acquisition['VideoImagingFrame'].data[:], video_frames)
 
 
 def test_video_times(session):
