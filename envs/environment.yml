@@ -30,4 +30,5 @@ dependencies:
   - qt6-multimedia
   - pygam
   - pynwb
+  - pytest
 prefix: N:\envs\Barna\envs\lncm

@@ -28,6 +28,7 @@ dependencies:
   - qt6-multimedia
   - pygam
   - pynwb
+  - pytest
   - pip
   - pip:
       - scipy-stubs
