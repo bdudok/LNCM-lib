@@ -3,7 +3,7 @@
 
 output:
   directory: E:/NWB_export/
-  filename: "{prefix}.nwb"   # {prefix} is replaced with the session prefix
+  filename: "{prefix}-full.nwb"   # {prefix} is replaced with the session prefix
   overwrite: false
 
 session:
