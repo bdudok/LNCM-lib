@@ -2,6 +2,7 @@ import os.path
 
 import numpy
 
+from BaserowAPI.BaserowRequests import GetSessions
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.Analysis.PullSignals import pull_signals
 from Proc2P.Analysis.CaTrace import CaTrace
@@ -31,17 +32,24 @@ class ExportImagingSession(ImagingSession):
 
     def export_metadata(self):
         '''
-        Session metadata. The whole dict is saved in the NWB file as a json string (NWBFile.notes),
-        so values must be json serializable (non-serializable values are converted with str).
+        Session metadata. The whole dict is saved in the NWB file's notes json, under 'SessionInfo'
+        (non-serializable values are converted with str).
         Reserved keys, used to fill NWB fields:
-            'session_start_time': datetime or ISO 8601 str. Required. Naive datetimes are assumed local time.
             'experimenter': list of str, optional. Added to the experimenters in the config.
             'laserWavelength_0': float or str (nm), optional. Excitation wavelength, used if not set in the config.
-            'subject': dict, optional. Keys of pynwb.file.Subject (subject_id, sex, species, age, genotype,
-                strain, date_of_birth, description). Values in the config take precedence.
         :return: dict
         '''
         return self.si.info
+
+    def export_subject(self):
+        '''
+        Subject fields from the DB. Values in the config take precedence.
+        :return: dict with keys of pynwb.file.Subject (subject_id, sex). Empty if there's no DB entry.
+        '''
+        if self.db_entry is None:
+            return {}
+        mouse_name, sex = GetSessions().get_sex(item=self.db_entry)
+        return {'subject_id': mouse_name, 'sex': sex}
 
     def get_starttime(self):
         '''

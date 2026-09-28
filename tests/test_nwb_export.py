@@ -4,14 +4,17 @@ Run from the LNCM-lib folder: python -m pytest
 Test data: the _test_data folder next to LNCM-lib, or set the LNCM_TEST_DATA environment variable.
 Skipped if the folder is missing.
 '''
+import json
 import os
 from pathlib import Path
 
 import numpy
+import pandas
 import pytest
 import yaml
 from pynwb import NWBHDF5IO, validate
 
+from BaserowAPI.BaserowRequests import GetSessions
 from NWB_converter.ExportImagingSession import ExportImagingSession
 from NWB_converter.NWBExporter import NWBExporter
 from Proc2P.Analysis.LoadPolys import load_roi_file
@@ -20,22 +23,41 @@ PREFIX = 'Dag47_2026-04-22_goal_128'
 DATA_DIR = Path(os.environ.get('LNCM_TEST_DATA', Path(__file__).resolve().parents[2] / '_test_data'))
 PROCPATH = DATA_DIR / '_Processed'
 RAWPATH = DATA_DIR / '_RawData' / f'{PREFIX}-000'
+# the session's Baserow row (pickled pandas Series) and the mouse's name and sex from the mice table
+DB_ENTRY = DATA_DIR / 'NWB_export' / f'{PREFIX}_baserow_entry.pkl'
+DB_MOUSE = DATA_DIR / 'NWB_export' / f'{PREFIX}_baserow_mouse.json'
 LEAN_CONFIG = Path(__file__).resolve().parents[1] / 'NWB_converter' / 'export_config_template_2ch-lean.yaml'
 
-pytestmark = pytest.mark.skipif(not (PROCPATH.exists() and RAWPATH.exists()),
+pytestmark = pytest.mark.skipif(not all(p.exists() for p in (PROCPATH, RAWPATH, DB_ENTRY, DB_MOUSE)),
                                 reason=f'test data not found in {DATA_DIR}')
 
 
 @pytest.fixture(scope='module')
-def session():
-    '''ExportImagingSession of the test data, with the raw data paths pointing to the test data folder'''
+def mouse():
+    with open(DB_MOUSE, 'r') as f:
+        return json.load(f)
+
+
+@pytest.fixture(scope='module')
+def db_entry():
+    return pandas.read_pickle(DB_ENTRY)
+
+
+@pytest.fixture(scope='module')
+def session(db_entry, mouse):
+    '''
+    ExportImagingSession of the test data, with the raw data paths pointing to the test data folder,
+    and the saved DB row and mice table result instead of DB requests
+    '''
     with open(LEAN_CONFIG, 'r') as f:
         kwargs = yaml.safe_load(f)['session']['imaging_session_kwargs']
-    session = ExportImagingSession(str(PROCPATH) + os.sep, PREFIX, **kwargs)
+    session = ExportImagingSession(str(PROCPATH) + os.sep, PREFIX, db_entry=db_entry, **kwargs)
     # SessionInfo stores the absolute raw data paths of the machine that did the preprocessing
     session.si.info['dpath'] = str(RAWPATH)
     session.si.info['cam_file'] = str(RAWPATH / f'{PREFIX}.avi')
-    return session
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(GetSessions, 'get_mouse', lambda self, item=None, mtag=None, ret_sex=False: mouse['sex'])
+        yield session
 
 
 def export(session, output_dir, **include):
@@ -73,6 +95,20 @@ def test_lean_contents(nwbfile):
 
 def test_session_start_time(nwbfile, session):
     assert nwbfile.session_start_time.isoformat()[:19] == session.get_starttime()
+
+
+def test_subject(nwbfile, mouse):
+    assert nwbfile.subject.subject_id == mouse['mouse_name']
+    assert nwbfile.subject.sex == mouse['sex']
+    assert nwbfile.subject.species == 'Mus musculus'
+
+
+def test_notes(nwbfile, session, db_entry):
+    notes = json.loads(nwbfile.notes)
+    assert set(notes) == {'SessionInfo', 'Baserow'}
+    assert notes['SessionInfo']['framerate'] == session.si['framerate']
+    assert notes['Baserow'] == json.loads(json.dumps(db_entry.to_dict(), default=str))
+    assert nwbfile.session_id == f'LNCM-{db_entry["id"]}-{PREFIX}'
 
 
 def test_frame_times(nwbfile, session):

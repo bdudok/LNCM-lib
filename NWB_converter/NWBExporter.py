@@ -37,7 +37,8 @@ File layout:
     processing/behavior/BehavioralTimeSeries/speed, position
     events/<event_type>                 EventsTable with timestamp and frame columns
     intervals/<event_type>              TimeIntervals with start_time and stop_time columns
-    notes                               the session metadata, as json
+    notes                               json: {'SessionInfo': session metadata, 'Baserow': the session's DB row}
+    subject                             subject_id and sex from the DB, other fields from the config
 '''
 
 
@@ -53,7 +54,6 @@ class NWBExporter:
         self.prefix = prefix
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
-        self.db_entry = None
         if session is None:
             session = self.load_session()
         self.session = session
@@ -70,15 +70,16 @@ class NWBExporter:
 
     def load_session(self):
         procpath = self.cfg('session', 'procpath')
+        db_entry = None
         if procpath is None or self.cfg('session', 'use_db', default=True):
             results = GetSessions().get_session(self.prefix)
             if len(results) != 1:
                 raise ValueError(f'Expected one DB entry for {self.prefix}, found {len(results)}')
-            self.db_entry = results.iloc[0]
+            db_entry = results.iloc[0]
             if procpath is None:
-                procpath = self.db_entry['Processed.Path']
+                procpath = db_entry['Processed.Path']
         kwargs = self.cfg('session', 'imaging_session_kwargs', default={})
-        return ExportImagingSession(procpath, self.prefix, db_entry=self.db_entry, **kwargs)
+        return ExportImagingSession(procpath, self.prefix, db_entry=db_entry, **kwargs)
 
     def get_output_path(self):
         fn = self.cfg('output', 'filename', default='{prefix}.nwb').format(prefix=self.prefix)
@@ -129,9 +130,12 @@ class NWBExporter:
             start_time = start_time.replace(tzinfo=tzlocal())
 
         lab = self.cfg('nwbfile', 'lab', default='')
+        db_entry = self.session.db_entry
         session_id = self.prefix
-        if self.db_entry is not None:
-            session_id = f'{lab}-{self.db_entry["id"]}-{self.prefix}'
+        notes = {'SessionInfo': self.metadata}
+        if db_entry is not None:
+            session_id = f'{lab}-{db_entry["id"]}-{self.prefix}'
+            notes['Baserow'] = db_entry.to_dict()
         experimenter = list(self.cfg('nwbfile', 'experimenter', default=[]))
         for name in self.metadata.get('experimenter', []):
             if name not in experimenter:
@@ -148,14 +152,14 @@ class NWBExporter:
             experiment_description=self.cfg('nwbfile', 'experiment_description'),
             keywords=self.cfg('nwbfile', 'keywords'),
             related_publications=self.cfg('nwbfile', 'related_publications'),
-            notes=json.dumps(self.metadata, default=str, indent=1),
+            notes=json.dumps(notes, default=str, indent=1),
             subject=self.get_subject(),
         )
         self.ophys_module = self.nwbfile.create_processing_module(
             name='ophys', description='Processed 2P data converted from LNCM ImagingSession format')
 
     def get_subject(self):
-        subject = dict(self.metadata.get('subject', {}))
+        subject = self.session.export_subject()
         subject.update(self.cfg('subject', default={}))
         if not subject:
             return None
