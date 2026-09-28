@@ -179,13 +179,20 @@ class ExportImagingSession(ImagingSession):
         '''
         raise NotImplementedError('export_interval_events')
 
+    def export_video_file(self):
+        '''
+        Path of the video file of the scene, in the raw data folder.
+        :return: str
+        '''
+        return os.path.join(self.si.info['dpath'], os.path.basename(self.si.info['cam_file']))
+
     def export_video(self):
         '''
         Video of the scene, greyscale frames (e.g. read from a cv2.VideoCapture).
         Can be a generator, so the video does not have to fit in memory.
         :return: iterable of 2D uint8 numpy arrays (height, width), or a 3D array (n_frames, height, width)
         '''
-        return self._iter_video_frames(self.si.info['cam_file'])
+        return self._iter_video_frames(self.export_video_file())
 
     @staticmethod
     def _iter_video_frames(path):

@@ -79,10 +79,18 @@ roi_sets:
         unit: dfof
 
 
+video:
+  storage: external          # external: link to the video file by name, for upload to DANDI next to the NWB file
+  # (writes <nwb name>_dandi.json for DandiUpload.py); embedded: decoded frames in the NWB file
+
+dandi:
+  dandiset_path: null        # local dandiset folder, made with:
+  # dandi download --download dandiset.yaml https://dandiarchive.org/dandiset/<id>/draft
+
 point_events: []             # e.g. [licks, rewards]
 interval_events: []          # e.g. [seizures]
 
 compression:
   2p_movie: 4                # gzip level, 0 for no compression
-  video: 4
+  video: 4                   # with video.storage: embedded
   buffer_frames: 100         # frames written at a time

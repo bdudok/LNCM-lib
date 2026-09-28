@@ -61,7 +61,7 @@ def session(db_entry, mouse):
         yield session
 
 
-def export(session, output_dir, roi_sets=True, **include):
+def export(session, output_dir, roi_sets=True, video_storage='external', dandiset_path=None, **include):
     '''
     run the exporter with the lean config, writing to output_dir.
     roi_sets: False to leave out the ROI sets. include: overrides of the include section
@@ -73,6 +73,8 @@ def export(session, output_dir, roi_sets=True, **include):
     config['include'].update(include)
     if not roi_sets:
         config['roi_sets'] = []
+    config['video']['storage'] = video_storage
+    config['dandi']['dandiset_path'] = dandiset_path
     config_path = Path(output_dir) / 'config.yaml'
     with open(config_path, 'w') as f:
         yaml.safe_dump(config, f)
@@ -157,19 +159,28 @@ def test_position(nwbfile, session):
     assert numpy.nanmax(position.data[:]) <= 1
 
 
-def test_video_export(session, tmp_path, monkeypatch):
-    '''video with the real frame times, but tiny frames instead of reading the video file'''
-    n_video_frames = len(session.export_video_times())
-    monkeypatch.setattr(session, 'export_video', lambda: numpy.zeros((n_video_frames, 2, 2), dtype='uint8'))
-    path = export(session, tmp_path, video=True)
+def test_external_video_export(session, tmp_path):
+    '''the video is linked by file name, and the DANDI upload file lists the paths'''
+    dandiset_path = tmp_path / '000000'
+    path = export(session, tmp_path, dandiset_path=str(dandiset_path), video=True)
     assert validate(path=path) == []
     with NWBHDF5IO(path, 'r') as io:
         acquisition = io.read().acquisition
-        video_times = acquisition['Video'].timestamps[:]
+        video = acquisition['Video']
+        assert list(video.external_file[:]) == [f'{PREFIX}.avi']
+        assert list(video.starting_frame[:]) == [0]
+        assert video.format == 'external'
+        assert video.data is None or len(video.data) == 0
+        numpy.testing.assert_array_equal(video.timestamps[:], session.export_video_times())
         video_frames = acquisition['VideoImagingFrame']
         assert video_frames.timestamps.name == '/acquisition/Video/timestamps'
         numpy.testing.assert_array_equal(video_frames.data[:], session.export_video_frames())
-    numpy.testing.assert_array_equal(video_times, session.export_video_times())
+    with open(Path(path).parent / (Path(path).stem + '_dandi.json'), 'r') as f:
+        upload = json.load(f)
+    assert upload['nwb_file'] == str(path)
+    assert upload['video_source'] == str(RAWPATH / f'{PREFIX}.avi')
+    assert upload['dandiset_path'] == str(dandiset_path)
+    assert len(upload['powershell_commands']) == 4
 
 
 def test_movie_and_video_export(session, tmp_path, monkeypatch):
@@ -184,7 +195,8 @@ def test_movie_and_video_export(session, tmp_path, monkeypatch):
     monkeypatch.setattr(session, 'export_video', lambda: iter(video))
     monkeypatch.setattr(session, 'export_video_times', lambda: video_times)
     monkeypatch.setattr(session, 'export_video_frames', lambda: video_frames)
-    path = export(session, tmp_path, roi_sets=False, speed=False, abspos=False, **{'2p_movie': True, 'video': True})
+    path = export(session, tmp_path, roi_sets=False, video_storage='embedded', speed=False, abspos=False,
+                  **{'2p_movie': True, 'video': True})
     assert validate(path=path) == []
     with NWBHDF5IO(path, 'r') as io:
         acquisition = io.read().acquisition

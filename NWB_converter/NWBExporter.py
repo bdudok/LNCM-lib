@@ -1,6 +1,7 @@
 import os
 import json
 from datetime import datetime
+from enum import Enum
 from uuid import uuid4
 
 import numpy
@@ -15,6 +16,7 @@ from pynwb.image import ImageSeries, RGBImage, Images
 from pynwb.ophys import Fluorescence, ImageSegmentation, OpticalChannel, RoiResponseSeries, TwoPhotonSeries
 
 from BaserowAPI.BaserowRequests import GetSessions
+from NWB_converter.DandiUpload import write_upload_file
 from NWB_converter.ExportImagingSession import ExportImagingSession
 from Proc2P.Bruker.LoadRegistered import Source
 
@@ -28,7 +30,8 @@ File layout:
     acquisition/ImagingFrameTimes       frame index vs. frame time. Other per-frame series link to these timestamps
     acquisition/TwoPhotonSeries_<ch>    motion corrected 2P movie, one per channel
     acquisition/LFP                     ElectricalSeries
-    acquisition/Video                   ImageSeries of the scene video, timestamps in seconds
+    acquisition/Video                   ImageSeries of the scene video, timestamps in seconds. With video.storage external
+                                        (default), a link to the video file by name; see DandiUpload for the upload
     acquisition/VideoImagingFrame       imaging frame index of each video frame (-1: outside imaging), links to the
                                         Video timestamps
     processing/ophys/FieldOfView        RGBImage
@@ -40,6 +43,13 @@ File layout:
     notes                               json: {'SessionInfo': session metadata, 'Baserow': the session's DB row}
     subject                             subject_id and sex from the DB, other fields from the config
 '''
+
+
+class VideoStorage(Enum):
+    '''config video.storage: how the scene video is stored'''
+    EXTERNAL = 'external'  # ImageSeries.external_file with the video file name. The video is uploaded to DANDI next to
+    # the NWB file (DandiUpload). Keeps the original encoding, no decoding during export
+    EMBEDDED = 'embedded'  # decoded greyscale frames in the NWB file
 
 
 class NWBExporter:
@@ -57,6 +67,7 @@ class NWBExporter:
         if session is None:
             session = self.load_session()
         self.session = session
+        self.video_storage = VideoStorage(self.cfg('video', 'storage', default='external'))
         self.nwbfile = None
 
     def cfg(self, *keys, default=None):
@@ -118,6 +129,10 @@ class NWBExporter:
         print(f'Writing {path}...')
         with NWBHDF5IO(path, 'w') as io:
             io.write(self.nwbfile)
+        if include.get('video', True) and self.video_storage == VideoStorage.EXTERNAL:
+            upload_file = write_upload_file(path, self.session.export_video_file(),
+                                            self.cfg('dandi', 'dandiset_path'))
+            print(f'DANDI upload paths and commands saved in {upload_file}')
         return path
 
     # file header
@@ -358,15 +373,25 @@ class NWBExporter:
     def add_video(self):
         video_times = numpy.asarray(self.session.export_video_times(), dtype='float64')
         video_frames = numpy.asarray(self.session.export_video_frames(), dtype='int64')
-        level = self.cfg('compression', 'video', default=4)
-        video = ImageSeries(
-            name='Video',
-            description='Greyscale video of the scene',
-            data=self.wrap_large(self.session.export_video(), level),
-            unit='n.a.',
-            format='raw',
-            timestamps=video_times,
-        )
+        if self.video_storage == VideoStorage.EXTERNAL:
+            video = ImageSeries(
+                name='Video',
+                description='Video of the scene',
+                external_file=[os.path.basename(self.session.export_video_file())],
+                starting_frame=[0],
+                format='external',
+                unit='n.a.',
+                timestamps=video_times,
+            )
+        else:
+            video = ImageSeries(
+                name='Video',
+                description='Greyscale video of the scene',
+                data=self.wrap_large(self.session.export_video(), self.cfg('compression', 'video', default=4)),
+                unit='n.a.',
+                format='raw',
+                timestamps=video_times,
+            )
         self.nwbfile.add_acquisition(video)
         # the schema only has times for video frames; the imaging frame of each video frame is a separate series
         self.nwbfile.add_acquisition(TimeSeries(
