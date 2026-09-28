@@ -36,7 +36,7 @@ class ExportImagingSession(ImagingSession):
         Reserved keys, used to fill NWB fields:
             'session_start_time': datetime or ISO 8601 str. Required. Naive datetimes are assumed local time.
             'experimenter': list of str, optional. Added to the experimenters in the config.
-            'excitation_lambda': float (nm), optional. Used if not set in the config.
+            'laserWavelength_0': float or str (nm), optional. Excitation wavelength, used if not set in the config.
             'subject': dict, optional. Keys of pynwb.file.Subject (subject_id, sex, species, age, genotype,
                 strain, date_of_birth, description). Values in the config take precedence.
         :return: dict
@@ -102,11 +102,11 @@ class ExportImagingSession(ImagingSession):
             s.init_session(self)
             s.set_pos()
             return s.pos
-        raise NotImplementedError('export_speed')
+        raise NotImplementedError('export_position')
 
     def export_lfp(self):
         '''
-        LFP recording (single channel).
+        LFP recording (single channel, lfp_ch of the session).
         :return: dict with keys:
             'data': 1D numpy array, length n_samples
             'rate': float, sampling rate in Hz
@@ -114,32 +114,44 @@ class ExportImagingSession(ImagingSession):
             'conversion': float, factor that converts data to volts (e.g. 1e-3 if data is in mV)
         '''
         if self.has_ephys:
-            return self.ephys.trace / 1000
+            # ephys.frames is the imaging frame index of each sample. Align on the first sample of the second frame,
+            # the first frame's start may not be recorded
+            fs = float(self.si['fs'])
+            first_frame = self.ephys.frames[0] + 1
+            first_sample = numpy.searchsorted(self.ephys.frames, first_frame)
+            return {'data': self.ephys.trace / 1000,  # Ephys converts to mV, NWB uses V
+                    'rate': fs,
+                    'starting_time': float(self.ftimes[first_frame, 0] - first_sample / fs),
+                    'conversion': 1.0}
         raise NotImplementedError('export_lfp')
 
     def export_roi_masks(self, roi_tag, weighted, source):
         '''
         ROI masks of one ROI set.
         :param roi_tag: str, the ROI set's tag
-        :return: numpy array, shape (n_rois, height, width), bool, or float weights between 0 and 1
+        :param weighted: bool, return SNR weights (each ROI's weights sum to 1) instead of binary masks
+        :param source: Source of the movie used for the SNR weights
+        :return: numpy array, shape (n_rois, height, width), bool, or float weights
         '''
-        return pull_signals(self.procpath, self.prefix, tag=roi_tag, ch=0, snr_weighted=weighted, enable_alt_path=True,
-                         overwrite=True, use_movie=source, mask_only=True)
+        masks = pull_signals(self.procpath, self.prefix, tag=roi_tag, ch=0, snr_weighted=weighted,
+                             enable_alt_path=True, overwrite=True, use_movie=source, mask_only=True)
+        # pull_signals indexes masks as [roi, x, y]; images are [row (y), column (x)]
+        return masks.transpose(0, 2, 1)
 
     def export_traces(self, roi_tag, trace_tag):
         '''
         One version of the traces pulled from one ROI set. ROI order must match export_roi_masks(roi_tag).
         :param roi_tag: str, the ROI set's tag
         :param trace_tag: str, the trace version (e.g. 'raw', 'dff', 'norm')
-        :return: numpy array, shape (n_frames, n_rois, n_channels). Channels in the order of imaging.channels.
+        :return: numpy array, shape (n_frames, n_rois) or (n_frames, n_rois, n_channels).
+            Channels in the order they were pulled (see roi_sets.channels in the config).
         '''
         ca = CaTrace(self.procpath, self.prefix, tag=roi_tag, ch='All')
         ca.load()
-        data = ca.__getattribute__(trace_tag)
-        if data.data.ndim == 2:
+        data = getattr(ca, trace_tag)
+        if data.ndim == 2:
             return data.transpose()
-        else:
-            return data.transpose(1, 0, 2)
+        return data.transpose(1, 0, 2)
 
     def export_point_events(self, event_type):
         '''
@@ -186,4 +198,18 @@ class ExportImagingSession(ImagingSession):
         Timestamp of each video frame.
         :return: 1D float numpy array, length n_video_frames, seconds
         '''
-        return self.ca.sync.load('cam')
+        # columns: camera frame, time in ms. As in PreProc.parse_cam, the first camera frame is at imaging time 0
+        timers = numpy.load(os.path.join(self.si.info['dpath'], self.prefix + '_CamTimers.npy'))
+        return (timers[:, 1] - timers[0, 1]) / 1000
+
+    def export_video_frames(self):
+        '''
+        Imaging frame during which each video frame was recorded.
+        :return: 1D int numpy array, length n_video_frames. -1 for video frames before the first or after the last
+            imaging frame
+        '''
+        video_times = self.export_video_times()
+        frame_times = self.ftimes[:, 0]
+        frames = numpy.searchsorted(frame_times, video_times, side='right') - 1
+        frames[video_times >= frame_times[-1] + 1 / self.fps] = -1
+        return frames

@@ -51,7 +51,7 @@ lfp:
   description: LFP recording
   device_name: A-M Systems Model 300
   device_description: twisted wire pair, differential amplifier, 1000x gain
-  filtering: [0.1 1000]
+  filtering: 0.1-1000 Hz band-pass
   reference: null
 
 include:                     # frame times are always included
@@ -68,6 +68,8 @@ roi_sets:
     weighted: false # whether to use snr-weighted or binary masks. check this matches what's recorded in the processing log.
     # when available from metadata, this option is ignored
     description: All GECO-expressing PCs segmented
+    channels: [Ch1_Red]      # imaging.channels names of the trace channels, in the order they were pulled.
+    # pull_signals with ch='All' stores dual-channel traces as [Ch2_Green, Ch1_Red]
     traces:                  # trace tags; either a str, or a dict with tag, description and unit
       - tag: trace
         description: raw fluorescence

@@ -22,17 +22,19 @@ from Proc2P.Bruker.LoadRegistered import Source
 Converts an ImagingSession to an NWB file (pynwb 4.2, NWB schema 2.11).
 Usage:
     NWBExporter('Dag47_2026-04-22_goal_128', 'path/to/export_config.yaml').run()
-See export_config_template.yaml for the config options, and ExportImagingSession for the data formats.
+See export_config_template_2ch.yaml for the config options, and ExportImagingSession for the data formats.
 
 File layout:
     acquisition/ImagingFrameTimes       frame index vs. frame time. Other per-frame series link to these timestamps
     acquisition/TwoPhotonSeries_<ch>    motion corrected 2P movie, one per channel
     acquisition/LFP                     ElectricalSeries
-    acquisition/Video                   ImageSeries of the scene video
+    acquisition/Video                   ImageSeries of the scene video, timestamps in seconds
+    acquisition/VideoImagingFrame       imaging frame index of each video frame (-1: outside imaging), links to the
+                                        Video timestamps
     processing/ophys/FieldOfView        RGBImage
     processing/ophys/ImageSegmentation  one PlaneSegmentation per ROI set, named with the ROI tag
     processing/ophys/<roi_tag>          Fluorescence, with a RoiResponseSeries named <trace_tag>_<ch> per trace version
-    processing/behavior/BehavioralTimeSeries/RunningSpeed
+    processing/behavior/BehavioralTimeSeries/speed, position
     events/<event_type>                 EventsTable with timestamp and frame columns
     intervals/<event_type>              TimeIntervals with start_time and stop_time columns
     notes                               the session metadata, as json
@@ -45,7 +47,7 @@ class NWBExporter:
     def __init__(self, prefix, config_path, session=None):
         '''
         :param prefix: session prefix
-        :param config_path: yaml export config (see export_config_template.yaml)
+        :param config_path: yaml export config (see export_config_template_2ch.yaml)
         :param session: optional, an ExportImagingSession to use instead of loading one based on the config
         '''
         self.prefix = prefix
@@ -229,36 +231,46 @@ class NWBExporter:
                 timestamps=self.frame_times,
             ))
 
+    def get_behavioral_time_series(self):
+        '''the BehavioralTimeSeries container of the behavior module, created on first use'''
+        if 'behavior' not in self.nwbfile.processing:
+            behavior_module = self.nwbfile.create_processing_module(name='behavior', description='Behavior data')
+            behavior_module.add(BehavioralTimeSeries())
+        return self.nwbfile.processing['behavior']['BehavioralTimeSeries']
+
     def add_speed(self):
         speed = numpy.asarray(self.session.export_speed(), dtype='float64')
         self.check_length(speed, 'speed')
-        behavior_module = self.nwbfile.create_processing_module(name='behavior', description='Behavior data')
-        behavior_module.add(BehavioralTimeSeries(time_series=TimeSeries(
-            name='RunningSpeed',
+        self.get_behavioral_time_series().create_timeseries(
+            name='speed',
             description='Running speed of the animal',
             data=speed,
             unit='cm/s',
             timestamps=self.frame_times,
-        )))
+        )
 
     def add_position(self):
         position = numpy.asarray(self.session.export_position(), dtype='float64')
-        self.check_length(position, 'speed')
-        behavior_module = self.nwbfile.processing["behavior"] #TODO cannot add another series
-        behavior_module.add(BehavioralTimeSeries(time_series=TimeSeries(
-            name='LapPosition',
+        self.check_length(position, 'position')
+        self.get_behavioral_time_series().create_timeseries(
+            name='position',
             description='Position of animal on the belt, relative to lap length',
             data=position,
             unit='lap',
             timestamps=self.frame_times,
-        )))
+        )
 
     def add_roi_set(self, roi_set):
         '''
-        :param roi_set: dict from config: tag, description, traces: list of trace tags
-            (str, or dict with tag, description, unit)
+        :param roi_set: dict from config: tag, source, weighted, description,
+            channels: config channel names of the trace channels, in trace order,
+            traces: list of trace tags (str, or dict with tag, description, unit)
         '''
         roi_tag = roi_set['tag']
+        channel_names = [ch['name'] for ch in self.cfg('imaging', 'channels')]
+        for name in roi_set['channels']:
+            if name not in channel_names:
+                raise ValueError(f'{roi_tag}: channel {name} is not in imaging.channels {channel_names}')
         if not hasattr(self, 'image_segmentation'):
             self.image_segmentation = ImageSegmentation()
             self.ophys_module.add(self.image_segmentation)
@@ -267,7 +279,7 @@ class NWBExporter:
         plane_segmentation = self.image_segmentation.create_plane_segmentation(
             name=roi_tag,
             description=roi_set.get('description', ''),
-            imaging_plane=self.imaging_planes[0],
+            imaging_plane=self.imaging_planes[channel_names.index(roi_set['channels'][0])],
         )
         for mask in masks:
             plane_segmentation.add_roi(image_mask=mask)
@@ -276,7 +288,6 @@ class NWBExporter:
 
         fluorescence = Fluorescence(name=roi_tag)
         self.ophys_module.add(fluorescence)
-        channels = self.cfg('imaging', 'channels')
         for trace in roi_set.get('traces', []):
             if isinstance(trace, str):
                 trace = {'tag': trace}
@@ -287,9 +298,12 @@ class NWBExporter:
             self.check_length(data, f'{roi_tag} {trace_tag} traces')
             if data.shape[1] != n_rois:
                 raise ValueError(f'{roi_tag} {trace_tag} traces have {data.shape[1]} ROIs, masks have {n_rois}')
-            for chi in range(data.shape[2]):
+            if data.shape[2] != len(roi_set['channels']):
+                raise ValueError(f'{roi_tag} {trace_tag} traces have {data.shape[2]} channels, '
+                                 f'config roi_sets.channels has {len(roi_set["channels"])}')
+            for chi, channel_name in enumerate(roi_set['channels']):
                 fluorescence.create_roi_response_series(
-                    name=f'{trace_tag}_{channels[chi]["name"]}',
+                    name=f'{trace_tag}_{channel_name}',
                     description=trace.get('description', trace_tag),
                     data=data[..., chi],
                     rois=rois,
@@ -338,15 +352,26 @@ class NWBExporter:
 
     # video
     def add_video(self):
-        frames_in_2p_frames = self.session.export_video_times()
+        video_times = numpy.asarray(self.session.export_video_times(), dtype='float64')
+        video_frames = numpy.asarray(self.session.export_video_frames(), dtype='int64')
         level = self.cfg('compression', 'video', default=4)
-        self.nwbfile.add_acquisition(ImageSeries(
+        video = ImageSeries(
             name='Video',
             description='Greyscale video of the scene',
             data=self.wrap_large(self.session.export_video(), level),
             unit='n.a.',
             format='raw',
-            timestamps=frames_in_2p_frames,
+            timestamps=video_times,
+        )
+        self.nwbfile.add_acquisition(video)
+        # the schema only has times for video frames; the imaging frame of each video frame is a separate series
+        self.nwbfile.add_acquisition(TimeSeries(
+            name='VideoImagingFrame',
+            description='Index of the imaging frame during which each video frame was recorded. '
+                        '-1: before the first or after the last imaging frame',
+            data=video_frames,
+            unit='frame',
+            timestamps=video,
         ))
 
     # helpers
