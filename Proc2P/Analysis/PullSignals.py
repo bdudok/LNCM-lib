@@ -11,6 +11,7 @@ from time import time
 import datetime
 from Proc2P.utils import logger, lprint
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -35,7 +36,7 @@ class Worker(Process):
             if roi == 'Auto':
                 #locate last saved roi file
                 exs = [1]
-                for f in os.listdir():
+                for f in os.listdir(Path(path) / prefix):
                     if prefix in f and '_saved_roi_' in f:
                         try:
                             if f[-6:-4] != '-1':
@@ -75,13 +76,13 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
     :return: saves the output traces to a file. Only returns report string (also saved in the log).
     '''
     #get binary mask
-    opPath = os.path.join(path, prefix + '/')
-    roi_name = opPath + f'{prefix}_saved_roi_{tag}.npy'
+    opPath = Path(path) / prefix
+    roi_name = opPath / f'{prefix}_saved_roi_{tag}.npy'
     if not os.path.exists(roi_name):
         print(roi_name)
         print(prefix, ': Roi file not found: ', tag)
         return -1
-    if os.path.exists(opPath + f'{prefix}_trace_{tag}.npy') and not overwrite:
+    if os.path.exists(opPath / f'{prefix}_trace_{tag}.npy') and not overwrite:
         print(prefix, f': Trace file for {tag} exists, skipping...')
         return -1
 
@@ -210,7 +211,7 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
                     ind = indices[c]
                     traces[c, start:stop, chi] = numpy.nanmean(inmem_data[:, ind[1], ind[0]], axis=1)
 
-    numpy.save(opPath + f'{prefix}_trace_{tag}', traces)
+    numpy.save(opPath / f'{prefix}_trace_{tag}.npy', traces)
     elapsed = datetime.datetime.now() - t0
     minutes = datetime.timedelta.total_seconds(elapsed) / 60
     speed = (elapsed / len(channels) / nframes).microseconds
