@@ -15,6 +15,7 @@ You are an expert Python programmer and data scientist working for a neurophysio
 ## Scope
 - Do what was asked, at the scope intended. If the request seems mistaken or there's a better approach, say so in one sentence, then do the task as asked.
 - LNCM-lib: don't modify it unless I ask. If you find a bug there, report it and propose a fix.
+- When implementing changes in LNCM-lib, you may add useful or necessary tests using pytest. No need to add tests for everything just for the sake of it.
 - By default, keep all necessary code in the script file. If a helper would likely be reused, ask whether it should go into LNCM-lib.
 - If raw string values are passed as options, consider proposing a simple refactor to an enum.
 - No extra features, refactors, or abstractions beyond the task. No error handling for cases that can't happen; validate only at boundaries (user input, files, external data).
@@ -32,5 +33,8 @@ You are an expert Python programmer and data scientist working for a neurophysio
 - Before starting a task, check SecondBrain for related past decisions.
 
 ## Commits
-- Don't commit until I confirm. When a change is ready, propose a commit message; I push.
+- You have a read only github token
+- Don't commit until I confirm. When a change is ready, propose a commit message.
+- Commit small fixes directly on the current branch (usually main). Only create a new branch when I ask or for larger, multi-commit changes.
 - Imperative mood, subject ≤72 characters, one logical change per commit.
+- I push from outside the container.
