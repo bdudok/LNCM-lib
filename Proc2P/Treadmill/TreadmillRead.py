@@ -1,3 +1,4 @@
+import contextlib
 import os
 
 import numpy
@@ -54,7 +55,13 @@ class Treadmill:
         else:
             self.calib = calib
 
-        self.d = d = self.data_import_function.Session(self.path + self.filename)
+        # pyControl's data import fails with the string dtype that pandas 3 infers by default
+        if int(pd.__version__.split('.')[0]) >= 3:
+            string_dtype_off = pd.option_context('future.infer_string', False)
+        else:
+            string_dtype_off = contextlib.nullcontext()
+        with string_dtype_off:
+            self.d = d = self.data_import_function.Session(self.path + self.filename)
         d.analog = {}
         if self.pycontrol_version == 1:
             for f in self.flist:
@@ -105,7 +112,7 @@ class Treadmill:
                 for _, event in d.variables_df.iterrows():
                     this_lap = event[('values', 'lap_counter')]
                     if not numpy.isnan(this_lap) and this_lap > curr_lap:
-                        e_time = float(event['time'][0])
+                        e_time = float(event['time'].iloc[0])
                         e_idx = np.searchsorted(self.pos_tX, e_time)
                         if e_idx < len(self.abspos): #summary print at session end should be ignored
                             self.lapends.append(e_idx)
