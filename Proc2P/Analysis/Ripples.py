@@ -709,30 +709,6 @@ def single_ripple_onsets(events, gap=4000):
     return events
 
 
-def export_SCA(path, prefix, channels=(1, 1)):
-    savepath = path + '_LFP/'
-    if not os.path.exists(savepath):
-        os.mkdir(savepath)
-    suffix = '_SpikeAnalyzerExport.mat'
-    # if os.path.exists(ofn):
-    #     print(f'Skipping {prefix}')
-    # else:
-    for chi in range(channels[1]):
-        r = Ripples(prefix, ephys_channels=(chi + 1, channels[1]), load_minimal=True)
-
-        header = str.encode(f'Ephys trace from {prefix} ch {chi}')
-        version = '1.0'
-        globals = ['sbuf', 'fs', 'samples']
-        s = r.trace.astype('<f4')
-
-        mat = {'__header__': header, '__version__': version, '__globals__': globals, 'sbuf': s, 'fs': r.fs,
-               'samples': len(s)}
-        ofn = savepath + prefix + f'_ch{chi}' + suffix
-
-        savemat(ofn, mat)
-        print(f'Exported: {prefix}')
-
-
 #
 if __name__ == '__main__':
     procpath = 'D:\Shares\Data\_Processed/2P\JEDI/'
