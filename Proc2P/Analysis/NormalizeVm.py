@@ -130,7 +130,7 @@ def normalize_trace(session: ImagingSession, cells=None, save=True,
         if keep_traces:
             trace_cache[c] = [predx, norm_traces[c], slo_baseline, corr, fitg, exclude_move, exclude_sz, ]
     if save:
-        numpy.save(session.ca.pf + '//' + 'vm', norm_traces)
+        numpy.save(session.ca.pf / 'vm.npy', norm_traces)
     if keep_traces:
         return trace_cache
 
