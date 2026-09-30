@@ -221,7 +221,7 @@ class CaTrace(object):
                 if os.path.exists(pf):
                     self.pf = pf
                     lprint(self, 'Loading traces from', pf)
-                break
+                    break
         if not os.path.exists(self.pf):
             if self.tag in ('skip', 'off', 'dummy'):
                 lprint(self, 'skipped loading ca')
