@@ -87,7 +87,7 @@ def LFPSpikes(a, w, ch=0, from_session=True, exclude_move=True, filter_by_sz=Non
                                 exclude_move=exclude_move)
 
 def Seizures(a, w, ch=1, eps=1, min_dur=5, off=False):
-    df = read_excel(a.get_file_with_suffix(f'_ch{ch}_seizure_times.xlsx'))
+    df = read_excel(a.get_file_with_suffix(f'_Ch{ch}_seizure_times.xlsx'))
     st = df['Sz.Start(s)'].values
     event_frames = []
     for i, sz in df.iterrows():
