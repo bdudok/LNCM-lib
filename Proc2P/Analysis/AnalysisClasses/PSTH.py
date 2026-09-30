@@ -15,7 +15,7 @@ class PSTH:
         identifier: unique name of data set, used to store data in files'''
         self.path = path
         self.identifier = identifier
-        self.wdir = path + 'EventTrigger/'
+        self.wdir = os.path.join(path, 'EventTrigger', '')
         self.lock_name = self.wdir + '_' + identifier + '.lock'
         if not os.path.exists(self.wdir):
             os.mkdir(self.wdir)
