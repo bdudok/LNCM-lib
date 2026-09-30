@@ -1,6 +1,7 @@
 import json
 import os
 import ast
+from pathlib import Path
 
 import numpy
 import pandas
@@ -17,7 +18,7 @@ class DataSet:
         :param ver: an int. if None, last available is read.
         '''
 
-        self.project_folder = os.path.realpath(project_folder)
+        self.project_folder = Path(os.path.realpath(project_folder))
         self.prefix = '_dataset'
         self.ext = '.feather'
         if ver is not None:
@@ -46,7 +47,7 @@ class DataSet:
     def get_fn(self, ext=None):
         if ext is None:
             ext = self.ext
-        return os.path.join(self.project_folder, f'{self.prefix}{self.ver:02}{ext}')
+        return self.project_folder / f'{self.prefix}{self.ver:02}{ext}'
 
     def get_current_ver(self, incr=0):
         flist = os.listdir(self.project_folder)
