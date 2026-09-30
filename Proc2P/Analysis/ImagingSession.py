@@ -230,21 +230,19 @@ class ImagingSession(object):
         Args:
             sign: True - mobile; False -immobile
             expand: if pulling immobility, expand movement periods by this many secs
-            return_trace: if True, also returns the boolean mask for the session
+            return_mask: if True, also returns the boolean mask for the session
 
-        Returns: starts, stops of the periods
+        Returns: starts, stops of the periods (frame indices, stop is the last frame of the period)
         '''
         v = gapless(numpy.abs(self.pos.smspd), threshold=1, expand=int(self.fps * expand))
         if not sign:
             v = numpy.logical_not(v)
-        count_starts = numpy.cumsum(numpy.diff(v) > 0)
-        periods = count_starts * v[1:]
-        starts, stops = [], []
-        for p in range(count_starts[-1]):
-            wh = numpy.where(periods == (p + 1))[0]
-            if len(wh) > 2:
-                starts.append(wh[0])
-                stops.append(wh[-1])
+        # pad with False so that periods at the start or end of the session also have both edges
+        edges = numpy.diff(numpy.asarray(v, dtype=int), prepend=0, append=0)
+        all_starts = numpy.where(edges == 1)[0]
+        all_stops = numpy.where(edges == -1)[0] - 1
+        keep = (all_stops - all_starts) >= 2
+        starts, stops = list(all_starts[keep]), list(all_stops[keep])
         if return_mask:
             return starts, stops, v
         return starts, stops
