@@ -699,17 +699,14 @@ def single_ripple_onsets(events, gap=4000):
     event_t = numpy.array([e.p[0] for e in events])
     clustering = cluster.DBSCAN(eps=gap, min_samples=2).fit(event_t.reshape(-1, 1))
     single_ripple_indices = numpy.where(clustering.labels_ < 0)[0]
-    event_number = len(single_ripple_indices) + clustering.labels_.max() + 1
-    events = numpy.empty(event_number, dtype=numpy.int64)
-    ri, rci = 0, 0
-    for ri, rj in enumerate(single_ripple_indices):
-        events[ri] = event_t[rj]
+    n_single = len(single_ripple_indices)
+    events = numpy.empty(n_single + clustering.labels_.max() + 1, dtype=numpy.int64)
+    events[:n_single] = event_t[single_ripple_indices]
+    # DBSCAN labels single events -1 and clusters 0, 1, ...; each cluster is replaced by its first member
     for rci in range(clustering.labels_.max() + 1):
-        # get list of ripples in cluster
         current_cluster = numpy.where(clustering.labels_ == rci)[0]
-        rj = current_cluster[0]
-        events[ri + rci] = event_t[rj]
-    return events[:ri + rci + 1]
+        events[n_single + rci] = event_t[current_cluster[0]]
+    return events
 
 
 def export_SCA(path, prefix, channels=(1, 1)):
