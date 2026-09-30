@@ -128,6 +128,6 @@ def calc_response_image(procpath, prefix, events, window, savepath=None, suffix=
 
 
 if __name__ == '__main__':
-    procpath = 'D:\Shares\Data\_Processed/2P\PVTot\Opto/'
+    procpath = r'D:\Shares\Data\_Processed/2P\PVTot\Opto/'
     prefix = 'PVTot5_2023-09-04_opto_023'
     # exportstop(procpath, prefix)

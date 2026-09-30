@@ -400,7 +400,7 @@ def SessionPeaks(a, w, lowpass = 10, peak_size=5, param_key='rel', exclude_movem
     return masks_from_list(a, w, peaks, exclude_movement=exclude_movement)
 
 if __name__ == '__main__':
-    processed_path = 'D:\Shares\Data\_Processed/2P\PVTot/'
+    processed_path = r'D:\Shares\Data\_Processed/2P\PVTot/'
     prefix = 'PVTot7_2024-02-07_lfpOpto_178'
     from Proc2P.Analysis.ImagingSession import ImagingSession
     a = ImagingSession(processed_path, prefix, tag='IN')

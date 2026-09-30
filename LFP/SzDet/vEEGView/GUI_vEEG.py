@@ -467,5 +467,5 @@ def launch_GUI(*args, **kwargs):
 
 
 if __name__ == '__main__':
-    path = 'D:\Shares\Data\_Processed\EEG\Tottering/'
+    path = r'D:\Shares\Data\_Processed\EEG\Tottering/'
     launch_GUI(path)

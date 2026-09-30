@@ -184,7 +184,7 @@ def load_roi_file(roi_name):
 
 
 if __name__ == '__main__':
-    procpath = 'D:\Shares\Data\_Processed/2P\PVTot\Opto/'
+    procpath = r'D:\Shares\Data\_Processed/2P\PVTot\Opto/'
     prefix = 'PVTot5_2023-09-04_opto_023'
     img = FrameDisplay(procpath, prefix, tag='skip')
 

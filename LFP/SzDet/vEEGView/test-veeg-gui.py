@@ -1,7 +1,7 @@
 from LFP.SzDet.vEEGView.GUI_vEEG import launch_GUI
 
 #specify the path to start at
-path = 'D:\Shares\Data\_Processed\EEG/test/'
+path = r'D:\Shares\Data\_Processed\EEG/test/'
 
 # override the GUI's default settings (for convenience)
 # you can comment out lines to use the hard coded defaults

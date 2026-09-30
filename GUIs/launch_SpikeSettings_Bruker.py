@@ -1,7 +1,7 @@
 from LFP.SzDet.AppSpikeSz.GUI_SpikeSzDet import launch_GUI
 
 #specify the path to start at
-path = 'D:\Shares\Data\_Processed/2P/'
+path = r'D:\Shares\Data\_Processed/2P/'
 use_deafults = ('hippocampus', 'cortex')[0] #select the relevant brain region
 
 # override the GUI's default settings (for convenience)

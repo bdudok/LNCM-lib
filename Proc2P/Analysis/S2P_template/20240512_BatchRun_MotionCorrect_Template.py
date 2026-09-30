@@ -147,12 +147,12 @@ if __name__ == '__main__':
         imwrite(previewname, preview)
 
         # remove raw movie and move output to final destination
-        os.remove(s.procpath + 'suite2p\plane0/data_raw.bin')
-        os.rename(s.procpath + 'suite2p\plane0/data.bin',
+        os.remove(s.procpath + r'suite2p\plane0/data_raw.bin')
+        os.rename(s.procpath + r'suite2p\plane0/data.bin',
                   s.procpath + prefix + f'_registered_{s.channelnames[0]}.bin')
         if dual_channel:
-            os.remove(s.procpath + 'suite2p\plane0/data_chan2_raw.bin')
-            os.rename(s.procpath + 'suite2p\plane0/data_chan2.bin',
+            os.remove(s.procpath + r'suite2p\plane0/data_chan2_raw.bin')
+            os.rename(s.procpath + r'suite2p\plane0/data_chan2.bin',
                       s.procpath + prefix + f'_registered_{s.channelnames[1]}.bin')
 
         print(f'S2P processing completed for {prefix}.')

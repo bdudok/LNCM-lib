@@ -800,7 +800,7 @@ class ImagingSession(object):
         self.fig.clf()
 
 if __name__ == '__main__':
-    procpath = 'D:\Shares\Data\_Processed/2P\PVTot/'
+    procpath = r'D:\Shares\Data\_Processed/2P\PVTot/'
     prefix = 'PVtot9_2024-03-07_RF_224'
     tag = 'skip'
     a = ImagingSession(procpath, prefix, tag=tag)

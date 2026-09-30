@@ -711,7 +711,7 @@ def single_ripple_onsets(events, gap=4000):
 
 #
 if __name__ == '__main__':
-    procpath = 'D:\Shares\Data\_Processed/2P\JEDI/'
+    procpath = r'D:\Shares\Data\_Processed/2P\JEDI/'
     prefix = 'JEDI-PV16_2024-03-05_Movie_032'
     r = Ripples(procpath, prefix)
     r.rec_enum_ripples()

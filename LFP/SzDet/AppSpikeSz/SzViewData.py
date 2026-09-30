@@ -512,10 +512,10 @@ class SzReviewData:
 
 if __name__ == '__main__':
     setup = 'Pinnacle'
-    path = 'D:\Shares\Data\_Processed\EEG\Dreadd/'
+    path = r'D:\Shares\Data\_Processed\EEG\Dreadd/'
     prefix = 'Tot9_2024-05-20_07_06_20_export'
     setup = 'LNCM'
-    path = 'D:\Shares\Data\_Processed/2P\PVTot/'
+    path = r'D:\Shares\Data\_Processed/2P\PVTot/'
     # prefix = 'PVTot9_2024-02-20_lfp_181'
     #
     # szdat = SzReviewData(path, prefix, 2, setup=setup)

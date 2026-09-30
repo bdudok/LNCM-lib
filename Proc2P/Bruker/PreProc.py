@@ -510,9 +510,9 @@ class SessionInfo:
             return key in self.info
 
 if __name__ == '__main__':
-    dpath = 'D:\Shares\Data\_RawData\Bruker\JEDI-IPSP/'
+    dpath = r'D:\Shares\Data\_RawData\Bruker\JEDI-IPSP/'
     # procpath = 'D:\Shares\Data\_Processed/testing/'
-    procpath = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
+    procpath = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
     prefix = 'JEDI-Sncg123_2025-05-16_stim_params_842'
     btag = '000'
 

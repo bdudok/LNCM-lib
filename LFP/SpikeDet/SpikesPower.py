@@ -110,7 +110,7 @@ class Detect:
         op.to_excel(f)
 
 if __name__ == '__main__':
-    processed_path = 'D:\Shares\Data\_Processed/2P\PVTot\LFP/'
+    processed_path = r'D:\Shares\Data\_Processed/2P\PVTot\LFP/'
     prefix = 'PVTot5_2023-09-15_LFP_025'
     from Proc2P.Bruker import LoadEphys
     fs = 2000

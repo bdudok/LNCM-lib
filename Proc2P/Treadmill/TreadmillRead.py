@@ -151,7 +151,7 @@ class Treadmill:
 
 
 if __name__ == '__main__':
-    dpath = 'D:\Shares\Data\_RawData\Bruker/testing/treadmill update test/JEDI-PV18_2024-03-13_Fast_043-000/'
+    dpath = r'D:\Shares\Data\_RawData\Bruker/testing/treadmill update test/JEDI-PV18_2024-03-13_Fast_043-000/'
     prefix = 'JEDI-PV18_2024-03-13_Fast_043'
     tm = Treadmill(dpath, prefix)
 

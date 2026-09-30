@@ -1158,7 +1158,7 @@ if __name__ == '__main__':
     # ('D:/Shares/Data/_Processed/2P/testing//', 'SncgTot4_2023-11-09_LFP_002', ['PC-G', 'STICA-G'],
     #  {'Start': '0', 'Stop': 'end', 'Diameter': '20', 'MinSize': '100', 'MaxSize': '800'})
 
-    wdir = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
+    wdir = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
     prefix = 'JEDI-Bl-53_2025-10-15_opto_05Hz_1397'
 
     # r = RoiEditor(wdir, prefix, )

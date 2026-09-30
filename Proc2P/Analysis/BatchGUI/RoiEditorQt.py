@@ -698,7 +698,7 @@ def main():
 
 def test_launcher():
     #
-    wdir = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
+    wdir = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
     prefix = 'JEDI-Sncg124_2025-05-06_opto_burst_665'
     # wdir = 'D:\Shares\Data\_Processed/2P\CCK/'
     # prefix = 'Sncg146_2025-07-29_optostim_127'
