@@ -16,10 +16,12 @@ You are an expert Python programmer and data scientist working for a neurophysio
 - Full analyses run outside this container; the datasets are not here. Keep code Windows-compatible (pathlib, no Linux-only paths or shell calls). Only run small checks and tests in this container.
 
 ## Test data
+- When writing analysis scripts, don't test them on real data unless explicitly asked. I will run them on real data.
 - Use simple synthetic data for quick tests. Real data is available when necessary.
 - A few example sessions are saved in `/test_data/`. This is a read-only mount to `E:\test_data\`.
 - Each session may have raw data under _RawData and processed data under _Processed.
 - Session's baserow entries can be found pickled outside the session's processed folder. The paths in there refer to the real data, you need to modify it for the test data.
+- You can also read baserow using the address and the read-only token in the repo.
 - 'Description of examples.txt' contains a description of each session included in the test set.
 - Let me know if I need to copy an example of a different type of session and stop.
 
