@@ -113,3 +113,12 @@ RUN echo 'source ~/.zshrc.custom' >> /home/vscode/.zshrc
 
 # Copy post_install script
 COPY --chown=vscode:vscode post_install.py /opt/post_install.py
+
+# Miniforge + project conda env (conda-forge)
+RUN curl -fsSL "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-$(uname -m).sh" -o /tmp/miniforge.sh && \
+    bash /tmp/miniforge.sh -b -p /home/vscode/miniforge3 && \
+    rm /tmp/miniforge.sh
+COPY --chown=vscode:vscode environment.yml /tmp/environment.yml
+RUN /home/vscode/miniforge3/bin/conda env create -f /tmp/environment.yml -n analysis && \
+    /home/vscode/miniforge3/bin/conda clean -afy
+ENV PATH="/home/vscode/miniforge3/envs/analysis/bin:/home/vscode/miniforge3/bin:$PATH"

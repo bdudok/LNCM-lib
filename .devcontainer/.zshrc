@@ -54,3 +54,5 @@ _fzf_compgen_dir() {
 
 # Source fzf shell integration (built-in since fzf 0.48+)
 eval "$(fzf --zsh)"
+
+export PATH="/home/vscode/miniforge3/envs/analysis/bin:$PATH"

@@ -17,5 +17,6 @@
     "E:/ExtDrives/LNCM6/_RawData/"
   ],
   "ledcal": 230,
-  "scratch_disk": "E:/tmp/"
+  "scratch_disk": "E:/tmp/",
+  "lab_identifier": "BCM_LNCM_Dudoklab"
 }

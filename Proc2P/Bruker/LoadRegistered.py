@@ -98,7 +98,7 @@ class LoadRegistered():
 
     def get_channel(self, ch=None):
         '''
-        :param ch 1: returns second channel. 'Green': Ch2; 'Red: Ch1. Any other value returns first channel
+        :param ch 1: returns second channel. 'Green': Ch2; 'Red': Ch1. Any other value returns first channel
         :return: memory mapped data corresponding to the selected channel
         '''
         ret_ch = 0

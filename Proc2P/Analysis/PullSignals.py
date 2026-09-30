@@ -54,7 +54,7 @@ class Worker(Process):
 
 
 def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_alt_path=True,
-                 overwrite=False, use_movie=Source.S2P):
+                 overwrite=False, use_movie=Source.S2P, mask_only=False):
     '''
     Compute average pixel intensity in each ROI and each frame of a movie
     :param path: the processed folder
@@ -71,6 +71,7 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
         S2P: default registered movie
         Raw: uses the raw movie instead of the registered one. Looks up path in the session info file.
         GEVIReg: uses the alternative corrected movie
+    :param mask_only: return weights instead of pulling the data. used for NWB export
     :return: saves the output traces to a file. Only returns report string (also saved in the log).
     '''
     #get binary mask
@@ -122,6 +123,9 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
             for y in range(top, bottom):
                 if poly.contains_point([x, y]):
                     binmask[nroi, x, y] = True
+    if mask_only:
+        if not snr_weighted:
+            return binmask
     #figure out channels to pull MODES = ['All', 'Green', 'Red']
     if ch == 'All':
         if 'Ch1' in channelnames and 'Ch2' in channelnames:
@@ -186,6 +190,13 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
                     for c in range(ncells):
                         ind = indices[c]
                         weights.append(fovsnr[ind[1], ind[0]])
+                if mask_only:
+                    wmask = numpy.zeros(binmask.shape)
+                    for c in range(ncells):
+                        ind = indices[c]
+                        if mask_only:
+                            wmask[c][ind] = weights[c] / numpy.nansum(weights[c])
+                    return wmask
                 for c in range(ncells):
                     #iterate frames and compute the weighted average of the polygon pixels
                     ind = indices[c]

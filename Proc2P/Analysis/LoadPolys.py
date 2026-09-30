@@ -176,8 +176,8 @@ def load_roi_file(roi_name):
         else:
             if len(poly) > 2:
                 polys.append(poly)
-            n += 1
-            poly = []
+            n = j
+            poly = [[x, y]]
     if len(poly) > 2:
         polys.append(poly)
     return [numpy.array(xi) for xi in polys]
