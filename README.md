@@ -40,7 +40,7 @@ GUI for processing and inspecting ImagingSession
 - Each class builds its own file names in one method (e.g. `ImagingSession.get_file_with_suffix`).
 - Library code does not call `os.chdir`.
 - `touch_path` returns a string with a trailing slash, for use in analysis scripts.
-- GUIs may keep their own folder strings. `Proc2P.Legacy` and `_Dependencies` are not converted.
+- GUIs may keep their own folder strings. `_Dependencies` is not converted.
 
 # See also from the lab:
 
