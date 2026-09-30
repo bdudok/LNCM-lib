@@ -188,7 +188,6 @@ class PSTH:
             lprint(self, ' '.join(('Pulling:', prefix, tag, self.trigger_name, self.param_key)))
             data = numpy.empty((1000, 2 * self.window_w + self.extra_columns))
             data_counter = 0
-            os.chdir(path)
             a = ImagingSession(path, prefix, tag=tag, norip=not self.uses_ripples, ch=ch, **self.session_kwargs)
             if self.uses_ripples:
                 rt = self.session_kwargs.get('ripple_tag')
@@ -376,14 +375,12 @@ class PSTH:
 
     def summary(self):
         '''load traces and collect in a single array'''
-        os.chdir(self.path)
         data = numpy.empty((1000, 2 * self.window_w + self.extra_columns))
         weights = numpy.empty(1000)
         data_counter = 0
         self.event_counter = 0
         for session_data, cell_data in self.pull_dict.items():
             path, prefix, tag, ch = session_data
-            os.chdir(path)
             lines = numpy.load(self.get_numpy_name(prefix, tag, ch))
             new_length = data_counter + len(lines)
             if new_length > len(data):
