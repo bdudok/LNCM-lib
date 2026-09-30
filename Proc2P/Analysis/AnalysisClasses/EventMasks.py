@@ -75,7 +75,10 @@ def Filter_events_by_sz(a, event_frames, filter_by_sz, margin=0.5):
 
 def LFPSpikes(a, w, ch=0, from_session=True, exclude_move=True, filter_by_sz=None):
     if not from_session:
-        df = read_excel(a.get_file_with_suffix(f'_Ch{ch+1}_spiketimes.xlsx'))
+        # same file name as in ImagingSession.map_spiketimes, with the session's spiketag if set
+        spiketag = a.kwargs.get('spiketag', None)
+        tag_str = '' if spiketag in (None, 'None') else f'_{spiketag}'
+        df = read_excel(a.get_file_with_suffix(f'{tag_str}_Ch{ch+1}_spiketimes.xlsx'))
         st = df['SpikeTimes(s)'].values
         event_frames = [a.timetoframe(x) for x in st]
     else:
