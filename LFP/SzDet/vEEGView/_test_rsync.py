@@ -22,7 +22,6 @@ from LFP.SpikeDet import SpikesPower
 from LFP.SzDet import InstRate
 
 #Readers
-from Proc2P.Legacy.Loaders import load_ephys
 from Proc2P.Bruker import LoadEphys
 from LFP.Pinnacle import ReadEDF
 from Proc2P.Treadmill import rsync

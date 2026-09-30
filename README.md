@@ -14,8 +14,6 @@ read EDF files exported by the Pinnacle recorder
 ## 2-photon
 ### Proc2P.Treadmill
 load treadmill data from PyControl file
-### Proc2P.Legacy
-all scanbox reader classes made during Soltesz lab times
 ### Proc2p.Bruker
 classes for reading BCM Dudok lab raw data recorded on the Bruker setup
 ### Proc2p.Analysis

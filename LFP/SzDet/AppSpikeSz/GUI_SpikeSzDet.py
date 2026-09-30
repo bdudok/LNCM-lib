@@ -24,7 +24,6 @@ from LFP.SpikeDet import SpikesPower
 from LFP.SzDet import InstRate, ProcessSeizures
 
 #Readers
-from Proc2P.Legacy.Loaders import load_ephys
 from Proc2P.Bruker import LoadEphys
 from LFP.Pinnacle import ReadEDF
 
@@ -50,7 +49,7 @@ class GUI_main(QtWidgets.QMainWindow):
             savepath = path
         self.savepath = savepath
         self.input_prefix = prefix_list
-        self.setup = setupID #'LNCM' or "Soltesz' or 'Pinnacle'
+        self.setup = setupID #'LNCM' or 'Pinnacle'
         # self.settings = QtCore.QSettings("pyqt_settings.ini", QtCore.QSettings.IniFormat)
         # self.settings.value("LastFile")
 
@@ -119,10 +118,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.param['fs'] = 5000
         self.param['PlotDur'] = 10
         self.param['Channel'] = 1
-        if self.setup == 'Soltesz':
-            self.param['fs'] = 10000
-            self.param['SzDet.Framesize'] = 64
-        elif self.setup == 'LNCM':
+        if self.setup == 'LNCM':
             self.param['SzDet.Framesize'] = 50
             self.param['fs'] = 5000
         if self.setup == 'Pinnacle':
@@ -296,13 +292,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         flist = os.listdir(self.wdir)
         #get prefix list
-        if self.setup == 'Soltesz':
-            suffix = '.ephys'
-            if self.input_prefix is None:
-                prefix_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
-            else:
-                prefix_list = [prefix for prefix in self.input_prefix if prefix+suffix in flist]
-        elif self.setup == 'LNCM':
+        if self.setup == 'LNCM':
             suffix = '_ephys.npy'
             self.dirpaths = {}
             prefix_list = []
@@ -328,7 +318,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         #check if output exist
         flist = os.listdir(self.savepath)
-        if self.setup in ['Soltesz', 'Pinnacle']:
+        if self.setup == 'Pinnacle':
             for pi, prefix in enumerate(prefix_list):
                 if prefix+self.suffix+'.json' in flist:
                     self.mark_complete(pi, color='#fcaf38')
@@ -426,9 +416,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.refresh_data()
 
     def get_output_fn(self):
-        if self.setup == 'Soltesz':
-            output_fn = self.savepath + self.active_prefix + self.suffix
-        elif self.setup == 'Pinnacle':
+        if self.setup == 'Pinnacle':
             output_fn = self.savepath + self.active_prefix + f'_Ch{self.param["channel_index"]}' + self.suffix
         elif self.setup == 'LNCM':
             output_fn = os.path.join(self.savepath, self.active_prefix, self.active_prefix +
@@ -510,9 +498,7 @@ class GUI_main(QtWidgets.QMainWindow):
     def refresh_data(self):
         print(self.active_prefix)
         ch = self.get_field('Channel')
-        if self.setup == 'Soltesz':
-            r = load_ephys(self.active_prefix)
-        elif self.setup == 'LNCM':
+        if self.setup == 'LNCM':
             chi = int(ch)
             self.param['channel_index'] = chi
             r = LoadEphys.Ephys(self.savepath, self.active_prefix, channel=chi)
