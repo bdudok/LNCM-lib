@@ -87,7 +87,10 @@ def LFPSpikes(a, w, ch=0, from_session=True, exclude_move=True, filter_by_sz=Non
                                 exclude_move=exclude_move)
 
 def Seizures(a, w, ch=1, eps=1, min_dur=5, off=False):
-    df = read_excel(a.get_file_with_suffix(f'_ch{ch}_seizure_times.xlsx'))
+    # same file name as in ImagingSession.map_seizuretimes, with the session's spiketag if set
+    spiketag = a.kwargs.get('spiketag', None)
+    tag_str = '' if spiketag in (None, 'None') else f'_{spiketag}'
+    df = read_excel(a.get_file_with_suffix(f'{tag_str}_Ch{ch}_seizure_times.xlsx'))
     st = df['Sz.Start(s)'].values
     event_frames = []
     for i, sz in df.iterrows():
