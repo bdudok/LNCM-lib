@@ -10,6 +10,7 @@ from sklearn import cluster
 from Proc2P.Bruker.LoadEphys import Ephys
 from Proc2P.utils import lprint, logger
 from dataclasses import dataclass
+from pathlib import Path
 
 @dataclass
 class RippleConfig:
@@ -69,7 +70,7 @@ class Ripples(object):
         self.channels = None
         self.ephys_channel = ephys_channel
         if prefix is not None:
-            self.path = os.path.join(procpath, prefix, '_ripples//')
+            self.path = Path(procpath) / prefix / '_ripples'
             self.read_phys()
             exist = os.path.exists(self.path)
             if not exist:
@@ -106,18 +107,18 @@ class Ripples(object):
 
     def save(self):
         for attr in self.attrs:
-            self.__getattribute__(attr).tofile(self.path + attr + '.np')
+            self.__getattribute__(attr).tofile(self.path / f'{attr}.np')
 
     def load(self):
         for attr in self.attrs:
-            fn = self.path + attr + '.np'
+            fn = self.path / f'{attr}.np'
             if os.path.exists(fn):
                 self.__setattr__(attr, numpy.fromfile(fn))
         for attr in self.load_attrs:
             if attr not in self.attrs:
-                fn = self.path + attr + '.np'
+                fn = self.path / f'{attr}.np'
                 if os.path.exists(fn):
-                    self.__setattr__(attr, numpy.fromfile(self.path + attr + '.np'))
+                    self.__setattr__(attr, numpy.fromfile(fn))
         if hasattr(self, 'ftr'):
             self.std = self.ftr.std()
 
@@ -600,7 +601,7 @@ class Ripples(object):
             return -1
         if tag not in (None, ''):
             self.tag = tag
-        if (self.tag is not None) and os.path.exists(self.path + self.tag + '.ripples') and not overwrite:
+        if (self.tag is not None) and os.path.exists(self.path / f'{self.tag}.ripples') and not overwrite:
             print(f'Ripple tag {self.tag} already exists, creating new timestamp')
             self.tag = None
         if self.tag is None:
@@ -618,7 +619,7 @@ class Ripples(object):
             ea = numpy.empty((len(events), 2))
             for i, p in enumerate(events):
                 ea[i, :] = p
-        ea.tofile(self.path + ts)
+        ea.tofile(self.path / ts)
         lprint(self, f'{ts} saved with {self.count_included()} events. Tr1: {self.tr1}, Tr2:{self.tr2}',
                logger=self.log)
 
@@ -632,16 +633,16 @@ class Ripples(object):
             for i, p in enumerate(events):
                 ea[i, :] = p
         pandas.DataFrame(ea,
-                         columns=['RippleStart', 'RippleStop']).to_excel(self.path + self.prefix + '_ripple_times.xlsx')
+                         columns=['RippleStart', 'RippleStop']).to_excel(self.path / f'{self.prefix}_ripple_times.xlsx')
         print(self.prefix, 'ripples exported.')
 
     def load_ripples(self, fn=None):
         if fn is not None and not fn.endswith('ripples'):
             fn += '.ripples'
         if fn is not None and self.strict_tag:
-            if not os.path.exists(self.path + fn):
+            if not os.path.exists(self.path / fn):
                 raise FileNotFoundError(f'{fn} not available')
-        if fn is None or not os.path.exists(self.path + fn):
+        if fn is None or not os.path.exists(self.path / fn):
             flist = []
             for f in os.listdir(self.path):
                 if f.endswith('.ripples'):
@@ -654,7 +655,7 @@ class Ripples(object):
                 fn = flist[-1]
         print('Loading ripples', fn)
         self.ripples_fn = fn
-        events = numpy.fromfile(self.path + fn)
+        events = numpy.fromfile(self.path / fn)
         events = events.reshape((int(len(events) / 2), 2))
         self.events = []
         if hasattr(self, 'envelope'):
@@ -690,7 +691,7 @@ class Ripples(object):
         mat = {'__header__': header, '__version__': version, '__globals__': globals, 'fs': self.fs, 'gn': gn, 'of': gn,
                's': s, 'total_ns': self.n}
 
-        scipy.io.savemat(self.path + self.prefix + '_ephysexport.mat', mat)
+        scipy.io.savemat(self.path / f'{self.prefix}_ephysexport.mat', mat)
 
 
 def single_ripple_onsets(events, gap=4000):

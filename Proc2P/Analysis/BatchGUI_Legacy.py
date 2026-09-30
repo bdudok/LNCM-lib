@@ -980,7 +980,7 @@ class Prev:
         self.ripples.export_ripple_times()
 
     def ripples_load_callback(self):
-        oloc = self.ripples.path
+        oloc = str(self.ripples.path)
         fn = filedialog.askopenfilename(initialdir=oloc)
         self.ripples.load_ripples(fn.split('/')[-1])
         self.ripples.enum_ripples(no_save=True)

@@ -459,9 +459,9 @@ class ImagingSession(object):
         path = self.ripples.path
         # later extend this to use multiple channels
         for band, key in zip(bands, keys):
-            cfn = path + key + '.npy'
+            cfn = path / f'{key}.npy'
             if os.path.exists(cfn):
-                setattr(self.ephys, key, numpy.load(path + key + '.npy'))
+                setattr(self.ephys, key, numpy.load(cfn))
             else:
                 lprint(self, f'Saving {band} power file ...')
                 filt = Filter.Filter(self.ephys.trace, fs)
