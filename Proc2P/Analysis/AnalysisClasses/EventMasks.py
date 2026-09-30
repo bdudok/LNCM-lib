@@ -133,6 +133,35 @@ def masks_from_list(a, w, event_list, exclude_movement=False):
         mask[mov_mask] = numpy.nan
     return events, mask
 
+def merge_clusters(event_list, eps, min_n=None, clustloc='first', trace=None):
+    '''replace each cluster of events (closer than eps) with one member.
+    eps: retain all events if 0.
+    min_n: if None, clusters have at least 2 members and single events are kept.
+        Otherwise, clusters have at least min_n members and single events are dropped.
+    clustloc: 'first' - first member of each cluster, 'max': member with the max value in the trace arg
+    Returns: sorted event array
+    '''
+    events = numpy.sort(numpy.array(event_list, dtype=numpy.int64))
+    exc_single = min_n is not None
+    if min_n is None:
+        min_n = 2
+    if not eps:
+        return events
+    if len(events) < min_n:  # no clusters possible
+        return events[:0] if exc_single else events
+    # DBSCAN labels single events (noise) -1, and clusters 0, 1, ...
+    labels = cluster.DBSCAN(eps=eps, min_samples=min_n).fit(events.reshape(-1, 1)).labels_
+    kept = [] if exc_single else list(events[labels < 0])
+    for label in range(labels.max() + 1):
+        current_cluster = numpy.where(labels == label)[0]
+        if clustloc == 'first':
+            rj = current_cluster[0]
+        elif clustloc == 'max':
+            rj = current_cluster[numpy.argmax(trace[events[current_cluster]])]
+        kept.append(events[rj])
+    return numpy.sort(numpy.array(kept, dtype=numpy.int64))
+
+
 def nonoverlap_from_list(a, w, event_list, decay=6, eps=16, exclude_move=False, min_n=None,
                          clustloc='first', trace=None):
     '''return masks for a custom event list with no overlap allowed between events.
@@ -141,53 +170,7 @@ def nonoverlap_from_list(a, w, event_list, decay=6, eps=16, exclude_move=False, 
      eps: replaces clusters with onset of firsts. retain all if 0.
      clustloc: 'first' - returns first member of a cluster, 'max': returns loc of max in the trace arg
      '''
-    events = numpy.array(event_list, dtype=numpy.int64)
-    if min_n is None:
-        min_n = 2
-        exc_single = False
-    else:
-        exc_single = True
-    if eps:
-        event_t = numpy.copy(events)
-        if len(event_t) < min_n:
-            events = event_t
-        else:
-            clustering = cluster.DBSCAN(eps=eps, min_samples=min_n).fit(event_t.reshape(-1, 1))
-            single_event_indices = numpy.where(clustering.labels_ < 0)[0]
-            any_clusters = clustering.labels_.max() > 0
-            if exc_single:
-                if any_clusters:
-                    event_number = clustering.labels_.max() + (len(single_event_indices) > 0)
-                    events = numpy.empty(event_number, dtype=numpy.int64)
-                    for rci in range(clustering.labels_.max() + (
-                            len(single_event_indices) > 0)):  # indices are different if there are zero noise events
-                        current_cluster = numpy.where(clustering.labels_ == rci)[0]
-                        rj = current_cluster[0]
-                        events[rci] = event_t[rj]
-                else:
-                    events = []
-            else:
-                event_number = len(single_event_indices)
-                if any_clusters:
-                    event_number += clustering.labels_.max()
-                events = numpy.empty(event_number, dtype=numpy.int64)
-                ri, rci = 0, 0
-                for ri, rj in enumerate(single_event_indices):
-                    # try:
-                    events[ri] = event_t[rj]
-                    # except:
-                    #     print(len(event_t), len(events), len(single_event_indices), clustering.labels_.max(), ri, rj)
-                    #     assert False
-                if any_clusters:
-                    for rci in range(clustering.labels_.max() + (
-                            len(single_event_indices) > 0)):  # indices are different if there are zero noise events
-                        # get list of ripples in cluster
-                        current_cluster = numpy.where(clustering.labels_ == rci)[0]
-                        if clustloc == 'first':
-                            rj = current_cluster[0]
-                        elif clustloc == 'max':
-                            rj = current_cluster[numpy.argmax(trace[event_t[current_cluster]])]
-                        events[ri + rci] = event_t[rj]
+    events = merge_clusters(event_list, eps, min_n, clustloc, trace)
     events.sort()
     if exclude_move:
         events = events[~a.pos.movement[events]]
@@ -228,53 +211,7 @@ def mask_from_list_nosession(w, event_list, trace_len, decay=6, eps=16, min_n=No
      eps: replaces clusters with onset of firsts. retain all if 0.
      clustloc: 'first' - returns first member of a cluster, 'max': returns loc of max in the trace arg
      '''
-    events = numpy.array(event_list, dtype=numpy.int64)
-    if min_n is None:
-        min_n = 2
-        exc_single = False
-    else:
-        exc_single = True
-    if eps:
-        event_t = numpy.copy(events)
-        if len(event_t) < min_n:
-            events = event_t
-        else:
-            clustering = cluster.DBSCAN(eps=eps, min_samples=min_n).fit(event_t.reshape(-1, 1))
-            single_event_indices = numpy.where(clustering.labels_ < 0)[0]
-            any_clusters = clustering.labels_.max() > 0
-            if exc_single:
-                if any_clusters:
-                    event_number = clustering.labels_.max() + (len(single_event_indices) > 0)
-                    events = numpy.empty(event_number, dtype=numpy.int64)
-                    for rci in range(clustering.labels_.max() + (
-                            len(single_event_indices) > 0)):  # indices are different if there are zero noise events
-                        current_cluster = numpy.where(clustering.labels_ == rci)[0]
-                        rj = current_cluster[0]
-                        events[rci] = event_t[rj]
-                else:
-                    events = []
-            else:
-                event_number = len(single_event_indices)
-                if any_clusters:
-                    event_number += clustering.labels_.max()
-                events = numpy.empty(event_number, dtype=numpy.int64)
-                ri, rci = 0, 0
-                for ri, rj in enumerate(single_event_indices):
-                    # try:
-                    events[ri] = event_t[rj]
-                    # except:
-                    #     print(len(event_t), len(events), len(single_event_indices), clustering.labels_.max(), ri, rj)
-                    #     assert False
-                if any_clusters:
-                    for rci in range(clustering.labels_.max() + (
-                            len(single_event_indices) > 0)):  # indices are different if there are zero noise events
-                        # get list of ripples in cluster
-                        current_cluster = numpy.where(clustering.labels_ == rci)[0]
-                        if clustloc == 'first':
-                            rj = current_cluster[0]
-                        elif clustloc == 'max':
-                            rj = current_cluster[numpy.argmax(trace[event_t[current_cluster]])]
-                        events[ri + rci] = event_t[rj]
+    events = merge_clusters(event_list, eps, min_n, clustloc, trace)
     events.sort()
     # if exclude_move:
     #     events = events[~a.pos.gapless[events]]
