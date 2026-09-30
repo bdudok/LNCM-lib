@@ -360,7 +360,7 @@ class GUI_main(QtWidgets.QMainWindow):
                         # keep autodetected rois from breaking numbering
                         roi_id = f[:-4].split('_')[-1]
                         if roi_id.isdigit():
-                            exs.append(int())
+                            exs.append(int(roi_id))
             exi = max(exs) + 1
             while os.path.exists(opPath + prefix + suffix + str(exi) + '.npy'):
                 exi += 1
