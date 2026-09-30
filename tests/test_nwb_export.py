@@ -1,7 +1,7 @@
 '''
 Tests for NWB_converter, run on one real session with the lean export config (no 2P movie, video or LFP).
 Run from the LNCM-lib folder: python -m pytest
-Test data: the _test_data folder next to LNCM-lib, or set the LNCM_TEST_DATA environment variable.
+Test data: set the LNCM_TEST_DATA environment variable, or /test_data, or the _test_data folder next to LNCM-lib.
 Skipped if the folder is missing.
 '''
 import itertools
@@ -21,12 +21,15 @@ from NWB_converter.NWBExporter import NWBExporter
 from Proc2P.Analysis.LoadPolys import load_roi_file
 
 PREFIX = 'Dag47_2026-04-22_goal_128'
-DATA_DIR = Path(os.environ.get('LNCM_TEST_DATA', Path(__file__).resolve().parents[2] / '_test_data'))
+DEFAULT_DATA_DIR = Path('/test_data') if os.path.isdir('/test_data') else Path(__file__).resolve().parents[2] / '_test_data'
+DATA_DIR = Path(os.environ.get('LNCM_TEST_DATA', DEFAULT_DATA_DIR))
 PROCPATH = DATA_DIR / '_Processed'
 RAWPATH = DATA_DIR / '_RawData' / f'{PREFIX}-000'
-# the session's Baserow row (pickled pandas Series) and the mouse's name and sex from the mice table
-DB_ENTRY = DATA_DIR / 'NWB_export' / f'{PREFIX}_baserow_entry.pkl'
-DB_MOUSE = DATA_DIR / 'NWB_export' / f'{PREFIX}_baserow_mouse.json'
+# the session's Baserow row (pickled pandas Series) and the mouse's name and sex from the mice table,
+# saved next to the session's processed folder (or in NWB_export in the earlier test data layout)
+DB_FOLDER = PROCPATH if (PROCPATH / f'{PREFIX}_baserow_entry.pkl').exists() else DATA_DIR / 'NWB_export'
+DB_ENTRY = DB_FOLDER / f'{PREFIX}_baserow_entry.pkl'
+DB_MOUSE = DB_FOLDER / f'{PREFIX}_baserow_mouse.json'
 LEAN_CONFIG = Path(__file__).resolve().parents[1] / 'NWB_converter' / 'export_config_template_2ch-lean.yaml'
 
 pytestmark = pytest.mark.skipif(not all(p.exists() for p in (PROCPATH, RAWPATH, DB_ENTRY, DB_MOUSE)),

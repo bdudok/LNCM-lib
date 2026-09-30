@@ -1,3 +1,4 @@
+from pathlib import Path
 import os
 
 import matplotlib.pyplot as plt
@@ -6,8 +7,8 @@ class Ephys:
     '''to interface with spike detector (emulate legacy ripples.trace)'''
 
     def __init__(self, procpath, prefix, channel=1):
-        epn = os.path.join(procpath, prefix, prefix + '_ephys.npy')
-        self.path = os.path.join(procpath, prefix, '')
+        self.path = Path(procpath) / prefix
+        epn = self.path / f'{prefix}_ephys.npy'
         self.prefix = prefix
         # print(epn)
         if os.path.exists(epn):

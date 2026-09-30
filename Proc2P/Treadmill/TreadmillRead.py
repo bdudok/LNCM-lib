@@ -2,6 +2,7 @@ import contextlib
 import os
 
 import numpy
+from pathlib import Path
 import numpy as np
 import pandas as pd
 from _Dependencies.PyControlv1.code.tools import data_import, session_plot
@@ -19,7 +20,7 @@ class Treadmill:
         :param path: data folder
         :param prefix: session name (ending with timestamp)
         '''
-        self.path = path
+        self.path = Path(path)
         self.pycontrol_version = 0
         self.prefix = prefix
         self.flist = os.listdir(path)
@@ -61,20 +62,20 @@ class Treadmill:
         else:
             string_dtype_off = contextlib.nullcontext()
         with string_dtype_off:
-            self.d = d = self.data_import_function.Session(self.path + self.filename)
+            self.d = d = self.data_import_function.Session(self.path / self.filename)
         d.analog = {}
         if self.pycontrol_version == 1:
             for f in self.flist:
                 if self.prefix in f and f.endswith('.pca'):
                     tag = (f.split('_')[-1].split('.')[0])
-                    d.analog[tag] = data_import.load_analog_data(self.path + f)
+                    d.analog[tag] = data_import.load_analog_data(self.path / f)
             # store calibrated position
             self.abspos = d.analog['pos'][:, 1] / self.calib  # cms
             self.pos_tX = d.analog['pos'][:, 0] / 1000  # seconds
         elif self.pycontrol_version == 2:
             # we won't search for multiple analog races, implement later if necessary
-            self.abspos = numpy.load(self.path+self.filename[:-4]+'_pos.data.npy') / self.calib # cms
-            self.pos_tX = numpy.load(self.path+self.filename[:-4]+'_pos.time.npy')  # seconds
+            self.abspos = numpy.load(self.path / f'{self.filename[:-4]}_pos.data.npy') / self.calib # cms
+            self.pos_tX = numpy.load(self.path / f'{self.filename[:-4]}_pos.time.npy')  # seconds
 
             # convert to speed
         spd = np.diff(self.abspos)
@@ -145,7 +146,7 @@ class Treadmill:
 
     def export_plot(self):
         if self.pycontrol_version == 1:
-            return self.session_export_function.session_plot(self.path + self.filename, fig_no=1, return_fig=True)
+            return self.session_export_function.session_plot(self.path / self.filename, fig_no=1, return_fig=True)
         else:
             return None
 

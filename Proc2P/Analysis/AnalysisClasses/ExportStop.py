@@ -1,5 +1,6 @@
 import numpy
 import os
+from pathlib import Path
 import cv2
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Analysis.LoadPolys import LoadImage
@@ -7,7 +8,7 @@ from Proc2P.Bruker.SyncTools import Sync
 from Proc2P.utils import startstop, gapless
 
 def exportstop(procpath, prefix, mode='stop', channel='Green', stimlen=15, trim=75):
-    dpath = os.path.join(procpath, prefix+'/')
+    dpath = Path(procpath) / prefix
     si = SessionInfo(dpath, prefix)
     si.load()
     image = LoadImage(procpath, prefix)
@@ -65,7 +66,7 @@ def exportstop(procpath, prefix, mode='stop', channel='Green', stimlen=15, trim=
     r = max(numpy.percentile(neg[trim:-trim, trim:-trim], 99), numpy.percentile(pos[trim:-trim, trim:-trim], 99))
     stoprun_rgb[:, :, 2] = numpy.minimum(neg / r, 1) * 255
     stoprun_rgb[:, :, 1] = numpy.minimum(pos / r, 1) * 255
-    cv2.imwrite(dpath + prefix + suf, stoprun_rgb)
+    cv2.imwrite(str(dpath / f'{prefix}{suf}'), stoprun_rgb)
     print('Stop score export finished for', prefix)
 
 
@@ -87,7 +88,7 @@ def calc_response_image(procpath, prefix, events, window, savepath=None, suffix=
     Returns: saves the image
 
     '''
-    dpath = os.path.join(procpath, prefix+'/')
+    dpath = Path(procpath) / prefix
     if savepath is None:
         savepath = dpath
     if not suffix.endswith('.tif'):

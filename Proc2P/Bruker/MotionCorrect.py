@@ -57,9 +57,9 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
         # session ops
         db = {
             'fs': s.si['framerate'],
-            'data_path': [s.dpath, ],
+            'data_path': [str(s.dpath), ],
             'tiff_list': filelist,
-            'save_path0': s.procpath
+            'save_path0': str(s.procpath)
         }
 
         dual_channel = len(s.channelnames) > 1
@@ -75,7 +75,7 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
         # clean up output
         preview_channels = {'R': None, 'G': None, 'B': None}
         mean1 = output_ops['meanImg'] / output_ops['meanImg'].max() * 255
-        previewname = s.procpath + prefix + f'_preview.tif'
+        previewname = s.procpath / f'{prefix}_preview.tif'
         imgshape = [*output_ops['meanImg'].shape]
         if len(imgshape) < 3:
             imgshape.append(3)
@@ -99,10 +99,11 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
         imwrite(previewname, preview)
 
         # remove raw movie
-        os.remove(s.procpath + r'suite2p\plane0/data_raw.bin')
-        os.rename(s.procpath + r'suite2p\plane0/data.bin',
-                  s.procpath + prefix + f'_registered_{s.channelnames[0]}.bin')
+        s2p_folder = s.procpath / 'suite2p' / 'plane0'
+        os.remove(s2p_folder / 'data_raw.bin')
+        os.rename(s2p_folder / 'data.bin',
+                  s.procpath / f'{prefix}_registered_{s.channelnames[0]}.bin')
         if dual_channel:
-            os.remove(s.procpath + r'suite2p\plane0/data_chan2_raw.bin')
-            os.rename(s.procpath + r'suite2p\plane0/data_chan2.bin',
-                      s.procpath + prefix + f'_registered_{s.channelnames[1]}.bin')
+            os.remove(s2p_folder / 'data_chan2_raw.bin')
+            os.rename(s2p_folder / 'data_chan2.bin',
+                      s.procpath / f'{prefix}_registered_{s.channelnames[1]}.bin')

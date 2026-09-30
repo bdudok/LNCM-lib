@@ -1,6 +1,7 @@
 import json
 import os
 import copy
+from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy
 import pandas
@@ -66,9 +67,9 @@ class ImagingSession(object):
                  ripple_tag=None, lfp_ch=1, **kwargs):
         self.opath = opath
         self.prefix = prefix
-        self.procpath = procpath
+        self.procpath = Path(procpath)
         self.tag = tag
-        self.path = os.path.join(procpath, prefix + '/')
+        self.path = self.procpath / prefix
         self.kwargs = kwargs
 
         # load info from json file
@@ -79,10 +80,10 @@ class ImagingSession(object):
         self.CF.fps = self.si['framerate']
 
         # load polygons, option to access image data
-        self.rois = FrameDisplay(procpath, prefix, tag=tag, lazy=True)
+        self.rois = FrameDisplay(self.procpath, prefix, tag=tag, lazy=True)
 
         # load processed traces
-        self.ca = CaTrace(procpath, prefix, tag=tag, ch=ch)
+        self.ca = CaTrace(self.procpath, prefix, tag=tag, ch=ch)
         self.has_ca = self.ca.load() is True
         if tag == 'dummy':
             self.ca.dummy_load(int(self.si['n_frames']))
@@ -123,7 +124,7 @@ class ImagingSession(object):
         self.version = 'LNCM'
 
     def get_file_with_suffix(self, suffix):
-        return os.path.join(self.path, self.prefix + suffix)
+        return self.path / (self.prefix + suffix)
 
     def map_opto(self):
         if self.si['has_opto']:
@@ -156,9 +157,8 @@ class ImagingSession(object):
                 self.has_behavior = True
 
     def get_face_path(self):
-        self.face_path = os.path.join(self.path, '_face/')
-        if not os.path.exists(self.face_path):
-            os.mkdir(self.face_path)
+        self.face_path = self.path / '_face'
+        self.face_path.mkdir(exist_ok=True)
         return self.face_path
 
     def map_face(self):
@@ -168,7 +168,7 @@ class ImagingSession(object):
         for whisker pad motion, use map_whiskers
         '''
         self.get_face_path()
-        trace_file = self.face_path + '_motion_energy.npy'
+        trace_file = self.face_path / '_motion_energy.npy'
         if os.path.exists(trace_file):
             self.mm_trace = numpy.load(trace_file)
         else:
@@ -191,7 +191,7 @@ class ImagingSession(object):
 
     def map_eye(self, thr=0.2, model_name='final'):
         if model_name == 'final':
-            self.eye_trace = numpy.load(os.path.join(self.get_face_path(), '_pupil_trace_final.npy'))
+            self.eye_trace = numpy.load(self.get_face_path() / '_pupil_trace_final.npy')
         else:
             self.eye_trace = FitEye(self.get_face_path(), thr, model_name=model_name).get_trace()
         self.eye_trace /= numpy.nanmax(self.eye_trace) #norm to max
@@ -459,9 +459,9 @@ class ImagingSession(object):
         path = self.ripples.path
         # later extend this to use multiple channels
         for band, key in zip(bands, keys):
-            cfn = path + key + '.npy'
+            cfn = path / f'{key}.npy'
             if os.path.exists(cfn):
-                setattr(self.ephys, key, numpy.load(path + key + '.npy'))
+                setattr(self.ephys, key, numpy.load(cfn))
             else:
                 lprint(self, f'Saving {band} power file ...')
                 filt = Filter.Filter(self.ephys.trace, fs)

@@ -1,4 +1,5 @@
 import numpy, os
+from pathlib import Path
 import tifffile
 from matplotlib import pyplot as plt
 from matplotlib.widgets import RectangleSelector, Button
@@ -15,12 +16,12 @@ import cv2
 class CropVideo:
     __name__ = 'CropVideo'
     def __init__(self, cam_file, savepath):
-        self.fn = cam_file
+        self.fn = str(cam_file)
         self.im = None
         print(cam_file)
-        self.savepath = savepath
-        if not os.path.exists(savepath):
-            os.mkdir(savepath)
+        self.savepath = Path(savepath)
+        if not os.path.exists(self.savepath):
+            os.mkdir(self.savepath)
 
     def open_video(self):
         # look for the raw file:
@@ -101,16 +102,16 @@ class CropVideo:
 
     def save_eye_crop(self, *args):
         if self.rect is not None:
-            with open(self.savepath + '_eye-crop.json', 'w') as f:
+            with open(self.savepath / '_eye-crop.json', 'w') as f:
                 self.eye_rect = self.rect
                 json.dump(self.rect, f)
                 self.b_save.label.set_text('Eye Saved')
                 print(self.rect, 'saved.')
-            tifffile.imwrite(self.savepath + '_video_preview.tif', self.preview)
+            tifffile.imwrite(self.savepath / '_video_preview.tif', self.preview)
 
     def save_motion_crop(self, *args):
         if self.rect is not None:
-            with open(self.savepath + '_motion-crop.json', 'w') as f:
+            with open(self.savepath / '_motion-crop.json', 'w') as f:
                 self.motion_rect = self.rect
                 json.dump(self.rect, f)
                 self.m_save.label.set_text('Motion Saved')
@@ -118,14 +119,14 @@ class CropVideo:
 
     def save_custom_crop(self, *args):
         if self.rect is not None:
-            with open(self.savepath + f'_{self.save_key}-crop.json', 'w') as f:
+            with open(self.savepath / f'_{self.save_key}-crop.json', 'w') as f:
                 self.motion_rect = self.rect
                 json.dump(self.rect, f)
                 self.m_save.label.set_text(f' {self.save_key} saved')
                 print(self.rect, 'saved.')
 
     def load_eye_crop(self):
-        fn = self.savepath + '_eye-crop.json'
+        fn = self.savepath / '_eye-crop.json'
         self.eye_rect = self.load(fn)
         return self.eye_rect
 
@@ -138,7 +139,7 @@ class CropVideo:
             return False
 
     def load_motion_crop(self):
-        fn = self.savepath + '_motion-crop.json'
+        fn = self.savepath / '_motion-crop.json'
         return self.load(fn)
 
     def compute_eye_trace(self):
@@ -169,12 +170,12 @@ class CropVideo:
         # determine location of max drop
         drop = -numpy.diff(m, axis=1)
         drop_loc = numpy.argmax(drop, axis=1)
-        numpy.save(self.savepath + 'eye_trace.npy', drop_loc)
+        numpy.save(self.savepath / 'eye_trace.npy', drop_loc)
         print(self.savepath, 'eye trace saved')
 
     def compute_motion_map(self):
         '''uses Video.PullMotion'''
-        output_fn = self.savepath + '_motion_energy.npy'
+        output_fn = self.savepath / '_motion_energy.npy'
         if os.path.exists(output_fn):
             return numpy.load(output_fn)
         crop = self.load_motion_crop()

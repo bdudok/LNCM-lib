@@ -2,6 +2,7 @@ import numpy
 from tifffile import imwrite
 # import cv2
 import os
+from pathlib import Path
 
 # from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Analysis.LoadPolys import LoadImage
@@ -16,7 +17,7 @@ def TimeProfile(procpath, prefix, cfg, ret=False, channel=0):
     kernel = cfg['Kernel']
     if 'Channel' in cfg:
         channel = cfg['Channel']
-    dpath = os.path.join(procpath, prefix+'/')
+    dpath = Path(procpath) / prefix
     # si = SessionInfo(dpath, prefix)
     # si.load()
     image = LoadImage(procpath, prefix)
@@ -53,7 +54,7 @@ def TimeProfile(procpath, prefix, cfg, ret=False, channel=0):
         im /= numpy.percentile(im, 95)
         im = numpy.minimum(1, im)
         fn = f'_linescan_x_{line}-{kernel}-ch{channel}_{duration[0]}-{duration[1]}.tif'
-        imwrite(dpath + prefix + fn, (im.transpose() * 255).astype('uint8'))
+        imwrite(dpath / f'{prefix}{fn}', (im.transpose() * 255).astype('uint8'))
 
 
 # def OEProfile(prefix, ret=False): #not updated

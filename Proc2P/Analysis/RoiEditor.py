@@ -4,6 +4,7 @@ from Proc2P.Bruker.LoadRegistered import check_compatible_ops
 from Proc2P.utils import lprint, logger
 import os
 import shutil
+from pathlib import Path
 import scipy
 import cv2
 import numpy
@@ -76,16 +77,16 @@ class RoiEditor(object):
     __name__ = 'RoiEditor'
 
     def __init__(self, procpath, prefix):
-        self.img = FrameDisplay(procpath, prefix, tag='skip')
-        self.procpath = procpath
+        self.procpath = Path(procpath)
+        self.img = FrameDisplay(self.procpath, prefix, tag='skip')
         self.prefix = prefix
-        self.opPath = os.path.join(procpath, prefix + '/')
+        self.opPath = self.procpath / prefix
 
     def find_rois(self):
         exs = []
         for f in os.listdir(self.opPath):
             if self.prefix in f and '_saved_roi_' in f:
-                if os.path.getsize(self.opPath + f) > 128:
+                if os.path.getsize(self.opPath / f) > 128:
                     exs.append(f)
         exs.sort()
         return exs
@@ -117,8 +118,9 @@ class RoiEditor(object):
                 rois = numpy.append(rois, numpy.empty((rois_chunk, rois.shape[1])), axis=0)
             rois[roi_counter:new_length, :] = new_array
             roi_counter += len(new_array)
-        if not fn.endswith('.npy'):
-            fn += '.npy'
+        fn = Path(fn)
+        if fn.suffix != '.npy':
+            fn = fn.with_name(fn.name + '.npy')
         numpy.save(fn, rois[:roi_counter])
 
     @staticmethod
@@ -166,7 +168,7 @@ class RoiEditor(object):
         n_channels = len(im.channels)
         maxint = self.img.image.imdat.bitdepth - 1
         force_re = False
-        opto_name = self.opPath + prefix + '_bad_frames.npy'
+        opto_name = self.opPath / f'{prefix}_bad_frames.npy'
         if exclude_opto and os.path.exists(opto_name):
             have_opto = True
             bad_frames = numpy.load(opto_name)
@@ -179,8 +181,8 @@ class RoiEditor(object):
         # x0, x1, y0, y1 = 10, 15, 10, 10
         x0, x1, y0, y1 = 1, 1, 1, 1  # not needed for bruker
         # create 50 frames which are each an average of 100, in random order
-        dsname = self.opPath + prefix + '_avgs' + '.sima'
-        idsname = self.opPath + prefix + '_iavgs' + '.sima'
+        dsname = str(self.opPath / f'{prefix}_avgs.sima')
+        idsname = str(self.opPath / f'{prefix}_iavgs.sima')
         if 'Start' in config:
             force_re = True
             try:
@@ -238,7 +240,7 @@ class RoiEditor(object):
                 id -= id.min()
                 id /= numpy.percentile(id, 99)
                 nicepic[y0:-y1, x0:-x1, lut[2]] = numpy.minimum(id, 1) * 255
-            cv2.imwrite(self.opPath + prefix + '_avgmax.tif', nicepic)
+            cv2.imwrite(str(self.opPath / f'{prefix}_avgmax.tif'), nicepic)
             lprint(self, prefix, 'avgmax.tif saved', logger=log)
 
             # create SIMA object
@@ -317,12 +319,12 @@ class RoiEditor(object):
         ds, ids = None, None
         for fn in (dsname, idsname):
             try:
-                shutil.rmtree(fn + '//')
+                shutil.rmtree(fn)
             except:
                 pass
 
     def saveauto(self, input_rois, tag, x0, y0, filter=None):
-        fn = self.opPath + self.prefix + '_saved_roi_' + tag
+        fn = self.opPath / f'{self.prefix}_saved_roi_{tag}'
         nrs = []
         for poly in input_rois:
             roi = []

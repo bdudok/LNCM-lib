@@ -118,9 +118,9 @@ if __name__ == '__main__':
         # session ops
         db = {
             'fs': s.si['framerate'],
-            'data_path': [s.dpath, ],
+            'data_path': [str(s.dpath), ],
             'tiff_list': filelist,
-            'save_path0': s.procpath
+            'save_path0': str(s.procpath)
         }
 
         # adjust ops if dual channel
@@ -136,7 +136,7 @@ if __name__ == '__main__':
 
         # clean up output
         mean1 = output_ops['meanImg'] / output_ops['meanImg'].max() * 255
-        previewname = s.procpath + prefix + f'_preview.tif'
+        previewname = s.procpath / f'{prefix}_preview.tif'
         if not dual_channel:
             preview = mean1
         else:
@@ -147,12 +147,13 @@ if __name__ == '__main__':
         imwrite(previewname, preview)
 
         # remove raw movie and move output to final destination
-        os.remove(s.procpath + r'suite2p\plane0/data_raw.bin')
-        os.rename(s.procpath + r'suite2p\plane0/data.bin',
-                  s.procpath + prefix + f'_registered_{s.channelnames[0]}.bin')
+        s2p_folder = s.procpath / 'suite2p' / 'plane0'
+        os.remove(s2p_folder / 'data_raw.bin')
+        os.rename(s2p_folder / 'data.bin',
+                  s.procpath / f'{prefix}_registered_{s.channelnames[0]}.bin')
         if dual_channel:
-            os.remove(s.procpath + r'suite2p\plane0/data_chan2_raw.bin')
-            os.rename(s.procpath + r'suite2p\plane0/data_chan2.bin',
-                      s.procpath + prefix + f'_registered_{s.channelnames[1]}.bin')
+            os.remove(s2p_folder / 'data_chan2_raw.bin')
+            os.rename(s2p_folder / 'data_chan2.bin',
+                      s.procpath / f'{prefix}_registered_{s.channelnames[1]}.bin')
 
         print(f'S2P processing completed for {prefix}.')

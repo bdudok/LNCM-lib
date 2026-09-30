@@ -34,6 +34,14 @@ SzViewGUI - review EEG with synced video, manually curate and edit automatically
 ### Proc2p.Analysis.BatchGUI
 GUI for processing and inspecting ImagingSession 
 
+# Conventions for paths
+- Library classes store paths as `pathlib.Path` and accept `str` or `Path` as input.
+- Join folders with `/` on `Path` objects. Don't use string `+`, hard-coded separators or trailing slashes.
+- Each class builds its own file names in one method (e.g. `ImagingSession.get_file_with_suffix`).
+- Library code does not call `os.chdir`.
+- `touch_path` returns a string with a trailing slash, for use in analysis scripts.
+- GUIs may keep their own folder strings. `Proc2P.Legacy` and `_Dependencies` are not converted.
+
 # See also from the lab:
 
 ## Recorder

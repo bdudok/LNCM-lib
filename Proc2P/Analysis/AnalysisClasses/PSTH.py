@@ -1,4 +1,5 @@
 import os.path
+from pathlib import Path
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.Analysis.NormalizeVm import arima_filtfilt
 from Proc2P.utils import lprint, outlier_indices
@@ -15,12 +16,11 @@ class PSTH:
         identifier: unique name of data set, used to store data in files'''
         self.path = path
         self.identifier = identifier
-        self.wdir = os.path.join(path, 'EventTrigger', '')
-        self.lock_name = self.wdir + '_' + identifier + '.lock'
-        if not os.path.exists(self.wdir):
-            os.mkdir(self.wdir)
-        self.items_filename = self.wdir + '_' + self.identifier + '.items'
-        self.groups_filename = self.wdir + '_' + self.identifier + '.groups'
+        self.wdir = Path(path) / 'EventTrigger'
+        self.lock_name = self.wdir / f'_{identifier}.lock'
+        self.wdir.mkdir(exist_ok=True)
+        self.items_filename = self.wdir / f'_{self.identifier}.items'
+        self.groups_filename = self.wdir / f'_{self.identifier}.groups'
         # prepare container attributes
         self.field_names = ['Path', 'Prefix', 'ROItag', 'Channel', 'CellIndex',
                             'TraceIndex']  # fields in item_dict tuples
@@ -107,20 +107,20 @@ class PSTH:
                     self.group_dict[cell_id][g_n] = group[gi]
 
 
-    def sanitize_filename(self, fn):
-        d, f = os.path.split(os.path.realpath(fn))
-        return os.path.join(d, f.replace('.', '_'))
+    def excel_filename(self, fn):
+        '''Excel copy of a pickled file: dots in the file name replaced with _'''
+        return fn.with_name(fn.name.replace('.', '_') + '.xlsx')
     def save_items(self):
         '''stores items and groups dicts in pickled binary pandas dataframes
         also saved as excel for future proof'''
         # store items
         df = pandas.DataFrame.from_dict(self.item_dict, orient='index', dtype=None, columns=self.field_names)
         df.to_pickle(self.items_filename)
-        df.to_excel(self.sanitize_filename(self.items_filename) + '.xlsx')
+        df.to_excel(self.excel_filename(self.items_filename))
         # store groups
         df = pandas.DataFrame.from_dict(self.group_dict, orient='index', dtype=None, columns=self.group_names)
         df.to_pickle(self.groups_filename)
-        df.to_excel(self.sanitize_filename(self.groups_filename) + '.xlsx')
+        df.to_excel(self.excel_filename(self.groups_filename))
         # create lock
         self.locked = True
         with open(self.lock_name, 'w') as f:
@@ -188,7 +188,6 @@ class PSTH:
             lprint(self, ' '.join(('Pulling:', prefix, tag, self.trigger_name, self.param_key)))
             data = numpy.empty((1000, 2 * self.window_w + self.extra_columns))
             data_counter = 0
-            os.chdir(path)
             a = ImagingSession(path, prefix, tag=tag, norip=not self.uses_ripples, ch=ch, **self.session_kwargs)
             if self.uses_ripples:
                 rt = self.session_kwargs.get('ripple_tag')
@@ -368,22 +367,20 @@ class PSTH:
         if self.mask_function_kwargs is not None:
             stripchars = r'"{:} ' + "'"
             str_builder.append(''.join([x for x in str(self.mask_function_kwargs) if x not in stripchars]))
-        fn = self.wdir + '_'.join([str(s) for s in str_builder])
+        name = '_'.join([str(s) for s in str_builder])
         if weight:
-            return fn + '_weights.npy'
+            return self.wdir / f'{name}_weights.npy'
         else:
-            return fn + '.npy'
+            return self.wdir / f'{name}.npy'
 
     def summary(self):
         '''load traces and collect in a single array'''
-        os.chdir(self.path)
         data = numpy.empty((1000, 2 * self.window_w + self.extra_columns))
         weights = numpy.empty(1000)
         data_counter = 0
         self.event_counter = 0
         for session_data, cell_data in self.pull_dict.items():
             path, prefix, tag, ch = session_data
-            os.chdir(path)
             lines = numpy.load(self.get_numpy_name(prefix, tag, ch))
             new_length = data_counter + len(lines)
             if new_length > len(data):

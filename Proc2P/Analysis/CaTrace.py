@@ -1,3 +1,4 @@
+from pathlib import Path
 import numpy
 import multiprocessing
 from multiprocessing import Process, Queue
@@ -48,9 +49,9 @@ class CaTrace(object):
         if verbose:
             print(f'Firing called with ch={ch}, tag={tag}')
         self.peakdet = peakdet  # removed peakdet from old Firing class, this doesn't do anything.
-        self.path = path
+        self.path = Path(path)
         self.prefix = prefix
-        self.opPath = os.path.join(self.path, self.prefix + '/')
+        self.opPath = self.path / self.prefix
         self.is_dual = False
         self.log = logger()
         self.log.set_handle(path, prefix)
@@ -68,7 +69,7 @@ class CaTrace(object):
             assert False
         self.ch = ch
         self.tag = tag
-        self.pf = self.opPath + f'{prefix}_trace_{tag}-ch{ch}'  # folder name
+        self.pf = self.opPath / f'{prefix}_trace_{tag}-ch{ch}'  # folder name
         self.sync = Sync(path, prefix)
         self.keys = ['bsl', 'rel', 'ntr', 'trace', 'smtr', ]
         self.verbose = verbose
@@ -104,11 +105,11 @@ class CaTrace(object):
         if trace is not None:
             self.trace = trace
         else:
-            file_name = self.opPath + f'{self.prefix}_trace_{self.tag}.npy'
+            file_name = self.opPath / f'{self.prefix}_trace_{self.tag}.npy'
             if os.path.exists(file_name):
                 self.trace = numpy.load(file_name)
             else:
-                lprint(self, 'Missing file: ' + file_name)
+                lprint(self, f'Missing file: {file_name}')
                 return -1
         if len(self.trace.shape) == 3:
             # print(self.ch, self.trace.shape)
@@ -121,7 +122,7 @@ class CaTrace(object):
             self.trace = self.trace[:, :trunc]
         self.cells, self.frames = self.trace.shape
         if not self.cells:
-            lprint(self, 'Zero cells in roi: ' + file_name)
+            lprint(self, f'Zero cells in roi: {file_name}')
             return -1
         if self.verbose:
             print(self.prefix, 'Traces loaded', str(self.cells))
@@ -185,22 +186,22 @@ class CaTrace(object):
             shutil.rmtree(self.pf)
         os.mkdir(self.pf)
         for key in self.keys:
-            numpy.save(self.pf + '//' + key, self.__getattribute__(key))
+            numpy.save(self.pf / f'{key}.npy', self.__getattribute__(key))
         self.version_info = {'v': '13', 'bsltype': self.bsltype, 'sz_mode': str(self.ignore_saturation),
                              'channel': str(self.ch),
                              'fps': f'{round(self.fps, 1)}',
                              'bg_corr': str(self.last_bg)}  # should contain only single strings as values
-        numpy.save(self.pf + '//' + 'info', self.version_info)
+        numpy.save(self.pf / 'info.npy', self.version_info)
         message = f'Tag: {self.tag}, Ch: {self.ch}, sz_mode: {self.ignore_saturation}, baseline: {self.bsltype}'
         lprint(self, self.prefix, self.cells, 'cells saved.', message, logger=self.log)
 
     # these functions are used to save additional time series shaped (c, f) in the traces folder.
     def save_custom(self, key, value):
-        numpy.save(self.pf + '//' + key, value)
+        numpy.save(self.pf / f'{key}.npy', value)
 
     def get_custom(self, key):
         if not hasattr(self, key):
-            fn = self.pf + '//' + key + '.npy'
+            fn = self.pf / f'{key}.npy'
             if os.path.exists(fn):
                 self.__setattr__(key, numpy.load(fn))
             else:
@@ -209,18 +210,18 @@ class CaTrace(object):
 
     def load(self):
         if not os.path.exists(self.pf):
-            self.pf = self.opPath + f'{self.prefix}_trace_{self.tag}'
+            self.pf = self.opPath / f'{self.prefix}_trace_{self.tag}'
         if not os.path.exists(self.pf):
             if self.tag == None:
                 self.tag = ''
             pf_try = [self.tag + '.np', self.tag + '-ch0.np', '1' + '.np', '1' + '-ch0.np', self.tag + 'dual.np',
                       '1-dual.np']
             for x in pf_try:
-                pf = self.opPath + self.prefix + '-' + x
+                pf = self.opPath / f'{self.prefix}-{x}'
                 if os.path.exists(pf):
                     self.pf = pf
                     lprint(self, 'Loading traces from', pf)
-                break
+                    break
         if not os.path.exists(self.pf):
             if self.tag in ('skip', 'off', 'dummy'):
                 lprint(self, 'skipped loading ca')
@@ -228,7 +229,7 @@ class CaTrace(object):
             else:
                 raise FileNotFoundError(f'Make sure the .np folder exists: {self.pf}\nPath is: {os.getcwd()}')
         for key in self.keys:
-            fn = self.pf + '//' + key + '.npy'
+            fn = self.pf / f'{key}.npy'
             if os.path.exists(fn):
                 self.__setattr__(key, numpy.load(fn))
             else:
@@ -242,10 +243,10 @@ class CaTrace(object):
         # keeping the version above for backwards compatibility with 'dual' np folders.
         # if the existing data is dual, we're good. if not, read second single and append.
         if self.channels == 1 and self.is_dual:
-            second_folder = self.opPath + f'{self.prefix}_trace_{self.tag}-ch{1}'  # folder name
+            second_folder = self.opPath / f'{self.prefix}_trace_{self.tag}-ch{1}'  # folder name
             found_second = False
             for key in self.keys:
-                fn = second_folder + '//' + key + '.npy'
+                fn = second_folder / f'{key}.npy'
                 if os.path.exists(fn):
                     found_second = True
                     tr1 = self.__getattribute__(key)
@@ -253,7 +254,7 @@ class CaTrace(object):
                     self.__setattr__(key, numpy.dstack((tr1, tr2)))
             if not found_second:
                 self.is_dual = False
-        vfn = self.pf + '//' + 'info' + '.npy'
+        vfn = self.pf / 'info.npy'
         # load version info text into dict
         if os.path.exists(vfn):
             vtx = str(numpy.load(vfn, allow_pickle=True))

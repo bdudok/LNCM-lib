@@ -3,6 +3,7 @@ import json
 import matplotlib.pyplot as plt
 import numpy
 import os
+from pathlib import Path
 import pandas
 from sklearn import cluster
 import xml.etree.ElementTree as ET
@@ -19,8 +20,8 @@ class PreProc:
 
     def __init__(self, dpath, procpath, prefix, btag='000', rsync_channel=0, led_channel=1,
                  debug=False, overwrite=False, db_entry=None):
-        self.dpath = os.path.join(dpath, prefix + f'-{btag}/')  # raw data
-        self.procpath = os.path.join(procpath, prefix) + '/'  # output processed data
+        self.dpath = Path(dpath) / f'{prefix}-{btag}'  # raw data
+        self.procpath = Path(procpath) / prefix  # output processed data
         self.prefix = prefix  # recorder prefix tag
         self.btag = btag  # tag appended by bruker (000 by default)
         self.logstring = ''
@@ -61,7 +62,7 @@ class PreProc:
     def lprint(self, *args, **kwargs):
         self.log(lprint(*args, **kwargs))
     def save_log(self):
-        fn = self.procpath+self.prefix+f'_{get_user()}_PreProcLog.txt'
+        fn = self.procpath / f'{self.prefix}_{get_user()}_PreProcLog.txt'
         with open(fn, 'w') as f:
             f.write(self.logstring)
 
@@ -180,8 +181,8 @@ class PreProc:
                 pandas.DataFrame([[float(frame.get(key)) for key in keys]], columns=keys, index=[frame.get('index')]))
         ft_op = pandas.concat(dfs)
         ft_op.sort_values('absoluteTime', inplace=True)
-        ft_op.to_excel(self.procpath + self.prefix + '_FrameTimes.xlsx')
-        numpy.save(self.procpath + self.prefix + '_FrameTimes.npy', ft_op.values)
+        ft_op.to_excel(self.procpath / f'{self.prefix}_FrameTimes.xlsx')
+        numpy.save(self.procpath / f'{self.prefix}_FrameTimes.npy', ft_op.values)
         self.frametimes = ft_op['relativeTime'].values
         self.n_frames = len(dfs)
 
@@ -190,12 +191,12 @@ class PreProc:
                              'framerate', 'linetime', 'channelnames'])
 
     def parse_cam(self):
-        vfn = self.dpath+self.prefix+'.avi'
+        vfn = self.dpath / f'{self.prefix}.avi'
         if os.path.exists(vfn):
-            self.cam_file = vfn
+            self.cam_file = str(vfn)
             self.md_keys.append('cam_file')
             self.found_output.append('Camera')
-        tfn = self.dpath + self.prefix + '_CamTimers.npy'
+        tfn = self.dpath / f'{self.prefix}_CamTimers.npy'
         if os.path.exists(tfn):
             cam_frame_times = numpy.load(tfn)  # millis
             scope_frame_times = (self.frametimes * 1000).astype('int64')
@@ -217,14 +218,14 @@ class PreProc:
                     f0 = found_frame
                 else:
                     cam_frames[fi] = 0
-            numpy.save(self.procpath + self.prefix + '_cam_sync_frames.npy', cam_frames)
+            numpy.save(self.procpath / f'{self.prefix}_cam_sync_frames.npy', cam_frames)
             self.found_output.append('CameraTiming')
 
     def parse_TTLs(self):
-        vdat = pandas.read_csv(self.dpath + self.voltage_data)
+        vdat = pandas.read_csv(self.dpath / self.voltage_data)
         self.vdat = vdat
         # get fs
-        tree = ET.parse(self.dpath + self.voltage_config)
+        tree = ET.parse(self.dpath / self.voltage_config)
         root = tree.getroot()
         experiment = root.find('Experiment')
         rate = experiment.find('Rate')
@@ -289,9 +290,9 @@ class PreProc:
                             stimframes = None
                 if stimframes is not None and len(stimframes):
                     badframes = numpy.array(badframes, dtype='int')
-                    led_op.to_excel(self.procpath + self.prefix + '_StimFrames.xlsx')
-                    numpy.save(self.dpath + 'bad_frames.npy', badframes)
-                    numpy.save(self.procpath + self.prefix + '_bad_frames.npy', badframes)
+                    led_op.to_excel(self.procpath / f'{self.prefix}_StimFrames.xlsx')
+                    numpy.save(self.dpath / 'bad_frames.npy', badframes)
+                    numpy.save(self.procpath / f'{self.prefix}_bad_frames.npy', badframes)
                 self.found_output.append('StimPulses')
 
         # rsync times
@@ -300,7 +301,7 @@ class PreProc:
             vmax = 3.3
             pos = numpy.where(numpy.convolve(trace > vmax * 0.5, [1, -1]) == 1)[0]
             self.ttl_times = pos / self.fs
-            numpy.save(self.procpath + self.prefix + '_2pTTLtimes.npy', self.ttl_times)
+            numpy.save(self.procpath / f'{self.prefix}_2pTTLtimes.npy', self.ttl_times)
             self.found_output.append('Rsync')
 
         ##append metadata attribs
@@ -334,7 +335,7 @@ class PreProc:
                 ephys[ci + 1] = trace[ci] * 1000
                 self.found_output.append(f'LFP{ci+1}')
             self.ephys = ephys
-            numpy.save(self.procpath + self.prefix + '_ephys.npy', ephys)
+            numpy.save(self.procpath / f'{self.prefix}_ephys.npy', ephys)
 
         ##append metadata attribs
         self.lfp_units = 'microvolts'
@@ -353,7 +354,7 @@ class PreProc:
             elif tm.pycontrol_version == 2:
                 fig, ax = plt.subplots()
                 ax.plot(tm.pos_tX, tm.abspos)
-            fig.savefig(self.procpath + self.prefix + '_treadmill.png', dpi=300)
+            fig.savefig(self.procpath / f'{self.prefix}_treadmill.png', dpi=300)
             plt.close()
         # read rSync
         tm_rsync = tm.get_Rsync_times().astype('int') #ms
@@ -377,7 +378,7 @@ class PreProc:
                 self.lprint(self, 'RSync align still failed')
         if not skip:
             self.frame_at_treadmill = align.B_to_A(self.frametimes * 1000)
-            numpy.save(self.procpath + self.prefix + '_frame_tm_times.npy', self.frame_at_treadmill)
+            numpy.save(self.procpath / f'{self.prefix}_frame_tm_times.npy', self.frame_at_treadmill)
             # resample speed, pos, laps to scope frames
             indices = self.get_frame_tm_x(self.frame_at_treadmill, tm.pos_tX * 1000)
             op = numpy.empty(len(self.frame_at_treadmill))
@@ -385,7 +386,7 @@ class PreProc:
             for Y, tag in zip((tm.smspd, tm.pos, tm.speed, tm.laps), ('smspd', 'pos', 'spd', 'laps')):
                 op[:] = numpy.nan
                 op[mask] = Y[indices[mask]]
-                numpy.save(self.procpath + self.prefix + f'_{tag}.npy', op)
+                numpy.save(self.procpath / f'{self.prefix}_{tag}.npy', op)
             # add lap and reward number to output
             self.laps = len(tm.laptimes)
             licks = []
@@ -416,7 +417,7 @@ class PreProc:
             if rz_started is not None:
                 rzs.append((rz_started, len(self.frametimes)))
             bdat = {'licks': licks, 'rewards': rewards, 'RZ': rzs}
-            with open(self.procpath + self.prefix + f'_bdat.json', 'w') as f:
+            with open(self.procpath / f'{self.prefix}_bdat.json', 'w') as f:
                 json.dump(bdat, f)
 
             self.rewards = len(rewards)
@@ -468,7 +469,11 @@ class PreProc:
         Create a SessionInfo, add all the relevant attrs, and save to json in the output path.
         '''
         for key in self.md_keys:
-            self.si[key] = self.__getattribute__(key)
+            value = self.__getattribute__(key)
+            if isinstance(value, Path):
+                # stored as a string ending in a separator, as before, for code that reads it back
+                value = os.path.join(value, '')
+            self.si[key] = value
         self.si.save()
 
     def load_metadata(self):

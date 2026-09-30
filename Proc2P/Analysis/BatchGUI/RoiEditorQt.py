@@ -352,7 +352,7 @@ class GUI_main(QtWidgets.QMainWindow):
             print('0 rois, roi file not saved for', prefix)
             return -1
         fn = prefix + suffix + self.preferred_tag
-        if os.path.exists(opPath + fn + '.npy'):
+        if os.path.exists(opPath / f'{fn}.npy'):
             exs = [0]
             for f in os.listdir(opPath):
                 if prefix in f and suffix in f:
@@ -362,10 +362,10 @@ class GUI_main(QtWidgets.QMainWindow):
                         if roi_id.isdigit():
                             exs.append(int(roi_id))
             exi = max(exs) + 1
-            while os.path.exists(opPath + prefix + suffix + str(exi) + '.npy'):
+            while os.path.exists(opPath / f'{prefix}{suffix}{exi}.npy'):
                 exi += 1
             fn = prefix + suffix + str(exi)
-        RoiEditor.save_roi(self.saved_rois, opPath + fn, self.rois.img.image.info['sz'])
+        RoiEditor.save_roi(self.saved_rois, opPath / fn, self.rois.img.image.info['sz'])
         msg = f'{len(self.saved_rois)} saved in {fn}'
         lprint(self, msg, logger=self.log)
         QtWidgets.QMessageBox(QtWidgets.QMessageBox.NoIcon,  # no standard icon → no system chime
