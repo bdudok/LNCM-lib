@@ -1,3 +1,4 @@
+from pathlib import Path
 import matplotlib.path as mplpath
 import matplotlib.pyplot as plt
 import numpy
@@ -63,7 +64,7 @@ class LoadPolys(object):
 class LoadImage(object):
     def __init__(self, procpath, prefix, source=Source.S2P):
         self.prefix = prefix
-        self.opPath = procpath + prefix + '/'
+        self.opPath = Path(procpath) / prefix
         self.data_loaded = False
         self.imdat = LoadRegistered(procpath, prefix, source)
         self.info = {'sz': (self.imdat.Ly, self.imdat.Lx)}
@@ -80,7 +81,7 @@ class LoadImage(object):
         #     return self.data[zplane][frame, :, :, ch]
 
     def show_field(self):
-        preview_fn = self.opPath + self.prefix + '_preview.tif'
+        preview_fn = self.opPath / (self.prefix + '_preview.tif')
         pic = tifffile.imread(preview_fn)
         if len(pic.shape) < 3:
             rgb_array = numpy.zeros((*pic.shape, 3), dtype='uint8')

@@ -1,4 +1,5 @@
 import numpy
+from pathlib import Path
 
 import Proc2P
 from Proc2P import *
@@ -109,7 +110,7 @@ class Spatial:
     '''Compute and store place cell-specific data of ImagingSession'''
 
     def __init__(self):
-        self.path: str = None
+        self.path: Path = None
         self.prefix: str = None
         self.tag: str = None
         self.session: ImagingSession = None
@@ -147,7 +148,7 @@ class Spatial:
         self.getdir()
 
     def getdir(self):
-        self.dir = f'{self.path + self.prefix}-{self.tag}-Spatial/'
+        self.dir = Path(self.path) / f'{self.prefix}-{self.tag}-Spatial'
 
     def set_PCs(self, cells, loc=None, sort=False):
         self.cells = numpy.array(cells)
@@ -217,39 +218,39 @@ class Spatial:
     def save_named_set(self, tag):
         assert self.cells is not None
         nfn = f'{self.tag}-{tag}'
-        if os.path.exists(self.dir + nfn + '.hash'):
+        if os.path.exists(self.dir / (nfn + '.hash')):
             if not self.force_mode:
                 raise FileExistsError('tag exists. set force mode to overwrite')
             else:
                 print(self.prefix, 'Overwriting content for', tag)
                 for f in os.listdir(self.dir):
                     if nfn in f:
-                        os.remove(self.dir + f)
-        with open(self.dir + nfn + '.hash', 'w') as f:
+                        os.remove(self.dir / f)
+        with open(self.dir / (nfn + '.hash'), 'w') as f:
             f.write(str(self.hash))
-        hfn = self.dir + nfn + f'_{self.hash}'
-        numpy.save(hfn + '.cells', self.cells)
+        hfn = nfn + f'_{self.hash}'
+        numpy.save(self.dir / (hfn + '.cells'), self.cells)
         if self.loc is not None:
-            numpy.save(hfn + '.locs', self.loc)
+            numpy.save(self.dir / (hfn + '.locs'), self.loc)
         self.setname = tag
 
     def load_named_set(self, tag):
         nfn = f'{self.tag}-{tag}'
-        hfn = self.dir + nfn + '.hash'
+        hfn = self.dir / (nfn + '.hash')
         if not os.path.exists(hfn):
             return -1
         with open(hfn, 'r') as f:
             self.hash = f.read()
-        hfn = self.dir + nfn + f'_{self.hash}'
-        self.cells = numpy.load(hfn + '.cells.npy')
-        lfn = hfn + '.locs.npy'
+        hfn = nfn + f'_{self.hash}'
+        self.cells = numpy.load(self.dir / (hfn + '.cells.npy'))
+        lfn = self.dir / (hfn + '.locs.npy')
         if os.path.exists(lfn):
             self.loc = numpy.load(lfn)
         self.setname = tag
 
     def set_pos(self, x=None):
         '''store or load position. norm. 0-1, for each frame'''
-        pfn = self.dir + 'pos.npy'
+        pfn = self.dir / 'pos.npy'
         if os.path.exists(pfn):
             self.pos = numpy.load(pfn)
         else:
@@ -279,8 +280,8 @@ class Spatial:
 
     def reldist_array(self):
         nfn = f'{self.tag}-{self.setname}'
-        hfn = self.dir + nfn + f'_{self.hash}'
-        rdfn = hfn + '.reldists.npy'
+        hfn = nfn + f'_{self.hash}'
+        rdfn = self.dir / (hfn + '.reldists.npy')
         if os.path.exists(rdfn):
             rd = numpy.load(rdfn)
         else:
@@ -297,7 +298,7 @@ class Spatial:
         self.cache['rd'] = rd
 
     def get_lut(self):
-        lfn = f'{self.dir}{self.resolution}_distances.lut.npy'
+        lfn = self.dir / f'{self.resolution}_distances.lut.npy'
         if os.path.exists(lfn):
             lut = numpy.load(lfn)
         else:
@@ -429,13 +430,13 @@ class Spatial:
             save_tag = 'self'
         fps = self.session.fps
         nfn = f'{self.tag}-{self.setname}'
-        hfn = self.dir + nfn + f'_{self.hash}'
+        hfn = nfn + f'_{self.hash}'
         if trim == 100:
-            rdfn = hfn + f'.binnedsignals-{param}-{res}-{save_tag}-{where}.npy'
+            rdfn = self.dir / (hfn + f'.binnedsignals-{param}-{res}-{save_tag}-{where}.npy')
         else:
-            rdfn = hfn + f'.binnedsignals-{param}-{res}-{save_tag}-{where}-{trim}.npy'
+            rdfn = self.dir / (hfn + f'.binnedsignals-{param}-{res}-{save_tag}-{where}-{trim}.npy')
         if norm_trace:
-            rdfn = rdfn.replace('.npy', '-norm.npy')
+            rdfn = rdfn.with_name(rdfn.name.replace('.npy', '-norm.npy'))
         if os.path.exists(rdfn) and not overwrite:
             print('Loading', rdfn)
             ba = numpy.load(rdfn)
@@ -445,7 +446,7 @@ class Spatial:
             rd = self.cache['rd']
 
             if where is None:
-                rdfn = hfn + f'.binnedsignals-{param}-{res}-{save_tag}.npy'
+                rdfn = self.dir / (hfn + f'.binnedsignals-{param}-{res}-{save_tag}.npy')
             else:
                 if where == 'run':
                     wh = numpy.where(self.session.pos.movement[trim:-trim])[0] + trim
@@ -491,8 +492,8 @@ class Spatial:
         if save_tag is None:
             save_tag = self.setname
         nfn = f'{self.tag}-{self.setname}'
-        hfn = self.dir + nfn + f'_{self.hash}'
-        mfn = hfn + f'.eventmasks-{w}-{save_tag}.npy'
+        hfn = nfn + f'_{self.hash}'
+        mfn = self.dir / (hfn + f'.eventmasks-{w}-{save_tag}.npy')
         # -1 of mask is the cell index (index in list)
         # -2 of mask is the signed distance
         lut = self.get_lut()
@@ -550,8 +551,8 @@ class Spatial:
         if save_tag is None:
             save_tag = 'self'
         nfn = f'{self.tag}-{self.setname}'
-        hfn = self.dir + nfn + f'_{self.hash}'
-        rdfn = hfn + f'.binnedsignals-event-{param}-{w}-{save_tag}.npy'
+        hfn = nfn + f'_{self.hash}'
+        rdfn = self.dir / (hfn + f'.binnedsignals-event-{param}-{w}-{save_tag}.npy')
         if os.path.exists(rdfn) and not overwrite:
             ba = numpy.load(rdfn)
         else:
@@ -578,8 +579,8 @@ class Spatial:
         if save_tag is None:
             save_tag = 'self'
         nfn = f'{self.tag}-{self.setname}'
-        hfn = self.dir + nfn + f'_{self.hash}'
-        rdfn = hfn + f'.laps-{param}-{res}-{save_tag}-{where}.npy'
+        hfn = nfn + f'_{self.hash}'
+        rdfn = self.dir / (hfn + f'.laps-{param}-{res}-{save_tag}-{where}.npy')
         if os.path.exists(rdfn) and not overwrite:
             ba = numpy.load(rdfn)
         else:

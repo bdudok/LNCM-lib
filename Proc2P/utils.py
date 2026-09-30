@@ -188,7 +188,7 @@ def read_excel(*args, keep_index=False, **kwargs):
     '''
     fn = args[0]
     keep_index = False
-    if fn.endswith('csv'):
+    if str(fn).endswith('csv'):
         return pandas.read_csv(*args, **kwargs)
     df = pandas.read_excel(*args, **kwargs, engine='openpyxl', index_col=0)
     # index_col=0 makes the first column index. It's not accessible by .loc or by name.
@@ -218,6 +218,7 @@ def p_lookup(p):
 
 
 def path_to_list(path):
+    path = str(path)
     parent_folders = []
     while path[-1] in ('//', '/', '\\'):
         path = path[:-1]

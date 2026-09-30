@@ -1,3 +1,4 @@
+from pathlib import Path
 import cv2
 from matplotlib import pyplot as plt
 import numpy
@@ -13,7 +14,7 @@ def pull_motion_energy(vid_fn, output_fn, crop=None, keep_map=False, save_previe
     Computes the motion enerhy (optical flow) in each frame
     Args:
         vid_fn: handle (full path, filename and extension) of the avi file
-        output_fn: handle (.npy) of the output files, e.g. session.face_path + '_motion_energy.npy'
+        output_fn: handle (.npy) of the output files, e.g. session.face_path / '_motion_energy.npy'
         crop: [x0, x1, y0, y1] of an area, relative to the raw movie.
         keep_map: if True, saves the full map, else just the average of each frame.
          a hash of the crop will be added to the name
@@ -23,7 +24,8 @@ def pull_motion_energy(vid_fn, output_fn, crop=None, keep_map=False, save_previe
     pw_n = 20 # preview frame (avoid sing 1st frame as light may be off)
 
     # read input
-    im = cv2.VideoCapture(vid_fn)
+    output_fn = Path(output_fn)
+    im = cv2.VideoCapture(str(vid_fn))
     ret, frame = im.read()
     h, w = frame.shape[:2]
     n_frames = int(im.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -40,7 +42,7 @@ def pull_motion_energy(vid_fn, output_fn, crop=None, keep_map=False, save_previe
         crop[[1, 3]] += 1
         hw = int((crop[1] - crop[0]) / 2)
         hh = int((crop[3] - crop[2]) / 2)
-    mm_fn = output_fn[:-4] + f'_map_{crop_id}.npy'
+    mm_fn = output_fn.with_name(f'{output_fn.stem}_map_{crop_id}.npy')
 
     # init output
     mm_trace = numpy.empty(n_frames)
@@ -103,7 +105,7 @@ def pull_motion_energy(vid_fn, output_fn, crop=None, keep_map=False, save_previe
             Y = numpy.array(pw_data[ci])
             ca.imshow(Y.mean(axis=0), cmap=cmap)
         plt.tight_layout()
-        fig.savefig(mm_fn.replace('.npy', '.png'), dpi=300)
+        fig.savefig(mm_fn.with_suffix('.png'), dpi=300)
         plt.close()
 
     return mm_trace
@@ -112,17 +114,18 @@ def recrop_motion_map(output_fn, recrop, orig_crop, crop_tag):
     '''
     measures motion energy in a cropped region of the map
     Args:
-        output_fn: handle (.npy) of the output files, e.g. session.face_path + '_motion_energy.npy'
+        output_fn: handle (.npy) of the output files, e.g. session.face_path / '_motion_energy.npy'
         orig_crop: [x0, x1, y0, y1] used to export the original motion map from which the peaks are
     saves to file
     '''
     crop_id = crop_hash(orig_crop)
     crop = numpy.array(recrop).astype('int')
     crop[[1, 3]] += 1
-    mm = numpy.load(output_fn[:-4] + f'_map_{crop_id}.npy')
+    output_fn = Path(output_fn)
+    mm = numpy.load(output_fn.with_name(f'{output_fn.stem}_map_{crop_id}.npy'))
     assert crop[1] <= mm.shape[1] and crop[3] <= mm.shape[2]
     mm_trace = mm[:, crop[0]:crop[1], crop[2]:crop[3]].mean(axis=(1, 2))
-    fn = output_fn[:-4] + f'_recrop_{crop_tag}.npy'
+    fn = output_fn.with_name(f'{output_fn.stem}_recrop_{crop_tag}.npy')
     numpy.save(fn, mm_trace)
     return mm_trace
 
@@ -130,7 +133,7 @@ def peak_averaged_motion_map(output_fn, peaks, orig_crop=None, time_constant=30)
     '''
     Displays the movement map average on included peaks
     Args:
-        output_fn: handle (.npy) of the output files, e.g. session.face_path + '_motion_energy.npy'
+        output_fn: handle (.npy) of the output files, e.g. session.face_path / '_motion_energy.npy'
         orig_crop: [x0, x1, y0, y1] used to export the original motion map from which the peaks are
     Returns: the image
     '''
@@ -139,7 +142,8 @@ def peak_averaged_motion_map(output_fn, peaks, orig_crop=None, time_constant=30)
         crop_id = 'full'
     else:
         crop_id = crop_hash(orig_crop)
-    mm = numpy.load(output_fn[:-4] + f'_map_{crop_id}.npy', mmap_mode='r')
+    output_fn = Path(output_fn)
+    mm = numpy.load(output_fn.with_name(f'{output_fn.stem}_map_{crop_id}.npy'), mmap_mode='r')
     peaks = peaks[peaks > time_constant]
     return numpy.maximum(0, numpy.mean(mm[peaks], axis=0) - numpy.mean(mm[peaks-int(time_constant)], axis=0))
 

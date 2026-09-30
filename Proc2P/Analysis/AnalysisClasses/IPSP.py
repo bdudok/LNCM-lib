@@ -30,7 +30,7 @@ class IPSP:
          not including post-stim periods). Needs to be set at init. does not overwrite stored stimtimes.
         '''
         self.session = session
-        self.wdir = self.session.path + 'IPSP/'
+        self.wdir = self.session.path / 'IPSP'
         self.n_cells = self.session.ca.cells
         if self.session.ca.last_bg:
             self.n_cells -= 1
@@ -46,7 +46,7 @@ class IPSP:
         if not os.path.exists(self.wdir):
             return 0
         for f in os.listdir(self.wdir):
-            os.remove(self.wdir + f)
+            os.remove(self.wdir / f)
 
     def set_defaults(self, user_config, shuffle=False):
         default_config = {
@@ -139,15 +139,15 @@ class IPSP:
         :return:
         '''
         if not hasattr(self, 'stimframes'):
-            stimname = self.wdir + '_StimTimes'
-            if os.path.exists(stimname + '.npy'):
-                stimframes = numpy.load(stimname + '.npy')
+            stimname = self.wdir / '_StimTimes.npy'
+            if os.path.exists(stimname):
+                stimframes = numpy.load(stimname)
             else:
                 t = PhotoStim.PhotoStim(self.session)
                 stimframes = t.get_trains(isi=3)[
                     0]  # ignoring intensities. these are not reliable with current PreProc.
-                numpy.save(stimname + '.npy', stimframes)
-                pandas.DataFrame({'StimFrames': stimframes}).to_excel(stimname + '.xlsx')
+                numpy.save(stimname, stimframes)
+                pandas.DataFrame({'StimFrames': stimframes}).to_excel(stimname.with_suffix('.xlsx'))
             if self.shuffle:
                 frame_pool = numpy.ones(stimframes[-1], dtype='bool')
                 frame_pool[:stimframes[0]] = 0
@@ -274,7 +274,6 @@ class IPSP:
             plot_Y = self.Y_fit_all
             modstring = self.get_modstring(popt)
         if save:
-            fname = self.get_fn('model')
             fig, ax = plt.subplots()
             ax.scatter(self.X, self.Y)
             ax.plot(fitX, plot_Y, color='red')
@@ -286,15 +285,15 @@ class IPSP:
             elif self.config.order == 7:
                 ax.plot(fitX, self.Y_fit, color='red', linestyle=':')
             fig.suptitle(figure_title)
-            with open(fname + '.txt', 'w') as f:
+            with open(self.get_fn('model.txt'), 'w') as f:
                 f.write(modstring + '\n' + str(self.model))
                 if self.config.order == 2:
                     f.write('\n' + self.get_modstring(self.model))
                     f.write('\n' + str(self.model_2))
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('Response (DF/F)')
-            plt.savefig(fname + '.png')
-            # numpy.save(fname + '.npy', self.model) #this is never used and can be parsed from json in the text file
+            plt.savefig(self.get_fn('model.png'))
+            # numpy.save(self.get_fn('model.npy'), self.model) #this is never used and can be parsed from json in the text file
             plt.tight_layout()
             self.fig = fig, ax
 
@@ -335,7 +334,7 @@ class IPSP:
         return f'ampl:{popt[0] * 100:.2f}%, peak:{popt[1]:.1f} ms, bias:{popt[2] * 100:.1f}%, delay:{popt[3]:.1f}ms'
 
     def get_fn(self, suffix):
-        return self.wdir + f'_{self.session.tag}_{self.confighash}_{suffix}'
+        return self.wdir / f'_{self.session.tag}_{self.confighash}_{suffix}'
 
     def alpha_func(self, x, A, B, C, D):
         '''
