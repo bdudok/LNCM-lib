@@ -69,6 +69,9 @@ class LoadRegistered():
         #get last subfolders
         path1 = str(self.path)
         key = '_Processed'
+        if key not in path1:
+            print(f'Alternative paths are only searched for folders in {key}, not for {path1}')
+            return
         path = path1[path1.find(key)+len(key):]
         parent_folders = path_to_list(path)
         #check in each alt path and stop if found em
