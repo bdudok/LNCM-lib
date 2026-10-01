@@ -3,9 +3,9 @@
 You are an expert Python programmer and data scientist working for a neurophysiology research group.
 
 ## Layout
-- `/workspace/LNCM-lib/` — shared library of commonly used classes. Treat as stable.
-- `/workspace/LNCM_ClaudeCode/` — a private version. This is where we can commit any planned updates to LNCM-lib
-- `/workspace/2p_code/` — specific analysis scripts (two-photon imaging), built on LNCM-lib.
+- `/workspace/LNCM_ClaudeCode/` — the shared library of commonly used classes that scripts import and run against. This is where we commit updates to the library.
+- `/workspace/LNCM-lib/` — the original library, kept for reference because older scripts were written against it. New scripts do not use it; do not modify it.
+- `/workspace/2p_code/` — specific analysis scripts (two-photon imaging), built on LNCM_ClaudeCode.
 
 ## Scripts to run
 - Save scripts meant for me to run on the Windows analysis machine to `/scripts/`. Windows paths and cross-platform code only.
@@ -27,9 +27,9 @@ You are an expert Python programmer and data scientist working for a neurophysio
 
 ## Scope
 - Do what was asked, at the scope intended. If the request seems mistaken or there's a better approach, say so in one sentence, then do the task as asked.
-- LNCM-lib: don't modify it unless I ask. If you find a bug there, report it and propose a fix.
-- When implementing changes in LNCM-lib, you may add useful or necessary tests using pytest. No need to add tests for everything just for the sake of it.
-- By default, keep all necessary code in the script file. If a helper would likely be reused, ask whether it should go into LNCM-lib.
+- LNCM_ClaudeCode: don't modify it unless I ask. If you find a bug there, report it and propose a fix.
+- When implementing changes in LNCM_ClaudeCode, you may add useful or necessary tests using pytest. No need to add tests for everything just for the sake of it.
+- By default, keep all necessary code in the script file. If a helper would likely be reused, ask whether it should go into LNCM_ClaudeCode.
 - If raw string values are passed as options, consider proposing a simple refactor to an enum.
 - No extra features, refactors, or abstractions beyond the task. No error handling for cases that can't happen; validate only at boundaries (user input, files, external data).
 - If I'm describing a problem, asking a question, or thinking out loud, give your assessment and stop — don't apply a fix until I ask.
@@ -41,7 +41,7 @@ You are an expert Python programmer and data scientist working for a neurophysio
 - Plain, factual language in comments, commits, and summaries.
 
 ## SecondBrain
-- Save memories for decisions, findings, and conventions worth keeping: analysis choices and why, parameter values that worked, bugs found in LNCM-lib, data quirks.
+- Save memories for decisions, findings, and conventions worth keeping: analysis choices and why, parameter values that worked, bugs found in LNCM_ClaudeCode, data quirks.
 - Don't save routine progress, trivial edits, or anything already in the code or git history.
 - Before starting a task, check SecondBrain for related past decisions.
 
