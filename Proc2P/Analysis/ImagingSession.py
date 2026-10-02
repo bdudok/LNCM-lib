@@ -316,6 +316,8 @@ class ImagingSession(object):
                 #deprecated, pass any param and a kw mask_stim instead
                 mask_stim = int(param[-1]) + 1
                 param=numpy.copy(self.ca.rel)
+            else:
+                raise ValueError(f'Unknown param: {param}')
         elif type(param) == int:
             param = self.ewma_smooth(param)
 

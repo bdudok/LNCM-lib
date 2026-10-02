@@ -92,3 +92,5 @@ def test_imaging_session_getparam(tmp_path):
     assert numpy.array_equal(ImagingSession(tmp_path, PREFIX, tag='A', ch=0).getparam('xtalk'), rel)
     with pytest.raises(FileNotFoundError, match='No crosstalk-corrected trace'):
         ImagingSession(tmp_path, PREFIX, tag='A', ch=1).getparam('xtalk')
+    with pytest.raises(ValueError, match='Unknown param: xtlak'):
+        ImagingSession(tmp_path, PREFIX, tag='A', ch=0).getparam('xtlak')
