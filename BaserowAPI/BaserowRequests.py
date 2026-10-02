@@ -114,7 +114,7 @@ class GetSessions:
         :return: DataFrame of the search result
         '''
         if mtag is not None:
-            params = {f"filter__field_{config['MouseID']['Mouse.ID']}__contains": mtag}
+            params = {f"filter__field_{config['MouseID']['Mouse.ID']}__equal": mtag}
             resp = requests.get(config['mice_url'],
                                 headers={"Authorization": self.auth_string},
                                 params=params
