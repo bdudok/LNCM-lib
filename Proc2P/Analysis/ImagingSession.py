@@ -284,6 +284,13 @@ class ImagingSession(object):
             elif param == 'vms':
                 #only available if saved by script
                 param = numpy.load(os.path.join(self.ca.pf, 'vms_interp.npy'))
+            elif param == 'xtalk':
+                # crosstalk-corrected rel, saved by AnalysisClasses.Crosstalk in this channel's trace folder
+                try:
+                    param = self.ca.get_custom('rel_xtalk')
+                except FileNotFoundError:
+                    raise FileNotFoundError(f'No crosstalk-corrected trace in {self.ca.pf}. '
+                                            f'Run AnalysisClasses.Crosstalk with this channel as target first.') from None
             elif 'custom' in param:
                 ckey = param.split('custom')[1]
                 param = self.ca.get_custom(ckey)

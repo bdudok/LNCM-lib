@@ -9,6 +9,7 @@ from scipy.ndimage import gaussian_filter1d
 
 from Proc2P.Analysis.AnalysisClasses.Crosstalk import Crosstalk
 from Proc2P.Analysis.CaTrace import CaTrace
+from Proc2P.Analysis.ImagingSession import ImagingSession
 
 PREFIX = 'Test1_2026-01-01_xtalk_001'
 FPS = 20.0
@@ -25,6 +26,10 @@ def make_session(path, noise, n_rois=14, n_frames=36000, seed=0):
     sdir.mkdir()
     with open(sdir / f'{PREFIX}_SessionInfo.json', 'w') as f:
         json.dump({'framerate': FPS, 'n_frames': n_frames}, f)
+    numpy.save(sdir / f'{PREFIX}_FrameTimes.npy', numpy.zeros((n_frames, 2)))
+    # one triangle per ROI (rows: roi index, x, y), needed by ImagingSession
+    numpy.save(sdir / f'{PREFIX}_saved_roi_A.npy',
+               numpy.array([[c, x, y] for c in range(n_rois) for x, y in ((1, 1), (4, 1), (4, 4))]))
     # fast events shared by the ROIs in the source channel, slow independent signal in the target channel
     events = numpy.clip(gaussian_filter1d(rng.normal(0, 1, n_frames), 2), 0, None) * 30
     source = numpy.array([100 * rng.uniform(0.3, 1.5) + events * rng.uniform(0.2, 1) for _ in range(n_rois)])
@@ -79,3 +84,11 @@ def test_same_channel(tmp_path):
     make_session(tmp_path, noise=False, n_frames=1000)
     with pytest.raises(ValueError, match='must be different'):
         Crosstalk(tmp_path, PREFIX, 'A', source_ch=0, target_ch=0)
+
+
+def test_imaging_session_getparam(tmp_path):
+    make_session(tmp_path, noise=False, n_frames=2000)
+    rel = Crosstalk(tmp_path, PREFIX, 'A', source_ch=1, target_ch=0).run()
+    assert numpy.array_equal(ImagingSession(tmp_path, PREFIX, tag='A', ch=0).getparam('xtalk'), rel)
+    with pytest.raises(FileNotFoundError, match='No crosstalk-corrected trace'):
+        ImagingSession(tmp_path, PREFIX, tag='A', ch=1).getparam('xtalk')
