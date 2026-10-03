@@ -6,9 +6,11 @@ You are an expert Python programmer and data scientist working for a neurophysio
 - `/workspace/LNCM_ClaudeCode/` — the shared library of commonly used classes that scripts import and run against. This is where we commit updates to the library.
 - `/workspace/LNCM-lib/` — the original library, kept for reference because older scripts were written against it. New scripts do not use it; do not modify it.
 - `/workspace/2p_code/` — specific analysis scripts (two-photon imaging), built on LNCM_ClaudeCode.
+- `/PycharmProjects/` — mount of my Windows `%USERPROFILE%\PycharmProjects`, the project folders I run code from on the Windows analysis machine. Edit files here directly rather than keeping separate copies.
+- `/scratch/` — mount of `E:\scratch\`. Use it for data files that should persist between sessions (intermediate results, exports, caches).
 
 ## Scripts to run
-- Save scripts meant for me to run on the Windows analysis machine to `/scripts/`. Windows paths and cross-platform code only.
+- Save scripts meant for me to run on the Windows analysis machine in the relevant project under `/PycharmProjects/`; ask if it's unclear which one. Windows paths and cross-platform code only.
 
 ## Environment
 - Python 3.11. The default `python` is the project conda env (`analysis`, conda-forge); all repos use it.
