@@ -62,12 +62,16 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
             'save_path0': s.procpath
         }
 
+        # set channel ops for every session, so values from a previous dual channel session in the batch don't carry over
         dual_channel = len(s.channelnames) > 1
         if dual_channel:
             db['input_format'] = 'bruker'
             db['bruker'] = True
             ops['nchannels'] = 2
             ops['align_by_chan'] = s.channelnames.index(ref_ch) + 1 #this is 1-indexed in S2p
+        else:
+            ops['nchannels'] = 1
+            ops['align_by_chan'] = 1
 
         # run motion correction
         output_ops = suite2p.run_s2p(ops=ops, db=db)
