@@ -2,11 +2,9 @@ import os
 
 import pandas
 
-# threads per job: the server has 32 cores shared by several users. Set all three, otherwise numba resets torch to use all cores.
-n_threads = "8"
-os.environ["OMP_NUM_THREADS"] = n_threads
-os.environ["MKL_NUM_THREADS"] = n_threads
-os.environ["NUMBA_NUM_THREADS"] = n_threads
+# threads are not limited: with several jobs running, each is slower but RAM use doesn't change.
+# To limit threads, set OMP_NUM_THREADS, MKL_NUM_THREADS and NUMBA_NUM_THREADS to the same value here,
+# otherwise numba resets torch to use all cores.
 os.environ["MKL_DISABLE_FAST_MM"] = "1"
 import suite2p
 from Proc2P import GetSessions
