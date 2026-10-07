@@ -16,18 +16,19 @@ conda activate lncm36
 conda install -c conda-forge -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph
 pip install sima
 
-# To use Suite2P for motion correction, we need a Python 3.9 env ("suite2p"):
+# To use Suite2P for motion correction, we need a Python 3.11 env ("suite2p") with suite2p 1.x (tested with 1.1.0):
 if you have a previous suite2p env, delete it (conda env remove --name suite2p),
 and delete the remaining empty folder in envs called suite2p
-note: s2p 1.0 has breaking changes, we stick to an older version until the pipeline is updated. 0.14.6 works.
+note: suite2p 0.x envs don't work with the current pipeline (MotionCorrect and the 20261007 template use the 1.x settings format).
 in conda powershell prompt:
-    conda create --name suite2p python=3.9 -c defaults --strict-channel-priority --no-default-packages
+    conda create --name suite2p python=3.11 -c conda-forge --strict-channel-priority
     conda activate suite2p
-    pip install suite2p=0.14.6
-    pip install pandas requests openpyxl
+    python -m pip install suite2p
+    python -m pip install pandas requests openpyxl
+our analysis server has no GPU, suite2p runs on CPU with the default torch install (it logs that cuda is not working and uses cpu).
 
 open the job script in your project (no need to have a separate S2P project)
-for example, Proc2P/Analysis/S2P_template/20260113_BatchRun_MotionCorrect_Template.py (in LNCM-lib)
+for example, Proc2P/Analysis/S2P_template/20261007_BatchRun_MotionCorrect_Template.py (in LNCM_ClaudeCode)
 In settings/Python/interpreter, add the suite2p env as system python (but don't select it for the project)
 Select run/edit configurations for your job script
     select the suite2p interpreter to run this script with
