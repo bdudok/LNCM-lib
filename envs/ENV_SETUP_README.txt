@@ -24,7 +24,7 @@ in conda powershell prompt:
     conda create --name suite2p python=3.11 -c conda-forge --strict-channel-priority
     conda activate suite2p
     python -m pip install suite2p
-    python -m pip install pandas requests openpyxl
+    python -m pip install pandas requests openpyxl pyarrow
 our analysis server has no GPU, suite2p runs on CPU with the default torch install (it logs that cuda is not working and uses cpu).
 
 open the job script in your project (no need to have a separate S2P project)
