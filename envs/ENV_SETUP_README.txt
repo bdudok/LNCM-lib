@@ -17,9 +17,9 @@ conda install -c conda-forge -y scipy pyqt matplotlib opencv scikit-learn openpy
 pip install sima
 
 # To use Suite2P for motion correction, we need a Python 3.11 env ("suite2p") with suite2p 1.x (tested with 1.1.0):
-if you have a previous suite2p env, delete it (conda env remove --name suite2p),
+if you have a previous suite2p env (0.x), delete it (conda env remove --name suite2p),
 and delete the remaining empty folder in envs called suite2p
-note: suite2p 0.x envs don't work with the current pipeline (MotionCorrect and the 20261007 template use the 1.x settings format).
+note: suite2p 0.x envs don't work with the current pipeline.
 in conda powershell prompt:
     conda create --name suite2p python=3.11 -c conda-forge --strict-channel-priority
     conda activate suite2p
