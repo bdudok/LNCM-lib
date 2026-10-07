@@ -6,6 +6,7 @@ import suite2p
 
 from Proc2P.Bruker import PreProc
 from tifffile import imwrite
+from Proc2P.utils import lprint
 
 '''This function runs the pre processing and motion correction, should be called by script in suite2p repo.
 Should be called from suite2p env (suite2p 1.x).
@@ -29,7 +30,7 @@ def run(settings, session_df, pre_only, overwrite_previous, overwrite_preproc, r
         imID = item['Image.ID']
         prefix = imID[:-4]
         btag = imID[-3:]
-        print(prefix)
+        lprint(None, "Processing", prefix)
         if not os.path.exists(processed_path):
             os.mkdir(processed_path)
 
