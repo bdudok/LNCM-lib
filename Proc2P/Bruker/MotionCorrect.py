@@ -1,3 +1,4 @@
+import copy
 import numpy
 import os, shutil
 import suite2p
@@ -7,16 +8,20 @@ from Proc2P.Bruker import PreProc
 from tifffile import imwrite
 
 '''This function runs the pre processing and motion correction, should be called by script in suite2p repo.
-Should be called from suite2p env.
-See: _TEMPLATE_SCRIPT/20241126_BatchRun_MotionCorrect_Template.py
+Should be called from suite2p env (suite2p 1.x).
+See: Proc2P/Analysis/S2P_template/20261007_BatchRun_MotionCorrect_Template.py
 '''
 
 
-def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch):
+def run(settings, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch, fast_disk=None):
+    '''
+    :param settings: suite2p settings dict (from suite2p.default_settings())
+    :param fast_disk: folder for suite2p scratch files. Default: E:/S2P/<username>/
+    '''
     username = os.environ.get('USERNAME')
     print(f'Running suite2p version {suite2p.version} as {username}')
-    fast_disk = f'E:/S2P/{username}/'
-    ops['fast_disk'] = fast_disk
+    if fast_disk is None:
+        fast_disk = f'E:/S2P/{username}/'
 
     for i, item in session_df.iterrows():
         dpath = item['Raw.Path']
@@ -54,33 +59,38 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
 
         filelist = [fn for fn in os.listdir(s.dpath) if ((prefix in fn) and ('.ome.tif' in fn))]
 
-        # session ops
+        # session db (input and output paths, data format)
         db = {
-            'fs': s.si['framerate'],
             'data_path': [str(s.dpath), ],
-            'tiff_list': filelist,
-            'save_path0': str(s.procpath)
+            'file_list': filelist,
+            'save_path0': str(s.procpath),
+            'fast_disk': fast_disk,
+            'keep_movie_raw': True,
+            'nchannels': 1,
+            'functional_chan': 1,
         }
+        # copy settings for each session, so changes don't carry over to the next session in the batch
+        session_settings = copy.deepcopy(settings)
+        session_settings['fs'] = s.si['framerate']
+        session_settings['registration']['align_by_chan2'] = False
 
-        # set channel ops for every session, so values from a previous dual channel session in the batch don't carry over
+        # Bruker files are split into channels by file name: Ch1 goes to data.bin, Ch2 to data_chan2.bin
         dual_channel = len(s.channelnames) > 1
         if dual_channel:
             db['input_format'] = 'bruker'
-            db['bruker'] = True
-            ops['nchannels'] = 2
-            ops['align_by_chan'] = s.channelnames.index(ref_ch) + 1 #this is 1-indexed in S2p
-        else:
-            ops['nchannels'] = 1
-            ops['align_by_chan'] = 1
+            db['nchannels'] = 2
+            session_settings['registration']['align_by_chan2'] = s.channelnames.index(ref_ch) == 1
 
         # run motion correction
-        output_ops = suite2p.run_s2p(ops=ops, db=db)
+        suite2p.run_s2p(db=db, settings=session_settings)
+        s2p_folder = s.procpath / 'suite2p' / 'plane0'
+        reg_outputs = numpy.load(s2p_folder / 'reg_outputs.npy', allow_pickle=True).item()
 
         # clean up output
         preview_channels = {'R': None, 'G': None, 'B': None}
-        mean1 = output_ops['meanImg'] / output_ops['meanImg'].max() * 255
+        mean1 = reg_outputs['meanImg'] / reg_outputs['meanImg'].max() * 255
         previewname = s.procpath / f'{prefix}_preview.tif'
-        imgshape = [*output_ops['meanImg'].shape]
+        imgshape = [*reg_outputs['meanImg'].shape]
         if len(imgshape) < 3:
             imgshape.append(3)
         preview = numpy.zeros(imgshape, dtype='uint8')
@@ -91,7 +101,7 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
             preview_channels['G'] = mean1
 
         if dual_channel:
-            mean2 = output_ops['meanImg_chan2'] / output_ops['meanImg_chan2'].max() * 255
+            mean2 = reg_outputs['meanImg_chan2'] / reg_outputs['meanImg_chan2'].max() * 255
             preview_channels['R'] = mean1
             preview_channels['G'] = mean2
 
@@ -103,7 +113,6 @@ def run(ops, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch
         imwrite(previewname, preview)
 
         # remove raw movie
-        s2p_folder = s.procpath / 'suite2p' / 'plane0'
         os.remove(s2p_folder / 'data_raw.bin')
         os.rename(s2p_folder / 'data.bin',
                   s.procpath / f'{prefix}_registered_{s.channelnames[0]}.bin')

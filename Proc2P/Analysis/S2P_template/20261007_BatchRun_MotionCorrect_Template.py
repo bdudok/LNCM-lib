@@ -2,8 +2,11 @@ import os
 
 import pandas
 
-os.environ["OMP_NUM_THREADS"] = "2"
-os.environ["MKL_NUM_THREADS"] = "2"
+# threads per job: the server has 32 cores shared by several users. Set all three, otherwise numba resets torch to use all cores.
+n_threads = "8"
+os.environ["OMP_NUM_THREADS"] = n_threads
+os.environ["MKL_NUM_THREADS"] = n_threads
+os.environ["NUMBA_NUM_THREADS"] = n_threads
 os.environ["MKL_DISABLE_FAST_MM"] = "1"
 import suite2p
 from Proc2P import GetSessions
@@ -19,7 +22,7 @@ Confirm the list of sessions by hitting Enter after it's displayed.
 '''
 To update s2p, use:
 conda activate suite2p
-pip install git+https://github.com/mouseland/suite2p.git
+python -m pip install suite2p --upgrade
 '''
 
 # Process specified sessions: list them in quotes or set the variable to None
@@ -55,43 +58,42 @@ assert len(session_df)
 
 
 '''Below are general settings, only change if you know what you're doing'''
-# pipeline ops
-ops = suite2p.default_ops()
+# pipeline settings (suite2p 1.x: nested dict)
+settings = suite2p.default_settings()
+reg = settings['registration']
 
 # specific settings
-ops['do_bidiphase'] = True  # whether or not to compute bidirectional phase offset
-ops['bidi_corrected'] = True  # Specifies whether to do bidi correction
-ops['two_step_registration'] = True  # run registration twice
+reg['do_bidiphase'] = True  # whether or not to compute and correct bidirectional phase offset
+reg['two_step_registration'] = True  # run registration twice
 
 # sensor specific settings
 if preset == None:
     pass
 elif preset == 'Calcium':
-    ops['nonrigid'] = True
-    ops['block_size'] = [512, 16]  # power of 2 and/or 3 (e.g. 128, 256, 384, etc)
-    ops['batch_size'] = 500
+    reg['nonrigid'] = True
+    # full-height blocks, 16 px wide. 511 instead of 512, because suite2p 1.x fails with a single block along a
+    # dimension (github.com/MouseLand/suite2p/issues/1211). Movies must have more than 511 lines; for 256x48 movies use Voltage.
+    reg['block_size'] = [511, 16]
+    reg['batch_size'] = 500
 elif preset == 'Voltage':
-    ops['snr_thresh'] = 1.5  # increased, so that low snr frames don't get corrected
-    ops['nonrigid'] = False  # no movement expected within frame
-    ops['block_size'] = [512, 48]  # power of 2 and/or 3 (e.g. 128, 256, 384, etc) #use full frame as one block
-    ops['batch_size'] = 5000  # use full rec as one batch
-    ops['maxregshift'] = 0.05  # reduced, because fow is small
+    reg['snr_thresh'] = 1.5  # increased, so that low snr frames don't get corrected
+    reg['nonrigid'] = False  # no movement expected within frame
+    reg['block_size'] = [512, 48]  # power of 2 and/or 3 (e.g. 128, 256, 384, etc) #use full frame as one block
+    reg['batch_size'] = 5000  # use full rec as one batch
+    reg['maxregshift'] = 0.05  # reduced, because fow is small
 else:
     input(f"No preset specified for {preset}, press Enter to continue with defaults")
 
 # general settings
-ops['delete_bin'] = False
-ops['move_bin'] = True
-ops['keep_movie_raw'] = True
+settings['io']['delete_bin'] = False
+settings['io']['move_bin'] = True
 
 if mc_only:
-    ops['roidetect'] = False
-    ops['neuropil_extract'] = False
-    ops['spikedetect'] = False
+    settings['run']['do_detection'] = False  # also skips extraction and deconvolution
 
 switches = {'pre_only': pre_only, 'overwrite_previous': overwrite_previous, 'overwrite_preproc': overwrite_preproc,
             'ref_ch': ref_ch, }
 
 #run the script
-MotionCorrect.run(ops, session_df, **switches)
+MotionCorrect.run(settings, session_df, **switches)
 
