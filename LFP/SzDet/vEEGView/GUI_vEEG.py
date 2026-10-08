@@ -27,6 +27,7 @@ from LFP.SzDet import InstRate
 from Proc2P.Bruker import LoadEphys
 from LFP.Pinnacle import ReadEDF
 from Proc2P.Treadmill import rsync
+from Video.LoadVEEG import VEEGVideo
 
 
 class GUI_main(QtWidgets.QMainWindow):
@@ -275,8 +276,8 @@ class GUI_main(QtWidgets.QMainWindow):
             prefix_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
             if self.input_prefix is not None:
                 prefix_list = [x for x in prefix_list if x in self.input_prefix]
-            suffix = '.avi'
-            video_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
+            # .avi: old EEG-Cam recordings with .npy sync; .mkv: vEEG recorder with _frames.csv and _ttl.csv
+            video_list = [fn[:-4] for fn in flist if fn.endswith('.avi') or fn.endswith('.mkv')]
         # set list widget
         print(video_list)
         self.prefix_list.clear()
@@ -296,6 +297,8 @@ class GUI_main(QtWidgets.QMainWindow):
                     self.mark_complete(pi, color='#fcaf38')
 
     def align_callback(self):
+        if os.path.exists(self.wdir + self.active_video + '_ttl.csv'):
+            return self.align_veeg()
         #load video npy and perform align
         vttl = numpy.load(self.wdir + self.active_video + '.npy')[:, -1]
         self.refresh_data()
@@ -333,6 +336,38 @@ class GUI_main(QtWidgets.QMainWindow):
         ca.set_ylim(-0.1, 1.1)
         ca.set_xlabel('Minutes')
 
+        self.FigCanvas0.draw()
+        plt.tight_layout()
+
+    def align_veeg(self):
+        # recordings of the vEEG recorder: frame times from the camera clock, aligned with rsync
+        self.refresh_data()
+        ttl = self.edf.get_TTL()
+        video = VEEGVideo(self.wdir + self.active_video)
+        try:
+            frametimes = video.align(ttl)
+        except rsync.RsyncError:
+            frametimes = None
+        eegdur = len(self.edf.trace) / self.edf.fs
+        xunit = 60
+        ca = self.FigCanvas0.ax
+        ca.cla()
+        ca.plot((0, eegdur / xunit), (1, 1), color='black')
+        ca.scatter((0, eegdur / xunit), (1, 1), marker='|', color='black')
+        if frametimes is not None:
+            self.alignment = video.alignment
+            ca.scatter(ttl / xunit, numpy.ones(len(ttl)) * 0.5, marker='|', c=numpy.isnan(self.alignment.cor_times_A))
+            ca.plot((frametimes[0] / xunit, frametimes[-1] / xunit), (1, 1), color='green', linewidth=2)
+            self.v_fps = video.fps
+            self.v_frametimes = frametimes
+            self.load_movie(fn=self.wdir + self.active_video)
+            self.new_plot = True
+            self.update_plot1()
+        else:
+            self.alignment = None
+            ca.plot((0, video.frame_times[-1] / xunit), (0, 0), color='red')
+        ca.set_ylim(-0.1, 1.1)
+        ca.set_xlabel('Minutes')
         self.FigCanvas0.draw()
         plt.tight_layout()
 
