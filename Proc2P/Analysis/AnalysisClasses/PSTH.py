@@ -1,7 +1,10 @@
 import json
 import os.path
+import zlib
 from pathlib import Path
+from statsmodels.stats.weightstats import DescrStatsW
 from Proc2P.Analysis.ImagingSession import ImagingSession
+from Proc2P.Analysis.AnalysisClasses.Spatial import match_cells
 from Proc2P.Analysis.NormalizeVm import arima_filtfilt
 from Proc2P.utils import lprint, outlier_indices
 from datetime import datetime
@@ -32,13 +35,11 @@ class PSTH:
         self.group_df = None
         self.pull_dict = {}
         self.cell_counter = 0
-        self.event_counter = 0
         self.data = None
         self.weights = None
         self.extra_columns = 2  # number of additional info fields in numpy arrays. original index, unique index.
         # reserve attribute names, these can be modified with setter function
         self.uses_ripples = False
-        self.uses_behav = False
         self.uses_weights = False
         self.param_key = 'rel'
         self.window_w = 156
@@ -46,7 +47,6 @@ class PSTH:
         self.session_kwargs = {}
         # reserve mask function names, this has to be specified with setter function
         self.mask_function = None
-        self.mask_function_name = None
         self.mask_function_kwargs = None
         self.pull_function_kwargs = {}
         # lock metadata once assembled, so cell indices can be relied on to group them
@@ -57,57 +57,39 @@ class PSTH:
         else:
             self.locked = False
 
-    def add_items(self, prefix, tag, cells, grouping=None, group_names=None, path=None, ch=0):
-        '''create an identifier for each item and store in item dict
-        prefix: session prefix
-        tag: session tag
-        cells: cell index or list of indices. each will be added to item dict and assigned a unique ID
-        grouping: group ID, a tuple of group IDs for all cells, or list or ndarray same length as cells.
-        can have multiple group identifiers for each cell.
-        group_names: string handle for each group
-        groups can be modified after finalize'''
+    def add_items(self, prefix, tag, cells, grouping, group_names, path=None, ch=0):
+        '''
+        Add cells of one session. Each cell gets a unique ID in the item dict.
+        :param prefix: session prefix
+        :param tag: ROI set tag
+        :param cells: cell index, or list of cell indices
+        :param grouping: the cells' group values, one per group name. The same values apply to all cells in the call.
+            A single value if group_names is a str.
+        :param group_names: name of each group: a str, or a sequence of str
+        :param path: processed folder of the session
+        :param ch: channel of the traces
+        '''
         if self.locked:
             raise Exception('Cell set locked, delete lock and existing traces to add data')
-        # check if cells is a list
         if not hasattr(cells, '__iter__'):
             cells = [cells]
-        # check if grouping is the same for all cells:
-        if not hasattr(grouping, '__iter__'):
-            simple_group = True
+        if isinstance(group_names, str):
+            group_names = (group_names,)
             grouping = (grouping,)
-        elif type(grouping) is tuple:
-            simple_group = True
-        elif len(grouping) == len(cells):
-            simple_group = False
-        else:
-            raise ValueError('Error with parsing grouping')
-        if hasattr(group_names, '__iter__') and type(group_names) is not str:
-            multiple_names = True
-        else:
-            multiple_names = False
+        if len(grouping) != len(group_names):
+            raise ValueError(f'grouping has {len(grouping)} values for {len(group_names)} group names: {grouping}')
         for g_n in group_names:
             if g_n not in self.group_names:
                 self.group_names.append(g_n)
         if path is None:
             path = os.curdir
-        # generate ID of session and roi set
-        session_hash = abs(hash(prefix + str(tag) + str(ch))) % (10 ** 8) * 10000
-        # add each cell to dict
-        for ci, c in enumerate(cells):
+        # ID of the session and ROI set (crc32 instead of hash, which changes between Python processes)
+        session_hash = zlib.crc32(f'{prefix}{tag}{ch}'.encode()) % (10 ** 8) * 10000
+        for c in cells:
             cell_id = session_hash + c
             self.item_dict[cell_id] = (path, prefix, tag, ch, c, self.cell_counter)
             self.cell_counter += 1
-            self.group_dict[cell_id] = {}
-            if simple_group:
-                group = grouping
-            else:
-                group = grouping[ci]
-            if not multiple_names:
-                self.group_dict[cell_id][group_names] = group
-            else:
-                for gi, g_n in enumerate(group_names):
-                    self.group_dict[cell_id][g_n] = group[gi]
-
+            self.group_dict[cell_id] = dict(zip(group_names, grouping))
 
     def excel_filename(self, fn):
         '''Excel copy of a pickled file: dots in the file name replaced with _'''
@@ -167,9 +149,8 @@ class PSTH:
 
     def set_pull_function_kwargs(self, *args, **kwargs):
         '''Specify kwargs that will be passed to any loader function called by pull_traces
-        NB this is not for mask functions! for that, pass kwargs to set_triggers'''
-        if None in args:
-            self.pull_function_kwargs = {}
+        NB this is not for mask functions! for that, pass kwargs to set_triggers
+        Positional arguments are ignored; set_pull_function_kwargs(None) clears the kwargs.'''
         self.pull_function_kwargs = kwargs
 
     def ready(self):
@@ -223,17 +204,12 @@ class PSTH:
             if 'pupil' in self.param_key:
                 line = a.map_eye(model_name=self.pull_function_kwargs.get('model_name', 'final'))
                 fill_line = True
-            # elif self.param_key == 'face':
-            #     # line = load_face(a, self.path + self.eyepath, prefix)
-            #     line = load_face(a, self.eyepath, prefix)
-            #     fill_line = True
             elif self.param_key == 'speed':
                 line = a.pos.speed
                 fill_line = True
             elif self.param_key == 'licks':
                 line = numpy.zeros(a.ca.frames)
-                for t in a.bdat.licks:
-                    fr = a.timetoframe(t)
+                for fr in a.bdat['licks']:  # imaging frame of each lick
                     if 0 < fr < a.ca.frames:
                         line[fr] += 1
                 fill_line = True
@@ -260,7 +236,7 @@ class PSTH:
                 nframes = a.ca.frames
                 line = numpy.empty(nframes)
                 t0, f = 0, 0
-                for t1, s in enumerate(a.ephysframes):
+                for t1, s in enumerate(a.ephys.frames):
                     if s > f:
                         if f < nframes:
                             line[f] = a.ripples.envelope[t0:t1].max()
@@ -279,17 +255,6 @@ class PSTH:
             elif self.param_key == 'LFPabs':
                 line = numpy.abs(a.ephys.edat[1])
                 fill_line = True
-            # elif self.param_key == 'inst_ev_freq':
-            #     np_fn = a.prefix+'_inst_sz_freq_1116.npy'# adjust between sz and epi events as needed
-            #     if os.path.exists(np_fn):
-            #         line = numpy.load(a.prefix+'_inst_sz_freq_1116.npy')
-            #     else:
-            #         line = numpy.empty(a.ca.frames)
-            #         line[:] = numpy.nan
-            #     fill_line = True
-            # elif 'corr' in self.param_key:
-            #     line = load_corr(a, path, prefix, **self.pull_function_kwargs)
-            #     fill_line = True
             elif 'gpw' in self.param_key:
                 if not hasattr(self, 'gamma_band'):
                     raise ValueError('Specify gamma band s, f, or b with set_pull_params')
@@ -300,7 +265,7 @@ class PSTH:
                 filt_func[self.gamma_band]()
                 line = numpy.zeros(a.ca.frames)
                 t0, f = 0, 0
-                for t1, s in enumerate(a.ephysframes):
+                for t1, s in enumerate(a.ephys.frames):
                     if s > f:
                         if f < a.ca.frames:
                             line[f] = a.ripples.gamma[t0:t1].mean()
@@ -318,13 +283,10 @@ class PSTH:
                 if not has_other:
                     param = a.getparam(self.param_key, mask_stim=mask_stim)
                 else:
-                    # other has to be same cells, but can have different tag and ch. masks from a will beused to pull b
-                    if other_tag is None:
-                        other_tag = a.ca.tag
-                    if other_ch is None:
-                        other_ch = a.ca.ch
-                    b = ImagingSession(prefix, tag=other_tag, norip=not self.uses_ripples, ch=other_ch,
-                                       no_tdml=not self.uses_behav, **self.session_kwargs)
+                    # other has to be same cells, but can have different tag and ch. masks from a will be used to pull b
+                    b_tag = a.ca.tag if other_tag is None else other_tag
+                    b_ch = a.ca.ch if other_ch is None else other_ch
+                    b = self.load_session(path, prefix, tag=b_tag, norip=not self.uses_ripples, ch=b_ch)
                     a_param = a.getparam(self.param_key)
                     b_param = b.getparam(self.param_key)
                     if other_match:  # re-fill param so original indices are replaced with match
@@ -336,9 +298,9 @@ class PSTH:
                             param[ci] = b_param[cj]
                     else:
                         param = b_param
-            if self.pull_function_kwargs.get('fillnan'):
-                line = arima_filtfilt(line)
             if fill_line:
+                if self.pull_function_kwargs.get('fillnan'):
+                    line = arima_filtfilt(line)
                 if 'Diff' in self.param_key:
                     line[1:] = numpy.diff(numpy.nan_to_num(line))
                     line[0] = 0
@@ -356,9 +318,8 @@ class PSTH:
                 loc = numpy.where(numpy.logical_not(numpy.isnan(indices)))[0]
                 try:
                     lines[:, loc] = param[cells[0]][:, indices[loc].astype(numpy.int64)]
-                except:
-                    print(prefix, tag, a.ca.cells, cells[0])
-                    assert False
+                except IndexError as e:
+                    raise IndexError(f'{prefix} {tag}: cannot pull cells {cells[0]} from {a.ca.cells} cells') from e
                 new_length = data_counter + len(lines)
                 if new_length > len(data):
                     data = numpy.append(data, numpy.empty((max(1000, len(lines)), data.shape[1])), axis=0)
@@ -472,7 +433,8 @@ class PSTH:
     def get_data(self, group_criteria=None, group_by=None, avg_cells=False, return_indices=False, keep_all=False,
                  weighted=False, baseline=None, mask_outliers=False):
         '''group criteria provided as a list of key-value pairs applied sequentially
-        group_by: average items that have the same value in the specified parameter
+        group_by: average the cells that have the same value in the specified parameter (each cell's events are
+            averaged first, so every cell has the same weight). avg_cells has no effect with group_by.
         return_indices: also return the original cell indices for each line
         if group_by is specified, returns group keys instead of indices
         If baseline is specified as a slice, this period is subtracted from each individual event'''
@@ -518,6 +480,8 @@ class PSTH:
                     data = None
                     cell_indices = None
             else:
+                # mean of the cell averages in each group: each cell has the same weight, regardless of its
+                # number of events
                 groups = self.get_groups_by(group_by)
                 data = numpy.empty((len(groups), 2 * self.window_w))
                 data[:] = numpy.nan
@@ -530,17 +494,23 @@ class PSTH:
                         continue
                     indices = numpy.array([self.item_dict[i][trace_indexer] for i in sub_indices])
                     element_included = numpy.isin(self.get_unique_indices(), indices)
-                    data[gi] = numpy.nanmean(self.data[element_included, :2 * self.window_w], axis=0)
+                    if not element_included.any():
+                        continue
+                    cell_averages, _ = self.collapse_cells(self.data[element_included, :2 * self.window_w],
+                                                           self.data[element_included, -1],
+                                                           self.data[element_included, -2], indices, keep_all=False,
+                                                           mask_outliers=mask_outliers)
+                    data[gi] = numpy.nanmean(cell_averages, axis=0)
                 cell_indices = groups
+        if data is None:
+            if return_indices:
+                return None, None
+            return None
         if baseline is not None:
             nd = numpy.empty(data.shape, data.dtype)
             for i in range(len(data)):
                 nd[i] = data[i] - numpy.nanmean(data[i][baseline])
             data = numpy.copy(nd)
-        if data is None:
-            if return_indices:
-                return None, None
-            return None
         if return_indices:
             return numpy.copy(data), cell_indices
         else:
@@ -681,18 +651,3 @@ def pull_session_with_mask(session:ImagingSession, mask, param_key='rel', ext_li
         lines[:, loc] = param[:, indices[loc].astype(numpy.int64)]
         data[ei] = lines
     return numpy.nanmean(data, axis=0)
-
-# testing
-if __name__ == '__main__':
-    path = 'X:/Barna/pvsncg/'
-    prefix = 'pvsncg_222_380'
-    tag = 'A'
-    os.chdir(path)
-    session = ImagingSession(prefix, tag='A')
-    cells = [2, 3]
-    grouping = [('control', 'cell'), ('control', 'ax')]
-    group_names = ('drug', 'type')
-    # grouping = ['cell', 'ax']
-    identifier = 'stop'
-    e = PSTH(path, identifier)
-    e.add_items(session, cells, grouping=grouping, group_names=group_names)
