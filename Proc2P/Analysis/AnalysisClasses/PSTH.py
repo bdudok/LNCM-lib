@@ -1,3 +1,4 @@
+import json
 import os.path
 from pathlib import Path
 from Proc2P.Analysis.ImagingSession import ImagingSession
@@ -198,7 +199,9 @@ class PSTH:
         for session_data, cell_data in self.pull_dict.items():
             path, prefix, tag, ch = session_data
             fn = self.get_numpy_name(prefix, tag, ch)
+            fingerprint = self.get_fingerprint(cell_data, mask_stim, other_tag, other_ch, other_match)
             if os.path.exists(fn):
+                self.check_fingerprint(fn, fingerprint)
                 print('Loading', prefix)
                 continue
             lprint(self, ' '.join(('Pulling:', prefix, tag, self.trigger_name, self.param_key)))
@@ -364,6 +367,8 @@ class PSTH:
                 data[data_counter:new_length, -1] = cells[1]
                 data_counter = new_length
             self.save_array(fn, data[:data_counter])
+            with open(self.fingerprint_name(fn), 'w') as f:
+                json.dump(fingerprint, f, indent=1)
             # save weights
             if self.uses_weights:
                 n_e = len(events)
@@ -389,6 +394,45 @@ class PSTH:
                                         f'Windows path limit (260). Use a shorter project folder or PSTH '
                                         f'identifier.') from e
             raise
+
+    def get_fingerprint(self, cell_data, mask_stim, other_tag, other_ch, other_match):
+        '''
+        Settings and cells that a session's pulled traces depend on. Saved next to the traces, and compared when
+        they are loaded, so traces pulled with other settings or another cell set are not used silently.
+        '''
+        fingerprint = {
+            'trigger_name': self.trigger_name, 'mask_function': getattr(self.mask_function, '__name__', None),
+            'mask_function_kwargs': self.mask_function_kwargs, 'param_key': self.param_key,
+            'window_w': self.window_w, 'uses_ripples': self.uses_ripples, 'uses_weights': self.uses_weights,
+            'eyepath': self.eyepath, 'gamma_band': getattr(self, 'gamma_band', None),
+            'session_kwargs': self.session_kwargs, 'pull_function_kwargs': self.pull_function_kwargs,
+            'mask_stim': mask_stim, 'other_tag': other_tag, 'other_ch': other_ch, 'other_match': other_match,
+            # (CellIndex, TraceIndex) of each cell, as stored in the trace rows
+            'cells': [[int(x) for x in value] for value in cell_data.values()],
+        }
+        # values that are not json types (e.g. session_class) are compared by their str
+        return json.loads(json.dumps(fingerprint, default=str))
+
+    @staticmethod
+    def fingerprint_name(fn):
+        return fn.with_name(fn.name[:-len('.npy')] + '_fingerprint.json')
+
+    def check_fingerprint(self, fn, fingerprint):
+        '''raise if the saved traces were pulled with other settings or cells. Traces saved before the
+        fingerprints were added have none, these are used as before.'''
+        fp_name = self.fingerprint_name(fn)
+        if not os.path.exists(fp_name):
+            return
+        with open(fp_name, 'r') as f:
+            saved = json.load(f)
+        differences = [key for key in set(saved) | set(fingerprint) if saved.get(key) != fingerprint.get(key)]
+        if differences:
+            details = '; '.join(f'{key}: saved {saved.get(key)}, now {fingerprint.get(key)}'
+                                for key in sorted(differences) if key != 'cells')
+            if 'cells' in differences:
+                details += '; the cells differ'
+            raise ValueError(f'{fn} was pulled with other settings ({details}). Delete it to pull again, '
+                             f'or use another PSTH identifier.')
 
     def get_numpy_name(self, prefix, tag, ch, weight=False):
         str_builder = [self.identifier, prefix, tag, ch, self.trigger_name, self.param_key, self.window_w]

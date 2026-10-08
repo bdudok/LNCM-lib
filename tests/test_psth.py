@@ -2,6 +2,10 @@
 PSTH item handling: items are ready to use after saving and after loading a locked PSTH, the number of included items
 is printed, and a too long save path gives a clear error.
 '''
+import json
+import os
+from pathlib import Path
+
 import numpy
 import pytest
 
@@ -50,3 +54,57 @@ def test_long_path_error(tmp_path, monkeypatch):
     # short paths raise the original error
     with pytest.raises(FileNotFoundError, match='No such file or directory'):
         PSTH.save_array(tmp_path / 'missing' / 'a.npy', numpy.zeros(3))
+
+
+def test_fingerprint_check(tmp_path):
+    e = make_psth(tmp_path)
+    e.save_items()
+    e.set_triggers(lambda a, w: None, 'Test', mask_stim=(0, 4))
+    session_data, cell_data = next(iter(e.pull_dict.items()))
+    fn = tmp_path / 'traces.npy'
+    fingerprint = e.get_fingerprint(cell_data, None, None, None, False)
+    # traces saved before fingerprints were added are used as before
+    e.check_fingerprint(fn, fingerprint)
+    with open(e.fingerprint_name(fn), 'w') as f:
+        json.dump(fingerprint, f)
+    e.check_fingerprint(fn, fingerprint)
+    with pytest.raises(ValueError, match='mask_stim: saved None, now 3'):
+        e.check_fingerprint(fn, e.get_fingerprint(cell_data, 3, None, None, False))
+    with pytest.raises(ValueError, match='the cells differ'):
+        e.check_fingerprint(fn, e.get_fingerprint(dict(list(cell_data.items())[:1]), None, None, None, False))
+
+
+
+DATA_DIR = Path(os.environ.get('LNCM_TEST_DATA', '/test_data'))
+OPTO_PREFIX = 'Sncg248_2026-10-01_CRISPR_opto_vehicle_085'
+
+
+@pytest.mark.skipif(not (DATA_DIR / '_Processed' / OPTO_PREFIX).exists(), reason='test data not found')
+def test_pull_and_fingerprint(tmp_path):
+    '''pulled traces are saved with a fingerprint; loading them with another setting raises'''
+    from Proc2P.Analysis.AnalysisClasses import EventMasks
+
+    def setup():
+        e = PSTH(tmp_path, 'opto')
+        if not e.locked:
+            e.add_items(OPTO_PREFIX, 'CellsGR', [0, 1, 2], grouping=(OPTO_PREFIX,), group_names=('Prefix',),
+                        path=DATA_DIR / '_Processed')
+            e.save_items()
+        e.set_pull_params(param_key='vm', window_w=288)
+        e.set_triggers(EventMasks.PhotoStimPulse, 'OptoPulse', mask_stim=(0, 4))
+        return e
+
+    e = setup()
+    e.pull_traces()
+    data = e.get_data(avg_cells=True, group_criteria=(('Prefix', OPTO_PREFIX),))
+    assert data.shape == (3, 576)
+    fn = e.get_numpy_name(OPTO_PREFIX, 'CellsGR', 0)
+    assert e.fingerprint_name(fn).exists()
+    # same settings: loaded
+    e = setup()
+    e.pull_traces()
+    numpy.testing.assert_array_equal(e.get_data(avg_cells=True, group_criteria=(('Prefix', OPTO_PREFIX),)), data)
+    # other mask_stim (not in the file name): raises instead of loading the old traces
+    e = setup()
+    with pytest.raises(ValueError, match='mask_stim: saved None, now 2'):
+        e.pull_traces(mask_stim=2)
