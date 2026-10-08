@@ -197,7 +197,7 @@ class SzReviewData:
         if os.path.exists(fn):
             saved = read_excel(fn, keep_index=True)
             for szname in sznames:
-                curated_sz = saved[saved.iloc[:, 0] == szname]
+                curated_sz = saved[saved.index == szname]
                 for fieldname in ('Included', 'Interictal'):
                     if fieldname not in saved.columns:
                         continue

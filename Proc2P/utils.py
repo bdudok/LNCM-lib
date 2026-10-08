@@ -187,7 +187,6 @@ def read_excel(*args, keep_index=False, **kwargs):
     :return: DataFrame
     '''
     fn = args[0]
-    keep_index = False
     if str(fn).endswith('csv'):
         return pandas.read_csv(*args, **kwargs)
     df = pandas.read_excel(*args, **kwargs, engine='openpyxl', index_col=0)
