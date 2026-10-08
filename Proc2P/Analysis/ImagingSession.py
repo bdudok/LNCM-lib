@@ -535,9 +535,10 @@ class ImagingSession(object):
     def qc(self, trim=10, nnd=None):
         '''returns a bool mask for cells that pass qc
         trim: if >0, remove cells that are close to the top or bottom row to avoid artefacts
+        With dual channel traces (ch='All'), a cell passes if it passes in any channel.
         '''
-
-        qc_pass = numpy.any(numpy.nan_to_num(self.getparam('ntr')) > 3, axis=1)
+        ntr = numpy.nan_to_num(self.getparam('ntr'))
+        qc_pass = numpy.any(ntr > 3, axis=tuple(range(1, ntr.ndim)))
         if hasattr(self.ca, 'nnd') and nnd is not None:
             nnd_pass = numpy.any(self.ca.nnd > nnd, axis=1)
             qc_pass = numpy.logical_and(nnd_pass, qc_pass)
