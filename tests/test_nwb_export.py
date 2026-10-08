@@ -100,8 +100,9 @@ def test_file_is_valid(lean_path):
 
 
 def test_lean_contents(nwbfile):
-    assert list(nwbfile.acquisition) == ['ImagingFrameTimes']
-    assert set(nwbfile.processing['behavior']['BehavioralTimeSeries'].time_series) == {'speed', 'position'}
+    assert set(nwbfile.acquisition) == {'ImagingFrameTimes', 'ImagingFrameAbsoluteTimes'}
+    assert set(nwbfile.processing['behavior']['BehavioralTimeSeries'].time_series) == {
+        'speed', 'smoothed_speed', 'position', 'belt_position', 'laps'}
 
 
 def test_session_start_time(nwbfile, session):
@@ -116,7 +117,9 @@ def test_subject(nwbfile, mouse):
 
 def test_notes(nwbfile, session, db_entry):
     notes = json.loads(nwbfile.notes)
-    assert set(notes) == {'SessionInfo', 'Baserow'}
+    assert set(notes) == {'SessionInfo', 'Baserow', 'Export'}
+    assert notes['Export']['roi_sets'][0]['channels'] == ['Ch1_Red']
+    assert notes['Export']['behavior_events']
     assert notes['SessionInfo']['framerate'] == session.si['framerate']
     assert notes['Baserow'] == json.loads(json.dumps(db_entry.to_dict(), default=str))
     assert nwbfile.session_id == f'LNCM-{db_entry["id"]}-{PREFIX}'
@@ -137,7 +140,7 @@ def test_traces(nwbfile, session):
     assert set(fluorescence.roi_response_series) == {'trace_Ch1_Red', 'rel_Ch1_Red'}
     rel = fluorescence['rel_Ch1_Red'].data[:]
     assert rel.shape == (len(session.ftimes), n_rois)
-    numpy.testing.assert_array_equal(rel, session.export_traces('CellsRe', 'rel'))
+    numpy.testing.assert_array_equal(rel, session.export_traces('CellsRe', 'rel')[..., 0])
 
 
 def test_roi_masks_orientation(nwbfile):
@@ -199,7 +202,7 @@ def test_movie_and_video_export(session, tmp_path, monkeypatch):
     monkeypatch.setattr(session, 'export_video_times', lambda: video_times)
     monkeypatch.setattr(session, 'export_video_frames', lambda: video_frames)
     path = export(session, tmp_path, roi_sets=False, video_storage='embedded', speed=False, abspos=False,
-                  **{'2p_movie': True, 'video': True})
+                  treadmill=False, behavior_events=False, **{'2p_movie': True, 'video': True})
     assert validate(path=path) == []
     with NWBHDF5IO(path, 'r') as io:
         acquisition = io.read().acquisition

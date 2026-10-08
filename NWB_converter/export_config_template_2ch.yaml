@@ -47,6 +47,7 @@ imaging:
       indicator: GCaMP8m
 
 lfp:
+  channels: null             # LFP channel numbers to export (rows of _ephys.npy, from 1, as lfp_ch); null: all
   location: CA1 (contralateral)
   description: LFP recording
   device_name: A-M Systems Model 300
@@ -59,7 +60,12 @@ include:                     # frame times are always included
   2p_movie: true
   speed: true
   abspos: true
-  lfp: false
+  treadmill: true            # belt position and laps
+  behavior_events: true      # licks, rewards and reward zones (_bdat.json), if the session has them
+  opto: true                 # photostimulation pulses and stimulated frames, if the session has opto
+  lfp: false                 # LFP, if the session has it. Also enables:
+  ripples: true              #   ripple events (not the filtered LFP or power, those are recomputed when needed)
+  lfp_events: true           #   spike and seizure tables and detection settings of the exported LFP channels
   video: true
 
 roi_sets:
@@ -79,6 +85,16 @@ roi_sets:
         unit: dfof
 
 
+opto:
+  device_name: LED
+  device_description: null
+  description: Photostimulation
+  excitation_lambda: null    # nm
+  location: null
+
+ripples:
+  tags: null                 # ripple tags (_ripples/<tag>.ripples) to export; null: all
+
 video:
   storage: external          # external: link to the video file by name, for upload to DANDI next to the NWB file
   # (writes <nwb name>_dandi.json for DandiUpload.py); embedded: decoded frames in the NWB file
@@ -87,8 +103,8 @@ dandi:
   dandiset_path: null        # local dandiset folder, made with:
   # dandi download --download dandiset.yaml https://dandiarchive.org/dandiset/<id>/draft
 
-point_events: []             # e.g. [licks, rewards]
-interval_events: []          # e.g. [seizures]
+point_events: []             # other event types, see ExportImagingSession.export_point_events
+interval_events: []          # other event types, see ExportImagingSession.export_interval_events
 
 compression:
   2p_movie: 4                # gzip level, 0 for no compression
