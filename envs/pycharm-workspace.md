@@ -27,7 +27,7 @@ To avoid this, **keep PyCharm project folders outside the repos** and add the re
    ~/PycharmProjects/lncm-dev/
    ```
 
-3. **Open the wrapper in PyCharm**, then go to
+3. **Open the wrapper folder in PyCharm**, then go to
    *Settings → Project Structure → Add Content Root* and choose the repo.
    - If the wrapper folder itself is listed as a content root, remove it.
    - One wrapper can hold several repos (e.g. `LNCM-lib` + `2p_code`), so navigation works across them.
