@@ -151,8 +151,16 @@ class PSTH:
         self.mask_function_kwargs = kwargs
 
     def set_session_kwargs(self, **kwargs):
-        '''Specify kwargs that will be passed to the init of the ImagingSession by pull_traces'''
+        '''Specify kwargs that will be passed to the init of the ImagingSession by pull_traces.
+        session_class: optional, the class to load sessions with instead of ImagingSession (e.g. NWBImagingSession,
+        with nwb_filename in the kwargs if needed). It is called with the same arguments as ImagingSession.'''
         self.session_kwargs = kwargs
+
+    def load_session(self, path, prefix, **kwargs):
+        '''load a session with the class and kwargs set by set_session_kwargs'''
+        session_kwargs = dict(self.session_kwargs)
+        session_class = session_kwargs.pop('session_class', ImagingSession)
+        return session_class(path, prefix, **kwargs, **session_kwargs)
 
     def set_pull_function_kwargs(self, *args, **kwargs):
         '''Specify kwargs that will be passed to any loader function called by pull_traces
@@ -188,7 +196,7 @@ class PSTH:
             lprint(self, ' '.join(('Pulling:', prefix, tag, self.trigger_name, self.param_key)))
             data = numpy.empty((1000, 2 * self.window_w + self.extra_columns))
             data_counter = 0
-            a = ImagingSession(path, prefix, tag=tag, norip=not self.uses_ripples, ch=ch, **self.session_kwargs)
+            a = self.load_session(path, prefix, tag=tag, norip=not self.uses_ripples, ch=ch)
             if self.uses_ripples:
                 rt = self.session_kwargs.get('ripple_tag')
                 if rt is not None:
