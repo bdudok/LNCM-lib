@@ -508,16 +508,3 @@ class SzReviewData:
         except PermissionError:
             print('''Permission error writing the output spreadsheet. Saving to new file, please rename later.''')
             self.output_sz.to_excel(self.get_fn('save', timestamp=True))
-
-
-if __name__ == '__main__':
-    setup = 'Pinnacle'
-    path = r'D:\Shares\Data\_Processed\EEG\Dreadd/'
-    prefix = 'Tot9_2024-05-20_07_06_20_export'
-    setup = 'LNCM'
-    path = r'D:\Shares\Data\_Processed/2P\PVTot/'
-    # prefix = 'PVTot9_2024-02-20_lfp_181'
-    #
-    # szdat = SzReviewData(path, prefix, 2, setup=setup)
-    # self = szdat
-    # sz = szdat.get_sz(self.szlist[1], True)

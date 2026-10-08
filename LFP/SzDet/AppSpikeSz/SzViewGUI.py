@@ -156,9 +156,6 @@ class GUI_main(QtWidgets.QMainWindow):
         button.clicked.connect(self.previous_callback)
 
         # toggle button
-        # sp = "\u2423"
-        # up = "\u2191"
-        # down = "\u2193"
         button = QPushButton(f'Toggle [t]', )
         horizontal_layout.addWidget(button)
         button.clicked.connect(self.toggle_callback)

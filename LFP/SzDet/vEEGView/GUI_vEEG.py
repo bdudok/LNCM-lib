@@ -416,11 +416,6 @@ class GUI_main(QtWidgets.QMainWindow):
             ax[1].plot(self.v_frametimes[:len(self.motion_energy)], self.motion_energy, color='orange', zorder=1, linewidth=1)
 
 
-        # ax[2].plot(X, sz_burden, color='blue', linewidth=1)
-        # for sz in sz_times_raw:
-        #     for ca in (0, 2):
-        #         ax[ca].axvspan(sz[0], sz[1], color='red', alpha=0.4, zorder=0)
-
         if not self.new_plot:
             for ca, xlim, ylim in zip(ax, xlims, ylims):
                 ca.set_xlim(xlim)

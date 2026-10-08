@@ -408,13 +408,6 @@ class GUI_main(QtWidgets.QMainWindow):
         self.set_result('Seizures', len(sz_times))
         self.set_result('Sz.Duration', f'{numpy.mean([sz[1] - sz[0] for sz in sz_times]):.2f}')
 
-    def load_file_callback(self):
-        current_item = self.prefix_list.selectedItems()[0]
-        self.active_prefix = current_item.text()
-        self.current_selected_i = self.prefix_list.currentRow()
-        self.new_plot = True
-        self.refresh_data()
-
     def get_output_fn(self):
         if self.setup == 'Pinnacle':
             output_fn = self.savepath + self.active_prefix + f'_Ch{self.param["channel_index"]}' + self.suffix
