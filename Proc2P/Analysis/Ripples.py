@@ -148,10 +148,6 @@ class Ripples(object):
         self.frame_array = self.ephys.frames
         self.n = len(self.trace)
         self.ephys_all_channels = self.ephys.edat[1:]
-        # # if more channels are available, load it:
-        # mpn = self.prefix + '.morephys'
-        # if os.path.exists(mpn):
-        #     self.channels = numpy.fromfile(mpn, dtype='float32')
 
     def gen_filt(self):
         highcut = self.highcut

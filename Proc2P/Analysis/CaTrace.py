@@ -427,21 +427,6 @@ if __name__ == '__main__':
     wdir = 'D:/Shares/Data/_Processed/2P/testing/'
     prefix = 'SncgTot4_2023-10-23_movie_000'
     tag = '1'
-    # b = CaTrace(wdir, prefix, verbose=True, ch=0, tag=tag)
-    # c = CaTrace(wdir, prefix, verbose=True, ch=1, tag=tag)
-    # b.open_raw()
-    # c.open_raw()
-    # print(b.pack_data(0)[1][:2], c.pack_data(0)[1][:2])
     a = CaTrace(wdir, prefix, verbose=True, ch='Dual', tag=tag)
     self = a
     a.load()
-    # a.open_raw()
-    # for c in range(a.cells):
-    #     if nworker < ncpu * 0.8:
-    #         Worker(request_queue, result_queue).start()
-    #         nworker += 1
-    #     request_queue.put(a.pack_data(c))
-    # for data in iter(result_queue.get, None):
-    #     finished = a.unpack_data(data)
-    #     if finished:
-    #         break

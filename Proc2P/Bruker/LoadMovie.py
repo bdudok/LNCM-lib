@@ -117,19 +117,6 @@ if __name__ == '__main__':
 
     lprint(None, 'started reading')
     f = LoadMovie(fn, preload=False)
-    # # data = f.f.asarray() # slow
-    # # data = f.f.asarray(out="memmap") # slow
-    # # data = f.f.series[0].asarray() # slow
-    #
-    # mmap = f.f.pages
-    # n_pages = len(mmap)
-    # frameshape = mmap[0].shape
-    # data = numpy.empty((n_pages, *frameshape), dtype=mmap[0].dtype)
-    # for i in range(n_pages):
-    #     data[i] = mmap[i].asarray()
-    # data = data[..., ::-1, ::-2]
-    #
-    # lprint(None, data.shape)
     im = f.preview()
     lprint(None, f.data.shape)
 

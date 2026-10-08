@@ -618,10 +618,6 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
         elif event.button() == QtCore.Qt.RightButton:
             self.finishPoly()
 
-    # def move_cursor_to_clicked(self):
-    #     p = [round((self.zoom_point[i] - self.zoom_offset[i]) * self.rescale_factor) for i in (0, 1)]
-    #     QtGui.QCursor.setPos(self.label.mapToGlobal(QtCore.QPoint(*p)))
-    #     #this does not seem to do anything.
 
     def mouseMoveEvent(self, event):
         if self._drawing and (event.buttons() & QtCore.Qt.LeftButton):
@@ -630,11 +626,6 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
             self._points.append(QtCore.QPointF(child_pos))
             self.update()
 
-    # def mouseReleaseEvent(self, event):
-    #     if event.button() == QtCore.Qt.LeftButton and self._drawing:
-    #         global_pos = event.globalPosition().toPoint()
-    #         child_pos = self.label.mapFromGlobal(global_pos)
-    #         self._points.append(QtCore.QPointF(child_pos))
 
     def finishPoly(self):
         if len(self._points) > 3:

@@ -527,14 +527,3 @@ if __name__ == '__main__':
     s = PreProc(dpath, procpath, prefix, btag, debug=True)
     self = s
     s.parse_notes()
-
-    # tm = TreadmillRead.Treadmill(os.path.join(dpath, prefix + f'-{btag}/'), prefix)  # raw data, prefix)
-
-
-    # self.si = SessionInfo(self.procpath, prefix)
-    # self.is_processed = self.si.load()
-    # self.skip_analysis = False
-    # self.found_output = []
-    # self.parse_frametimes()
-
-

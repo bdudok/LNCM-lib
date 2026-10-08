@@ -359,28 +359,6 @@ class IPSP:
         y2 = numpy.clip(A2 * (x - D2) / B2 * numpy.exp(1 - (x - D2) / B2), max=0)
         return y1 + y2
 
-    # def dual_fit(self, include_cells=None):
-            #now included in fit_model
-    #     '''Try optimizing both functions in 1 shot (7 df)'''
-    #     first_model = self.fit_model_single_order(include_cells=include_cells)
-    #     fitX = self.X[self.notna]
-    #     fitY = self.Y[self.notna]
-    #     guesses = list(self.model)
-    #     bounds = self.constraints['bounds']
-    #     for add_i in (0, 1, 3):
-    #         guesses.append(self.constraints['guesses.second'][add_i])
-    #         for b_i in (0, 1):
-    #             bounds[b_i].append(self.constraints['bounds.second'][b_i][add_i])
-    #     maxval = numpy.nanmax(fitY)
-    #     popt, pcov = curve_fit(self.dual_alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
-    #     second_fit = maxval - self.dual_alpha_func(fitX, *popt)
-    #     self.model_2 = popt
-    #     self.Y_fit_2 = second_fit
-    #     plot_Y = self.Y_fit_2
-    #     plt.plot(fitX, self.Y_fit, color='red', linestyle=':')
-    #     plt.plot(fitX, self.Y_fit_2, color='orange')
-
-
 
     def ampl_func(self, x, A, C):
         '''

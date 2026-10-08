@@ -108,9 +108,6 @@ class ExportPhotonTransfer:
         :return: flux #saves the figure and flux array, also returns it in photons/px/frame
         '''
 
-        # path = r'D:\Shares\Data\_Processed\2P\JEDI/'
-        # prefix = 'JEDI-PV21_2024-05-10_Fast_045' #prefix(without btag)
-        # channel_name = 'Ch2' #'Ch1' or 'Ch2', # Ch1 is red; Ch2 is green
         # init an ImagingSession
         session = ImagingSession(path, prefix, tag='skip', norip=True)
         dpath = session.si.info['dpath']

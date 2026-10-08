@@ -127,10 +127,6 @@ class FitEye:
         ED_filt = numpy.copy(ED)
         #filter each ellipse paramater
         #actually, we don't filter the ellipse, it breaks accurate tracking of fast pupil responses
-        # ED_filt = numpy.empty(ED.shape)
-        # ED_filt[:] = numpy.nan
-        # for i in range(ED.shape[1]):
-        #     ED_filt[:, i] = arima_filtfilt(ED[:, i])
 
         numpy.save(self.ellipse_fn, ED_filt)
         ellipse_diameter = (ED_filt[:, 2]+ED_filt[:, 3])/2

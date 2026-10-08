@@ -294,15 +294,6 @@ class ImagingSession(object):
             elif 'custom' in param:
                 ckey = param.split('custom')[1]
                 param = self.ca.get_custom(ckey)
-            # elif param == 'peaks':
-            #     self.disc_param = True
-            #     param = numpy.nan_to_num(self.ca.peaks.astype('bool'))
-            # elif param == 'aupeaks':
-            #     param = numpy.maximum(0, self.ca.smtr * self.ca.b2)
-            # elif param == 'bin_onset':  # onset frame of 3 sd events
-            #     param = numpy.zeros(self.ca.rel.shape, dtype='bool')
-            #     for event in self.ca.eventarray:
-            #         param[event[0], event[1]] = 1
             elif param == 'diff':
                 param = numpy.empty(self.ca.rel.shape)
                 param[:, 0] = numpy.nan

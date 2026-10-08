@@ -217,19 +217,6 @@ def register(proc_path, prefix, config=None):
     for i in range(2):
         f_disp[:, i] = sosfiltfilt(filter, disps[:, i])
 
-    # f3, a3 = plt.subplots(nrows=3, sharex=True)
-    # for i in range(2):
-    #     a3[i].plot(disps[:, i])
-    # for highcut in (20, 30, 40, 60):
-    #     nyq = 0.5 * fps
-    #     cutoff = highcut / nyq
-    #     filter = bessel(3, cutoff, btype='lowpass', output='sos')
-    #     f_disp = numpy.empty(disps.shape)
-    #     for i in range(2):
-    #         f_disp[:, i] = sosfiltfilt(filter, disps[:, i])
-    #         a3[i].plot(f_disp[:, i], label=f'{highcut} Hz')
-    # a3[1].legend()
-    # a3[2].plot(session.pos.speed)
 
     # apply displacements and save output
     if verbose:
@@ -292,4 +279,3 @@ def register(proc_path, prefix, config=None):
                 preview[..., chi] = x
         imwrite(previewname, preview)
     plt.close()
-
