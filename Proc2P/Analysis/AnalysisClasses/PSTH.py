@@ -52,6 +52,7 @@ class PSTH:
         if os.path.exists(self.lock_name):
             self.locked = True
             self.load_items()
+            self.ready()
         else:
             self.locked = False
 
@@ -125,6 +126,7 @@ class PSTH:
         self.locked = True
         with open(self.lock_name, 'w') as f:
             f.write(f'Data for {self.cell_counter} cells saved on {datetime.now().isoformat()}.')
+        self.ready()
 
     def load_items(self):
         '''restores items and groups dicts from pickle file, overwriting any existing items in instance attribute'''
@@ -170,7 +172,10 @@ class PSTH:
         self.pull_function_kwargs = kwargs
 
     def ready(self):
-        '''rebuild dict of items to allow getting all cells for each session'''
+        '''
+        rebuild dict of items to allow getting all cells for each session, and print the number of included items.
+        Called when the items are saved or loaded; calling it again is not needed, but does no harm.
+        '''
         if not self.locked:
             raise Exception('Save and lock before pulling.')
         sessions = {}
@@ -182,6 +187,9 @@ class PSTH:
         self.pull_dict = sessions
         self.group_df = pandas.DataFrame.from_dict(self.group_dict, orient='index', dtype=None,
                                                    columns=self.group_names)
+        counts = ', '.join(f'{name} {self.group_df[name].nunique()}' for name in self.group_names)
+        print(f'PSTH {self.identifier}: {len(self.item_dict)} cells in {len(self.pull_dict)} sessions. '
+              f'Unique values per group: {counts}')
 
     def pull_traces(self, other_tag=None, other_ch=None, other_match=False, mask_stim=None):
         '''open each session and save event triggered average'''
@@ -355,7 +363,7 @@ class PSTH:
                 data[data_counter:new_length, -2] = cells[0]
                 data[data_counter:new_length, -1] = cells[1]
                 data_counter = new_length
-            numpy.save(fn, data[:data_counter])
+            self.save_array(fn, data[:data_counter])
             # save weights
             if self.uses_weights:
                 n_e = len(events)
@@ -363,12 +371,24 @@ class PSTH:
                 weight_of_cells = numpy.empty(n_e * n_c)
                 for i in range(len(events)):
                     weight_of_cells[i * n_c: (i + 1) * n_c] = weights[i, cells[0]]
-                numpy.save(self.get_numpy_name(prefix, tag, ch, weight=True), weight_of_cells)
+                self.save_array(self.get_numpy_name(prefix, tag, ch, weight=True), weight_of_cells)
         self.summary()
 
     # make sure this indexes into the right shape
     def get_unique_indices(self):
         return self.data[:, -1]
+
+    @staticmethod
+    def save_array(fn, data):
+        '''numpy.save, with a clearer error when the path is too long for Windows'''
+        try:
+            numpy.save(fn, data)
+        except FileNotFoundError as e:
+            if len(str(fn)) >= 260:
+                raise FileNotFoundError(f'Could not save {fn}: the path is {len(str(fn))} characters, longer than the '
+                                        f'Windows path limit (260). Use a shorter project folder or PSTH '
+                                        f'identifier.') from e
+            raise
 
     def get_numpy_name(self, prefix, tag, ch, weight=False):
         str_builder = [self.identifier, prefix, tag, ch, self.trigger_name, self.param_key, self.window_w]
