@@ -271,6 +271,7 @@ class GUI_main(QtWidgets.QMainWindow):
                             prefix_list.append(fn)
             if self.input_prefix is not None:
                 prefix_list = [prefix for prefix in self.input_prefix if prefix in self.dirpaths]
+            video_list = []
         elif self.setup == 'Pinnacle':
             suffix = '.edf'
             prefix_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
@@ -279,7 +280,6 @@ class GUI_main(QtWidgets.QMainWindow):
             # .avi: old EEG-Cam recordings with .npy sync; .mkv: vEEG recorder with _frames.csv and _ttl.csv
             video_list = [fn[:-4] for fn in flist if fn.endswith('.avi') or fn.endswith('.mkv')]
         # set list widget
-        print(video_list)
         self.prefix_list.clear()
         self.prefix_list.addItems(prefix_list)
         self.video_list.clear()
@@ -356,7 +356,7 @@ class GUI_main(QtWidgets.QMainWindow):
         ca.scatter((0, eegdur / xunit), (1, 1), marker='|', color='black')
         if frametimes is not None:
             self.alignment = video.alignment
-            ca.scatter(ttl / xunit, numpy.ones(len(ttl)) * 0.5, marker='|', c=numpy.isnan(self.alignment.cor_times_A))
+            ca.scatter(ttl / xunit, numpy.ones(len(ttl)) * 0.5, marker='|', c=numpy.isnan(self.alignment.cor_times_B))
             ca.plot((frametimes[0] / xunit, frametimes[-1] / xunit), (1, 1), color='green', linewidth=2)
             self.v_fps = video.fps
             self.v_frametimes = frametimes
@@ -375,6 +375,7 @@ class GUI_main(QtWidgets.QMainWindow):
         if os.path.exists(fn+'.avi'):
             pass #todo load with cv2 reader
         suffix = '_motion.npy'
+        self.motion_energy = None
         if os.path.exists(fn+ suffix):
             self.motion_energy = numpy.load(fn+suffix)
 
@@ -412,7 +413,7 @@ class GUI_main(QtWidgets.QMainWindow):
         #Todo add emg
 
         #Motion
-        if self.alignment is not None:
+        if self.alignment is not None and self.motion_energy is not None:
             ax[1].plot(self.v_frametimes[:len(self.motion_energy)], self.motion_energy, color='orange', zorder=1, linewidth=1)
 
 
