@@ -12,6 +12,33 @@ class Source(Enum):
     Raw = 2
 
 
+class GEVIRegStatus(Enum):
+    '''Whether a trace was pulled from a GEVIReg movie, and from which version'''
+    FIXED = 'fixed'  # GEVIReg movie made by version GEVIREG_FIXED_VERSION or later
+    OLD = 'old'  # GEVIReg movie made before the axis order fix (2026-10-09)
+    NOT_GEVIREG = 'not GEVIReg'  # pulled from another movie
+    UNKNOWN = 'unknown'  # no pull record, the session has a GEVIReg movie
+
+
+GEVIREG_FIXED_VERSION = 1  # first GEVIReg.Register.VERSION with the axis order fix (2026-10-09)
+
+
+def gevireg_version(procpath, prefix):
+    '''
+    Version of register() that made the session's GEVIReg output, from the regconfig json. 0 if the run was before
+    versions were saved (before the axis order fix), or not finished (the regconfig is saved last).
+    None if there is no GEVIReg output.
+    '''
+    folder = Path(procpath) / prefix / 'GEVIReg'
+    if not folder.exists():
+        return None
+    fn = folder / f'{prefix}_regconfig.json'
+    if not fn.exists():
+        return 0
+    with open(fn) as f:
+        return json.load(f).get('version', 0)
+
+
 class LoadRegistered():
     __name__ = 'LoadRegistered'
     '''

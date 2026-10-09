@@ -1,11 +1,12 @@
 import numpy
 from Proc2P.Analysis.LoadPolys import LoadImage, load_roi_file
 from Proc2P.Bruker.LoadMovie import LoadMovie, get_raw_movies
-from Proc2P.Bruker.LoadRegistered import Source
+from Proc2P.Bruker.LoadRegistered import Source, gevireg_version
 from Proc2P.Bruker.PreProc import SessionInfo
 import matplotlib.path as mplpath
 from statsmodels.stats.weightstats import DescrStatsW
 import os
+import json
 from multiprocessing import Process
 from time import time
 import datetime
@@ -212,6 +213,13 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
                     traces[c, start:stop, chi] = numpy.nanmean(inmem_data[:, ind[1], ind[0]], axis=1)
 
     numpy.save(opPath / f'{prefix}_trace_{tag}.npy', traces)
+    # record of the movie used, read by CaTrace and saved in the version info of the processed traces
+    pull_info = {'movie': use_movie.name, 'snr_weighted': snr_weighted, 'channels': channels,
+                 'date': datetime.datetime.now().isoformat(timespec='seconds')}
+    if use_movie == Source.GEVIReg:
+        pull_info['GEVIReg_version'] = gevireg_version(path, prefix)
+    with open(opPath / f'{prefix}_trace_{tag}.json', 'w') as f:
+        json.dump(pull_info, f, indent=2)
     elapsed = datetime.datetime.now() - t0
     minutes = datetime.timedelta.total_seconds(elapsed) / 60
     speed = (elapsed / len(channels) / nframes).microseconds
@@ -221,6 +229,25 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
     message = f'Pulled {avgtype} average from {int(nframes)} frames ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}.'
     message += '\r\n' + f'Channel order is: {channels}, {use_movie} movie was used.'
     return message
+
+def logged_pull_source(path, prefix, tag):
+    '''
+    The movie of the last pull of a ROI set, as written to the analysis logs by the pull Worker ('S2P', 'GEVIReg'
+    or 'Raw'). None if no pull of the tag is logged. For traces pulled before the pull info json was saved.
+    '''
+    found = []  # (timestamp, movie)
+    for fn in (Path(path) / prefix).glob(f'{prefix}_*_AnalysisLog*.txt'):
+        with open(fn, errors='replace') as f:
+            lines = [line for line in f.read().splitlines() if line.strip()]
+        # the message is two lines: '<time> - PullSignals: Pulled ... roi <tag>.', 'Channel order is: ..., <Source> movie was used.'
+        for line, next_line in zip(lines[:-1], lines[1:]):
+            if ' - PullSignals: Pulled ' in line and line.endswith(f' roi {tag}.') and 'movie was used' in next_line:
+                movie = next_line.rsplit(' movie was used', 1)[0].rsplit(' ', 1)[-1].removeprefix('Source.')
+                found.append((line.split(' - ', 1)[0], movie))
+    if not found:
+        return None
+    return max(found)[1]
+
 
 if __name__ == '__main__':
     # path = r'D:\Shares\Data\_Processed\2P\eCB-GRAB/'

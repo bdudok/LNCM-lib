@@ -20,6 +20,9 @@ Each frame is rigid, and consecutive frames are not independent - displacements 
 Displacements are (row, col), as returned by phase_cross_correlation. skimage transforms take (x, y) = (col, row).
 '''
 
+# saved in the regconfig json. Missing in runs before the axis order fix (2026-10-09).
+VERSION = 1
+
 
 @dataclass
 class RegConfig:
@@ -91,6 +94,12 @@ def register(proc_path, prefix, config=None, bidiphase=None):
     if fps < (config.displacement_lowpass * 2):
         lprint(None, f'FPS is {fps}, too low for filter setting {config.displacement_lowpass} Hz')
         return 0
+
+    # the settings are saved now without a version, and again with the version when the run is complete, so an
+    # interrupted run doesn't look complete but keeps its settings for the next run
+    regconfig_fn = os.path.join(oPath, prefix + config.setting_suffix)
+    with open(regconfig_fn, "w") as f:
+        json.dump(asdict(config), f, indent=2)
 
     if config.scratch_path is not None:
         memmap_fn = os.path.join(config.scratch_path, prefix + '_raw.npy')
@@ -239,8 +248,6 @@ def register(proc_path, prefix, config=None, bidiphase=None):
     if verbose:
         lprint(None, 'Applying displacements')
     numpy.save(disps_fn.replace(config.disps_suffix, config.filt_disps_suffix), f_disp)
-    with open(os.path.join(oPath, prefix + config.setting_suffix), "w") as f:
-        json.dump({**asdict(config), 'S2P_offset': ref_offset.tolist(), 'bidiphase': bidiphase}, f, indent=2)
 
     reg_movie = open_memmap(registered_output_handle, mode='w+',
                             shape=data.shape, dtype=numpy.uint16, )
@@ -296,3 +303,7 @@ def register(proc_path, prefix, config=None, bidiphase=None):
                 preview[..., chi] = x
         imwrite(previewname, preview)
     plt.close()
+
+    with open(regconfig_fn, "w") as f:
+        json.dump({**asdict(config), 'S2P_offset': ref_offset.tolist(), 'bidiphase': bidiphase, 'version': VERSION},
+                  f, indent=2)

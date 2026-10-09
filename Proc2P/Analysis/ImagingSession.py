@@ -13,6 +13,8 @@ from Proc2P.Analysis.FitEye import FitEye
 from Proc2P.Bruker.ConfigVars import CF
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Bruker.LoadEphys import Ephys
+from Proc2P.Bruker.LoadRegistered import GEVIRegStatus, GEVIREG_FIXED_VERSION
+from Proc2P.Analysis.PullSignals import logged_pull_source
 from LFP import Filter
 from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel, strip_ax, ewma
 from Proc2P.Analysis.Ripples import Ripples
@@ -87,6 +89,15 @@ class ImagingSession(object):
         self.has_ca = self.ca.load() is True
         if tag == 'dummy':
             self.ca.dummy_load(int(self.si['n_frames']))
+        if self.has_ca:
+            status = self.gevireg_status()
+            if status == GEVIRegStatus.OLD:
+                lprint(self, f'Warning: {prefix} trace {tag} was pulled from a GEVIReg movie registered before the '
+                             f'axis order fix. Pull it again from the rerun GEVIReg movie.')
+            elif status == GEVIRegStatus.UNKNOWN:
+                lprint(self, f'Warning: {prefix} has a GEVIReg movie, and it is not recorded whether trace {tag} '
+                             f'was pulled from it. If it was, it is from a GEVIReg movie registered before the '
+                             f'axis order fix.')
         self.ftimes = numpy.load(self.get_file_with_suffix('_FrameTimes.npy'))
 
         # load photostimulation if available:
@@ -522,6 +533,26 @@ class ImagingSession(object):
         self.rates[self.pltnum] = rates
         self.zscores[self.pltnum] = zscores
         return zscores
+
+    def gevireg_status(self):
+        '''
+        Which movie the loaded trace was pulled from (GEVIRegStatus). Assert FIXED to make sure that a trace is from
+        a GEVIReg movie registered after the axis order fix (2026-10-09).
+        Traces pulled since then have a pull record in their version info. For older traces, the pull is looked up in
+        the analysis logs (only pulls from the GUI are logged) if the session has a GEVIReg folder.
+        '''
+        if 'movie' in self.ca.version_info:
+            if self.ca.version_info['movie'] != 'GEVIReg':
+                return GEVIRegStatus.NOT_GEVIREG
+            fixed = int(self.ca.version_info['GEVIReg_version']) >= GEVIREG_FIXED_VERSION
+            return GEVIRegStatus.FIXED if fixed else GEVIRegStatus.OLD
+        if not (self.path / 'GEVIReg').exists():
+            return GEVIRegStatus.NOT_GEVIREG
+        movie = logged_pull_source(self.procpath, self.prefix, self.tag)
+        if movie is None:
+            return GEVIRegStatus.UNKNOWN
+        # pulls without a pull record were made before the fix
+        return GEVIRegStatus.OLD if movie == 'GEVIReg' else GEVIRegStatus.NOT_GEVIREG
 
     def qc(self, trim=10, nnd=None):
         '''returns a bool mask for cells that pass qc

@@ -3,6 +3,7 @@ import numpy
 import multiprocessing
 from multiprocessing import Process, Queue
 import os
+import json
 from scipy import signal
 import pandas
 import shutil
@@ -83,6 +84,7 @@ class CaTrace(object):
         if verbose:
             print(prefix, 'firing init')
         self.version_info = {}  # should contain only single strings as values
+        self.pull_info = {}  # saved by pull_signals with the raw trace
 
     # def open_trace(self):
     #     self.open_raw(trace=numpy.load(self.pf))
@@ -111,6 +113,10 @@ class CaTrace(object):
             else:
                 lprint(self, f'Missing file: {file_name}')
                 return -1
+            info_name = file_name.with_suffix('.json')
+            if os.path.exists(info_name):
+                with open(info_name) as f:
+                    self.pull_info = json.load(f)
         if len(self.trace.shape) == 3:
             # print(self.ch, self.trace.shape)
             if not self.ch < self.trace.shape[2]:
@@ -191,6 +197,10 @@ class CaTrace(object):
                              'channel': str(self.ch),
                              'fps': f'{round(self.fps, 1)}',
                              'bg_corr': str(self.last_bg)}  # should contain only single strings as values
+        # movie that the raw trace was pulled from. Missing if the trace was pulled before this was recorded.
+        for key in ('movie', 'GEVIReg_version'):
+            if key in self.pull_info:
+                self.version_info[key] = str(self.pull_info[key])
         numpy.save(self.pf / 'info.npy', self.version_info)
         message = f'Tag: {self.tag}, Ch: {self.ch}, sz_mode: {self.ignore_saturation}, baseline: {self.bsltype}'
         lprint(self, self.prefix, self.cells, 'cells saved.', message, logger=self.log)
