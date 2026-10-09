@@ -4,7 +4,7 @@ import os, shutil
 import suite2p
 # run using suite2p conda env but s2p package, not source
 
-from Proc2P.Bruker import PreProc
+from Proc2P.Bruker import Bidiphase, PreProc
 from tifffile import imwrite
 from Proc2P.utils import lprint
 
@@ -16,7 +16,13 @@ See: Proc2P/Analysis/S2P_template/20261007_BatchRun_MotionCorrect_Template.py
 
 def run(settings, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch, fast_disk=None):
     '''
-    :param settings: suite2p settings dict (from suite2p.default_settings())
+    :param settings: suite2p settings dict (from suite2p.default_settings()).
+        Bidiphase: with settings['registration']['do_bidiphase'] False, the movie is not corrected. With True, the
+        offset is settings['registration']['bidiphase'] if nonzero, otherwise estimated from the reference channel
+        (Bidiphase.estimate_file) and rounded, or 0 if the estimate is under 1 px. A nonzero offset is corrected in
+        a copy of the raw movie in <fast_disk>_bidi, which suite2p registers instead of the raw files (suite2p 1.1.0
+        can't correct it, see Bidiphase). suite2p itself runs with do_bidiphase False; the corrected offset is saved
+        in the suite2p db as 'bidiphase_corrected'.
     :param fast_disk: folder for suite2p scratch files. Default: E:/S2P/<username>/
     '''
     username = os.environ.get('USERNAME')
@@ -82,8 +88,33 @@ def run(settings, session_df, pre_only, overwrite_previous, overwrite_preproc, r
             db['nchannels'] = 2
             session_settings['registration']['align_by_chan2'] = s.channelnames.index(ref_ch) == 1
 
+        # bidiphase offset, corrected in a copy of the movie
+        reg = session_settings['registration']
+        offset = 0
+        if reg['do_bidiphase']:
+            if reg['bidiphase']:
+                offset = int(reg['bidiphase'])
+                lprint(None, f'Bidiphase offset from settings: {offset} px')
+            else:
+                align_ch = s.channelnames[1] if reg['align_by_chan2'] else s.channelnames[0]
+                fn = sorted(fn for fn in filelist if f'_{align_ch}_' in fn)[0]
+                estimate = Bidiphase.estimate_file(os.path.join(s.dpath, fn))
+                offset = round(estimate) if abs(estimate) >= 1 else 0  # sub-pixel offsets are not corrected
+                lprint(None, f'Bidiphase offset estimated from {align_ch}: {estimate:.1f} px, correcting {offset} px')
+        reg['do_bidiphase'] = False
+        reg['bidiphase'] = 0
+        db['bidiphase_corrected'] = offset
+        standin_path = os.path.normpath(fast_disk) + '_bidi'
+        if offset:
+            Bidiphase.write_corrected(s.dpath, filelist, standin_path, offset)
+            db['data_path'] = [standin_path]
+
         # run motion correction
-        suite2p.run_s2p(db=db, settings=session_settings)
+        try:
+            suite2p.run_s2p(db=db, settings=session_settings)
+        finally:
+            if offset:
+                shutil.rmtree(standin_path, ignore_errors=True)
         s2p_folder = s.procpath / 'suite2p' / 'plane0'
         reg_outputs = numpy.load(s2p_folder / 'reg_outputs.npy', allow_pickle=True).item()
 
