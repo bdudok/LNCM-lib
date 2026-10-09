@@ -63,7 +63,7 @@ class Pos:
 class ImagingSession(object):
     __name__ = 'ImagingSession'
 
-    def __init__(self, procpath, prefix, tag=None, norip=True, opath='.', ch=0,
+    def __init__(self, procpath, prefix, tag='dummy', norip=True, opath='.', ch=0,
                  ripple_tag=None, lfp_ch=1, **kwargs):
         self.opath = opath
         self.prefix = prefix

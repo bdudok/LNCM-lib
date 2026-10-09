@@ -35,7 +35,7 @@ no eye or face traces yet.
 class NWBImagingSession(ImagingSession):
     __name__ = 'NWBImagingSession'
 
-    def __init__(self, procpath, prefix, tag=None, norip=True, opath='.', ch=0, ripple_tag=None, lfp_ch=1,
+    def __init__(self, procpath, prefix, tag='dummy', norip=True, opath='.', ch=0, ripple_tag=None, lfp_ch=1,
                  nwb_filename='{prefix}.nwb', temp_root=None, **kwargs):
         '''
         :param procpath: folder of the NWB file
