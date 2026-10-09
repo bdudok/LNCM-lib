@@ -229,7 +229,11 @@ class PutLogEntries:
         return resp
 
     def check(self, sessionID, source='ArchiveZip'):
-        '''Return True if the sessionID is already registered in BR as archived'''
+        '''
+        Return the log entries (DataFrame, empty if none) whose Name contains sessionID and Class is source,
+        e.g. sessions already registered in BR as archived.
+        Read with the read-only token: the logger token can only create rows.
+        '''
         params = {
             f"filter__field_{config['LogID']['Name']}__contains": sessionID,
             f"filter__field_{config['LogID']['Class']}__equal": source,
@@ -237,12 +241,12 @@ class PutLogEntries:
 
         resp = requests.get(config['log_url'],
                             headers={
-                                "Authorization": self.auth_string,
+                                "Authorization": f"Token {config['api_token']}",
                             },
                             params=params
                             )
-
-        return pandas.DataFrame(resp.json())
+        resp.raise_for_status()
+        return pandas.DataFrame(resp.json()['results'])
 
 
 class Exclusions:
