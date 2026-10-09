@@ -6,6 +6,7 @@ from dataclasses import dataclass, asdict
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.utils import *
 from Proc2P.Bruker.LoadMovie import get_raw_movies
+from Proc2P.Bruker import Bidiphase
 from skimage.registration import phase_cross_correlation
 from skimage import transform
 from scipy.signal import bessel, sosfiltfilt
@@ -16,6 +17,7 @@ from multiprocessing import Process
 '''
 Rigid motion correction for high frame rate (GEVI) movies
 Each frame is rigid, and consecutive frames are not independent - displacements are smoothed 
+Displacements are (row, col), as returned by phase_cross_correlation. skimage transforms take (x, y) = (col, row).
 '''
 
 
@@ -59,7 +61,12 @@ class Worker(Process):
             register(*data)
             self.res_queue.put((self.__name__+str(self.n), prefix))
 
-def register(proc_path, prefix, config=None):
+def register(proc_path, prefix, config=None, bidiphase=None):
+    '''
+    :param bidiphase: offset of the odd lines (int px, Bidiphase.shift convention), corrected in the raw movie before
+     registration. None: use the offset that MotionCorrect corrected (db['bidiphase_corrected'] in suite2p/plane0/db.npy),
+     so the movie matches the suite2p mean image used as reference. 0 if there is no db.npy.
+    '''
     debug = False
     if config is None:
         config = RegConfig()
@@ -98,6 +105,16 @@ def register(proc_path, prefix, config=None):
     else:
         movies = get_raw_movies(info)
         data = movies[ref_channel]
+
+    if bidiphase is None:
+        db_path = os.path.join(proc_path, prefix, 'suite2p/plane0/db.npy')
+        bidiphase = numpy.load(db_path, allow_pickle=True).item().get('bidiphase_corrected', 0) if os.path.exists(db_path) else 0
+    bidiphase = int(bidiphase)
+    if bidiphase:
+        lprint(None, f'Correcting bidiphase offset: {bidiphase}')
+        data = numpy.array(data)  # writable copy, the cached raw movie is opened read-only
+        for i in range(len(data)):
+            data[i] = Bidiphase.shift(data[i], bidiphase)
     disps_fn = os.path.join(oPath, prefix + config.disps_suffix)
 
     n_frames = info["n_frames"]
@@ -110,6 +127,7 @@ def register(proc_path, prefix, config=None):
     exclude_move = gapless(session.pos.speed, int(fps), threshold=1, expand=int(fps))
     if exclude_move is None:
         exclude_move = numpy.zeros(n_frames, dtype='bool')
+    exclude_move = exclude_move.astype('bool')  # gapless returns floats if the speed is all zero
     bad_frames = session.ca.sync.load('opto', suppress=True)
     if bad_frames is None:
         bad_frames = []
@@ -137,15 +155,15 @@ def register(proc_path, prefix, config=None):
 
     d = norm_img(data, norm_min, norm_range)
     r = norm_img(first_ref, norm_min, norm_range)
-    reg_offset = [0, 0]
+    # expected displacement of stable frames: the offset of the reference from the raw frames
+    ref_offset = numpy.zeros(2)
     lp = os.path.join(proc_path, prefix, 'suite2p/plane0/ops.npy')
     if use_reference == 'S2P' and os.path.exists(lp):
         # use previous registration result as reference, so segmentations can be reused
         ops = numpy.load(lp, allow_pickle=True).item()
         s2pr = ops['meanImg']
         norm_s2pr = norm_img(s2pr, s2pr.min(), s2pr.max() - s2pr.min())
-        ref_offset = phase_cross_correlation(norm_s2pr, r, upsample_factor=10)[0]
-        config.S2P_offset = ref_offset
+        ref_offset = phase_cross_correlation(r, norm_s2pr, upsample_factor=10)[0]
         lprint(None, f'Offset from S2P reference: {ref_offset}')
         r = norm_s2pr  # this updates the reference for upcoming steps
 
@@ -155,7 +173,6 @@ def register(proc_path, prefix, config=None):
     ref_frames = [x for x in ref_frames if snr[x] > snr_lim]
     if debug:
         print(f'After exclude low snr, {len(ref_frames)} ref frames')
-    max_offset = max([abs(x) for x in reg_offset])  # to add to limit for keeping frames as stable reference
     avgs = numpy.zeros([len(ref_frames), *first_ref.shape])
     n_roll = round(config.rolling_avg_size / 1000 * fps)
     disps = numpy.zeros((len(ref_frames), 2))
@@ -167,7 +184,7 @@ def register(proc_path, prefix, config=None):
         avg_sample = numpy.sum(weighted_sample, axis=0) / numpy.sum(snr[i0:i1])
         displacements = phase_cross_correlation(avg_sample, r, upsample_factor=10)  # fit ref to target,
         disps[i] = displacements[0]
-        if max([abs(x) for x in displacements[0]]) < (config.ref_displacement_limit + max_offset):
+        if numpy.abs(displacements[0] - ref_offset).max() < config.ref_displacement_limit:
             stable_refs.append(i)
     sr_size = int(config.min_ref_size / 2)
     if debug:
@@ -181,7 +198,7 @@ def register(proc_path, prefix, config=None):
             print(f'After adding, {len(stable_refs)} "stable" ref frames')
     for i in stable_refs:
         f = ref_frames[i]
-        tforms = transform.SimilarityTransform(translation=disps[i])
+        tforms = transform.SimilarityTransform(translation=disps[i][::-1])
         avgs[i] = transform.warp(data[f], tforms, order=1, preserve_range=True).astype('float')
 
     # update reference one last time for using with the final registration
@@ -194,7 +211,7 @@ def register(proc_path, prefix, config=None):
     f_disp = numpy.empty(disps.shape)
 
     # estimate raw displacement (single frames)
-    if not os.path.exists(disps_fn):
+    if config.overwrite or not os.path.exists(disps_fn):
         if verbose:
             lprint(None, 'Estimating displacements')
         for i in range(len(d)):
@@ -223,13 +240,13 @@ def register(proc_path, prefix, config=None):
         lprint(None, 'Applying displacements')
     numpy.save(disps_fn.replace(config.disps_suffix, config.filt_disps_suffix), f_disp)
     with open(os.path.join(oPath, prefix + config.setting_suffix), "w") as f:
-        json.dump(asdict(config), f, indent=2)
+        json.dump({**asdict(config), 'S2P_offset': ref_offset.tolist(), 'bidiphase': bidiphase}, f, indent=2)
 
     reg_movie = open_memmap(registered_output_handle, mode='w+',
                             shape=data.shape, dtype=numpy.uint16, )
     for i, frame in enumerate(data):
-        tforms = transform.SimilarityTransform(translation=f_disp[i])
-        reg_movie[i] = transform.warp(frame, tforms, order=1, mode='symmetric', preserve_range=True)
+        tforms = transform.SimilarityTransform(translation=f_disp[i][::-1])
+        reg_movie[i] = numpy.rint(transform.warp(frame, tforms, order=1, mode='symmetric', preserve_range=True))
     reg_movie.flush()
 
     if verbose:
@@ -253,7 +270,7 @@ def register(proc_path, prefix, config=None):
 
     # add a sample to have a general preview of registration quality
 
-    spaced_frames = numpy.linspace(config.ref_margin, n_frames - config.ref_margin, config.ref_size).astype('int64')
+    spaced_frames = numpy.linspace(ref_margin, n_frames - ref_margin, config.ref_size).astype('int64')
     # exp_indices = sort_disp[spaced_frames]
     ca = ax[1, 1]
     strip_ax(ca)
