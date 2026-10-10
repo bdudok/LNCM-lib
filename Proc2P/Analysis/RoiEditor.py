@@ -112,6 +112,8 @@ class RoiEditor(object):
                 if image_shape is not None:
                     coords = RoiEditor.trim_coords(numpy.copy(new_array[:, 1:]), image_shape)
                     new_array[:, 1:] = coords
+                # stored as integers: round, so that fractional (e.g. dilated) coordinates are not shifted up and left
+                new_array[:, 1:] = numpy.round(new_array[:, 1:])
             # append the new array to container
             new_length = roi_counter + len(new_array)
             if new_length > len(rois):
