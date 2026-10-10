@@ -195,13 +195,13 @@ class IPSP:
         :return: model parameters
         '''
         M = self.get_matrix()
-        self.wh_nan = numpy.where(numpy.average(numpy.isnan(M[:, ci, :]), axis=0) > 0.2)
+        # local: self.wh_nan and self.notna belong to the model fit and are used by pull_ipsps
+        wh_nan = numpy.where(numpy.average(numpy.isnan(M[:, ci, :]), axis=0) > 0.2)
         Y = numpy.nanmean(M[:, ci, self.config.pre:], axis=0)
         notna = numpy.ones(len(Y), dtype='bool')
-        for x in self.wh_nan[0]:
+        for x in wh_nan[0]:
             if x >= self.config.pre:
                 notna[x - self.config.pre] = False
-        self.notna = notna
         X = 1000 * numpy.arange(self.config.post) / self.session.fps
         fitX = X[notna]
         fitY = Y[notna]
