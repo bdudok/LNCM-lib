@@ -482,10 +482,8 @@ class IPSP:
         # response is ampl parameter of the fit, compared to where it returns to
         # amplitude is the peak value minus baseline value
         assert order <= self.config.order
-        if save_fitforms and (order > 1):
-            order_dims = 2
-            if order == 7:
-                order_dims += 2
+        if save_fitforms:
+            order_dims = {1: 1, 2: 2, 7: 4}[order]
             fitforms = numpy.empty((self.n_cells, self.n_stims, self.config.post, order_dims))
             fitforms[:] = numpy.nan
         if order > 1:
@@ -522,9 +520,13 @@ class IPSP:
                         y_at_peak2 = self.dual_alpha_func(self.model_2[5] + self.model_2[6], *use_model) #predict at B2+D2
                         self.responses[ci, ei, -4:] = second_fit[0], bl - y_at_peak1, second_fit[-1], bl - y_at_peak2
                     if save_fitforms:
+                        if order == 1:
+                            fitX = self.X[self.notna & numpy.logical_not(numpy.isnan(Y))]
+                            first_Y = bl - self.ampl_func(fitX, *fit)
                         ind_x = (fitX * self.session.fps / 1000).astype('int64')
                         fitforms[ci, ei, ind_x, 0] = first_Y
-                        fitforms[ci, ei, ind_x, 1] = second_Y
+                        if order > 1:
+                            fitforms[ci, ei, ind_x, 1] = second_Y
                         if order == 7:
                             e_model = [x for x in use_model]
                             e_model[0] = 0
