@@ -523,7 +523,7 @@ class IPSP:
                         if order == 1:
                             fitX = self.X[self.notna & numpy.logical_not(numpy.isnan(Y))]
                             first_Y = bl - self.ampl_func(fitX, *fit)
-                        ind_x = (fitX * self.session.fps / 1000).astype('int64')
+                        ind_x = numpy.round(fitX * self.session.fps / 1000).astype('int64')  # truncating can drop a frame
                         fitforms[ci, ei, ind_x, 0] = first_Y
                         if order > 1:
                             fitforms[ci, ei, ind_x, 1] = second_Y
