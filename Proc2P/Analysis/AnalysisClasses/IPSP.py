@@ -501,25 +501,25 @@ class IPSP:
                 if fit is None:
                     self.responses[ci, ei, 1:] = numpy.nan
                 else:
-                    # peak value:
+                    # peak value: the alpha function peaks at B+D
                     B = self.model[1]
                     D = self.model[3]
-                    y_at_peak = self.alpha_func(B, fit[0], B, fit[1], D)
+                    y_at_peak = self.alpha_func(B + D, fit[0], B, fit[1], D)
                     # note because alpha puts the response on top of the baseline, bl-y_at_peak is the actual value.
                     self.responses[ci, ei, 1:4] = bl, fit[0], bl - y_at_peak
                     if order == 2:
                         fitX, second_fit, first_Y, second_Y = self.fit_event_second_component(Y, bl, fit)
                         B = self.model_2[1]
                         D = self.model_2[3]
-                        y_at_peak = self.alpha_func(B, second_fit[0], B, second_fit[1], D)
+                        y_at_peak = self.alpha_func(B + D, second_fit[0], B, second_fit[1], D)
                         self.responses[ci, ei, -2:] = second_fit[0], bl - y_at_peak
                     elif order == 7:
                         fitX, second_fit, first_Y, second_Y = self.fit_event_7(Y, bl, fit)
                         use_model = [x for x in self.model_2]
                         for fi, mi in enumerate((0, 2, 4)): #A1, C, A2
                             use_model[mi] = second_fit[fi]
-                        y_at_peak1 = self.dual_alpha_func(self.model_2[1], *use_model) #predict at B1
-                        y_at_peak2 = self.dual_alpha_func(self.model_2[5], *use_model) #predict at B2
+                        y_at_peak1 = self.dual_alpha_func(self.model_2[1] + self.model_2[3], *use_model) #predict at B1+D1
+                        y_at_peak2 = self.dual_alpha_func(self.model_2[5] + self.model_2[6], *use_model) #predict at B2+D2
                         self.responses[ci, ei, -4:] = second_fit[0], bl - y_at_peak1, second_fit[-1], bl - y_at_peak2
                     if save_fitforms:
                         ind_x = (fitX * self.session.fps / 1000).astype('int64')
