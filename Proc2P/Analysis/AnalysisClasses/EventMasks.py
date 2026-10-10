@@ -19,12 +19,12 @@ def PhotoStimTrain(a, w):
     event_frames = numpy.load(a.get_file_with_suffix('_photostim_trains.npy'))
     return masks_from_list(a, w, event_frames)
 
-def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_seconds=0, mask_stim=None,
+def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_seconds=0, mask_stim='auto',
                     stopresp_only=None,
                    filter_by_sz=None):
     '''
-    :param mask_stim: frames to mask after each stim onset: an int (0 to n), a tuple (from, to), or 'auto' to mask
-        the frames affected by each stim (ImagingSession.stim_artifact_frames)
+    :param mask_stim: frames to mask after each stim onset: 'auto' (default) masks the frames affected by each stim
+        (ImagingSession.stim_artifact_frames). Or an int (0 to n), a tuple (from, to), or None for no masking.
     '''
     if a.opto is None:
         event_frames = []
