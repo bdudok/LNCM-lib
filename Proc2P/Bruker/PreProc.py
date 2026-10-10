@@ -291,7 +291,10 @@ class PreProc:
                 if stimframes is not None and len(stimframes):
                     badframes = numpy.array(badframes, dtype='int')
                     led_op.to_excel(self.procpath / f'{self.prefix}_StimFrames.xlsx')
-                    numpy.save(self.dpath / 'bad_frames.npy', badframes)
+                    # the raw folder copy may belong to another user: only write it if the content changed
+                    raw_fn = self.dpath / 'bad_frames.npy'
+                    if not (raw_fn.exists() and numpy.array_equal(numpy.load(raw_fn), badframes)):
+                        numpy.save(raw_fn, badframes)
                     numpy.save(self.procpath / f'{self.prefix}_bad_frames.npy', badframes)
                 self.found_output.append('StimPulses')
 
@@ -357,6 +360,9 @@ class PreProc:
             fig.savefig(self.procpath / f'{self.prefix}_treadmill.png', dpi=300)
             plt.close()
         # read rSync
+        if self.rsync_channel is None:
+            self.lprint(self, 'No rsync channel, treadmill not aligned to frames')
+            return None
         tm_rsync = tm.get_Rsync_times().astype('int') #ms
         sc_rsync = (self.ttl_times * 1000).astype('int') #ms
         try:
@@ -453,7 +459,7 @@ class PreProc:
                 if config_json is not None and type(config_json) != float and len(config_json):
                     config = json.loads(config_json)
                     for subkey, subtag in zip (('l', 'p'), ('Duration', 'Power')):
-                        if subkey in config_json:
+                        if subkey in config:
                             subv = float(config[subkey])
                             okey = 'Baserow_' + key.replace('.', '_') + '_' + subtag
                             self.md_keys.append(okey)
