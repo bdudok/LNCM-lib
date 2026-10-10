@@ -145,9 +145,10 @@ def masks_from_list(a, w, event_list, exclude_movement=False):
         if w0 + w1 > 1:
             mask[ri, w - w0:w + w1] = numpy.arange(current_frame - w0, current_frame + w1)
     if exclude_movement:
-        speed_mask = numpy.nan_to_num(mask.astype('int16'))
-        mov_mask = a.pos.movement[speed_mask]
-        mov_mask[speed_mask == 0] = 0
+        # look up movement only at the frames in the mask (NaN means no frame)
+        valid = ~numpy.isnan(mask)
+        frames = numpy.where(valid, mask, 0).astype('int64')
+        mov_mask = a.pos.movement[frames] & valid
         mask[mov_mask] = numpy.nan
     return events, mask
 
