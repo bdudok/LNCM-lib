@@ -293,9 +293,9 @@ class IPSP:
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('Response (DF/F)')
             plt.savefig(self.get_fn('model.png'))
-            # numpy.save(self.get_fn('model.npy'), self.model) #this is never used and can be parsed from json in the text file
             plt.tight_layout()
             self.fig = fig, ax
+        numpy.save(self.get_fn('model.npy'), self.model)  # get_ipsps loads it with the saved responses
 
     def constrain_guesses(self, guesses, bounds):
         ret_guesses = []
