@@ -458,12 +458,15 @@ class ImagingSession(object):
                 break
 
     def map_instrate(self):
-        '''get the instantaneous rate of LFP spikes in each 2P imaging frame'''
-        mapped_fn = self.get_file_with_suffix(f'_Ch{self.lfp_ch}_instrate_mapped.npy')
+        '''get the instantaneous rate of LFP spikes in each 2P imaging frame, from the spike times of the session's
+        spiketag (file names as in map_spiketimes). Cached per channel and spiketag.'''
+        spiketag = self.kwargs.get('spiketag', None)
+        tag_str = '' if spiketag in (None, 'None') else f'_{spiketag}'
+        mapped_fn = self.get_file_with_suffix(f'{tag_str}_Ch{self.lfp_ch}_instrate_mapped.npy')
         if os.path.exists(mapped_fn):
             return numpy.load(mapped_fn)
         else:
-            spikes = read_excel(self.get_file_with_suffix(f'_Ch{self.lfp_ch}_spiketimes.xlsx'))
+            spikes = read_excel(self.get_file_with_suffix(f'{tag_str}_Ch{self.lfp_ch}_spiketimes.xlsx'))
             spk_times = spikes['SpikeTimes(s)'].values
             nframes = self.si.info['n_frames']
             X = self.ftimes[1:-1, 0] # skip first and last frames, because ephys samples may not align with imaging
