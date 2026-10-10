@@ -7,14 +7,22 @@ from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.utils import gapless, outlier_indices, lprint
 from multiprocessing import Process
 from dataclasses import dataclass
+from enum import Enum
+
+
+class Monotonic(Enum):
+    '''constraint on the slow baseline. Monotonic(x) also accepts the values None, 'up', 'down'.'''
+    NONE = None
+    UP = 'up'  # baseline increases throughout the recording, such as bleaching in an inverted GEVI trace
+    DOWN = 'down'
 
 @dataclass
 class PullVmConfig:
     #fields to be configurable from GUI
     gauss_sigma: float = 3 # resolution of calculating the range (s).
-    monotonic: str | None = 'up' #if 'up' (such as bleaching in inverted gevi trace): baseline is increasing throughout the recording
+    monotonic: Monotonic = Monotonic.UP
     percentile: float = 1 #max and min of the range defined as percentile of values. 1 is good for control, 5 for epileptic
-    exclude_move: bool = False # if true, periods with running are excluded from fitting the models (but are predicted).
+    exclude_move: bool = True # if true, periods with running are excluded from fitting the models (but are predicted).
     exclude_seizures_flag: bool = False #if true, periods marked as seizures are excluded from fitting the models (but are predicted).
     overwrite: bool = False #if False, skips when output exists
 
@@ -28,13 +36,15 @@ def normalize_trace(session: ImagingSession, cells=None, save=True,
     :param session: an initialized ImagingSession
     :return: nothing, saves traces in CaTrace
     :keywords
-        monotonic: if 'up' (such as bleaching in inverted gevi trace): baseline is increasing throughout the recording
+        monotonic: Monotonic, or its value (None, 'up', 'down'). UP (such as bleaching in inverted gevi trace):
+            baseline is increasing throughout the recording
             can be less accurate than default polynom, but reduces the number of cells that need to be excluded due to
             poor baseline fitting
         return_for_test: (bool) instead of saving, return the results for inspection
         exclude_seizures: (bool)periods marked as seizures are excluded from fitting the models (but are predicted).
         cell: (int) if specified, only compute that cell
     '''
+    monotonic = Monotonic(monotonic)
     fps = session.fps
     look_back_frames = int(fps / 0.3)  # time frame for finding the range, 1/firing rate
     # filter_order = (1, 1, 1)  # for arima. dorpna not compatible with all models, this works fine but slows signals.
@@ -78,13 +88,10 @@ def normalize_trace(session: ImagingSession, cells=None, save=True,
             y[exclude_sz] = numpy.nan
         baseline = arima_filtfilt(y)
         slo_baseline = gaussian_filter(baseline, int(fps * gauss_sigma))
-        if monotonic is not None:
-            if monotonic == 'up':
-                slo_baseline = (slo_baseline + numpy.maximum.accumulate(slo_baseline)) / 2
-            elif monotonic == 'down':
-                slo_baseline = (slo_baseline + numpy.minimum.accumulate(slo_baseline)) / 2
-            else:
-                raise ValueError('Monotonic should be None, "up" or "down"')
+        if monotonic == Monotonic.UP:
+            slo_baseline = (slo_baseline + numpy.maximum.accumulate(slo_baseline)) / 2
+        elif monotonic == Monotonic.DOWN:
+            slo_baseline = (slo_baseline + numpy.minimum.accumulate(slo_baseline)) / 2
 
         corr = Y - slo_baseline
 

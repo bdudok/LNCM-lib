@@ -95,7 +95,7 @@ def gapless(trace, gap=5, threshold=0, expand=None):
     if trace is None:
         return None
     elif not numpy.count_nonzero(trace):
-        return numpy.zeros(len(trace))
+        return numpy.zeros(len(trace), dtype='bool')
     gapless = trace > threshold
     ready = False
     gap = int(gap)

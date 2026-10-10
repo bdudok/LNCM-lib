@@ -11,6 +11,7 @@ import json
 import sys
 import datetime
 from dataclasses import dataclass, fields, asdict
+from enum import Enum
 
 from Proc2P.Analysis.BatchGUI.Config import *
 from Proc2P.Analysis.AssetFinder import AssetFinder, get_processed_tags
@@ -321,6 +322,10 @@ class GUI_main(QtWidgets.QMainWindow):
             elif ftype is bool:
                 w = QtWidgets.QCheckBox()
                 w.setChecked(fvalue)
+            elif isinstance(ftype, type) and issubclass(ftype, Enum):
+                w = QtWidgets.QComboBox()
+                w.addItems([x.name for x in ftype])
+                w.setCurrentText(fvalue.name)
             else:
                 w = QtWidgets.QLineEdit()
                 w.setText(fvalue)
@@ -338,6 +343,8 @@ class GUI_main(QtWidgets.QMainWindow):
                 setattr(cfg, fname, ftype(w.value()))
             elif ftype == bool:
                 setattr(cfg, fname, w.isChecked())
+            elif isinstance(ftype, type) and issubclass(ftype, Enum):
+                setattr(cfg, fname, ftype[w.currentText()])
             else:
                 setattr(cfg, fname, w.text())
 
