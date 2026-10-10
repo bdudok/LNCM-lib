@@ -10,6 +10,7 @@ import numpy
 import json
 import sys
 import datetime
+import typing
 from dataclasses import dataclass, fields, asdict
 from enum import Enum
 
@@ -345,6 +346,8 @@ class GUI_main(QtWidgets.QMainWindow):
                 setattr(cfg, fname, w.isChecked())
             elif isinstance(ftype, type) and issubclass(ftype, Enum):
                 setattr(cfg, fname, ftype[w.currentText()])
+            elif w.text() == '' and type(None) in typing.get_args(ftype):
+                setattr(cfg, fname, None)  # an empty field of an optional setting means None
             else:
                 setattr(cfg, fname, w.text())
 
