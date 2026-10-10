@@ -4,7 +4,6 @@ import multiprocessing
 from multiprocessing import Process, Queue
 import os
 import json
-from scipy import signal
 import pandas
 import shutil
 from Proc2P.Bruker.SyncTools import Sync
@@ -174,10 +173,13 @@ class CaTrace(object):
         if self.verbose:
             print('Saving cell ' + str(c))
         for att in self.keys:
-            # print('saving', att, self.__getattribute__(att).shape, data[att].shape)
             tr = data[att]
             if self.invert:
-                tr = numpy.nanmax(tr) - tr
+                # inverted sensor (GEVI): trace becomes Fmax-F, dF/F is computed from the real baseline and sign flipped
+                if att == 'trace':
+                    tr = numpy.nanmax(tr) - tr
+                elif att in ('rel', 'ntr', 'smtr'):
+                    tr = -tr
             self.__getattribute__(att)[c] = tr
 
         self.computed_cells += 1
@@ -196,7 +198,8 @@ class CaTrace(object):
         self.version_info = {'v': '13', 'bsltype': self.bsltype, 'sz_mode': str(self.ignore_saturation),
                              'channel': str(self.ch),
                              'fps': f'{round(self.fps, 1)}',
-                             'bg_corr': str(self.last_bg)}  # should contain only single strings as values
+                             'bg_corr': str(self.last_bg),
+                             'invert': str(self.invert)}  # should contain only single strings as values
         # movie that the raw trace was pulled from. Missing if the trace was pulled before this was recorded.
         for key in ('movie', 'GEVIReg_version'):
             if key in self.pull_info:
@@ -346,24 +349,6 @@ class Worker(Process):
             else:
                 if bsltype == 'poly':
                     # instead of original sliding window minimum, use a polynom fit for baseline
-                    # iteratively remove negative peaks from the smoothed trace
-                    for _ in range(5):
-                        sneg = []
-                        for chunk in range(trim, frames - trim, trim):
-                            pks = signal.find_peaks_cwt(-smw[chunk:chunk + trim],
-                                                        numpy.array([5, 10, 20, 50, 100]), min_length=10, min_snr=2)
-                            sneg.extend(numpy.array(pks) + chunk)
-                        if len(sneg) > 1:
-                            nsmw = numpy.copy(smw)
-                            for t in sneg:
-                                start, stop = int(max(0, t - (5 * fps))), int(min(frames, t + 5 * fps))
-                                tc1, tc2 = numpy.nanargmax(smw[start:t]) + start, numpy.nanargmax(smw[t:stop]) + t
-                                inds = list(numpy.arange(start, max(tc1, start + 0.5 * self.fps)))
-                                inds.extend(numpy.arange(min(tc2, stop - 0.5 * fps), stop))
-                                nsmw[tc1:tc2] = numpy.nanmean(smw[inds])
-                            smw = nsmw
-                        else:
-                            break
                     # fit polynom (for periods outside movement
                     x = []
                     for t in numpy.arange(trim, frames - trim):
@@ -396,7 +381,7 @@ class Worker(Process):
                     if numpy.any(bsl < 0):
                         lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline', )
                         bsltype = 'original'
-                elif bsltype in ['original', 'both']:  # both not implemented
+                if bsltype in ['original', 'both']:  # both not implemented
                     # the F0 method described in Jia Nat Prot 2011 paper
                     for t in range(1, frames):
                         ti0, ti1 = max(0, t - t2), min(t, frames)
