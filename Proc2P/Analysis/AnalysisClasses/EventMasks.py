@@ -22,6 +22,10 @@ def PhotoStimTrain(a, w):
 def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_seconds=0, mask_stim=None,
                     stopresp_only=None,
                    filter_by_sz=None):
+    '''
+    :param mask_stim: frames to mask after each stim onset: an int (0 to n), a tuple (from, to), or 'auto' to mask
+        the frames affected by each stim (ImagingSession.stim_artifact_frames)
+    '''
     if a.opto is None:
         event_frames = []
     else:
@@ -53,7 +57,15 @@ def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_secon
     if filter_by_sz is not None:
         event_frames = Filter_events_by_sz(a, event_frames, filter_by_sz)
     event, mask = masks_from_list(a, w, event_frames)
-    if mask_stim is not None:
+    if mask_stim == 'auto':
+        # mask the frames affected by each stim, which can be one more than the opto frames (see stim_artifact_frames)
+        artifact = a.stim_artifact_frames()
+        for ri, e in enumerate(event):
+            k = 0
+            while k < w and e + k < len(artifact) and artifact[e + k]:
+                mask[ri, w + k] = numpy.nan
+                k += 1
+    elif mask_stim is not None:
         if not type(mask_stim) == tuple:
             mask_stim = (0, mask_stim)
         mask[:, w+int(mask_stim[0]):w+int(mask_stim[1])+1] = numpy.nan

@@ -152,6 +152,38 @@ class ImagingSession(object):
         else:
             self.opto = None
 
+    def stim_artifact_frames(self, threshold=10, baseline=25):
+        '''
+        Frames affected by photostimulation: the opto frames (LED on during the frame, from the voltage recording),
+        and the frame after each run of opto frames if its brightness differs by more than threshold robust SDs from
+        the frames before the stim, or if CaTrace set it to NaN as an outlier. That frame is sometimes affected when
+        the LED turns off close to a frame boundary. Brightness is the mean trace of the ROIs.
+        :param threshold: in robust SDs (1.4826 * median absolute deviation)
+        :param baseline: number of frames before the stim used as reference
+        :return: bool array (frames), None if the session has no photostimulation
+        '''
+        if self.opto is None:
+            return None
+        trace = self.ca.trace if self.ca.trace.ndim == 2 else self.ca.trace[..., 0]
+        y = numpy.nanmean(trace, axis=0)
+        mask = numpy.copy(self.opto)
+        edges = numpy.diff(self.opto.astype(int), prepend=0, append=0)
+        for start, stop in zip(numpy.where(edges == 1)[0], numpy.where(edges == -1)[0]):  # stop: first frame after
+            if stop >= len(y):
+                continue
+            if numpy.isnan(y[stop]):
+                mask[stop] = True
+                continue
+            window = slice(max(0, start - baseline), start)
+            ref = y[window][~mask[window] & ~numpy.isnan(y[window])]
+            if len(ref) < 5:
+                continue
+            med = numpy.median(ref)
+            sd = 1.4826 * numpy.median(numpy.abs(ref - med))
+            if sd > 0 and abs(y[stop] - med) > threshold * sd:
+                mask[stop] = True
+        return mask
+
     def map_pos(self):
         self.pos = Pos(self.ca.sync, self.fps)
         if self.pos.speed is None:  # in case this data is missing
