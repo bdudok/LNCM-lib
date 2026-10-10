@@ -386,7 +386,9 @@ class DataSet:
             if alt_tag is not None:
                 cellfield += f'.{alt_tag}'
             if cellfield in self.df.columns:
-                rets[suffix] = json.loads(self.get_field(prefix, cellfield))
+                value = self.get_field(prefix, cellfield)
+                # rows added after the column was made hold a missing value instead of 'null'
+                rets[suffix] = None if is_missing(value) else json.loads(value)
         if 'Incl' not in rets:
             return None
         if 'Excl' not in rets:
