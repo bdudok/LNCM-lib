@@ -118,7 +118,7 @@ class IPSP:
                     mask[ri] = numpy.arange(current_frame - self.config.pre, current_frame + self.config.post)
 
                 # set the resp values
-                param = self.session.getparam(self.config.param)
+                param = self.session.getparam(self.config.param)[:self.n_cells]  # without the background ROI (last_bg)
                 for ei, indices in enumerate(mask):
                     loc = numpy.where(numpy.logical_not(numpy.isnan(indices)))[0]
                     if len(loc):
