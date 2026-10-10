@@ -250,7 +250,7 @@ class ImagingSession(object):
 
     def interpolate_trace(self, trace_x, trace_y):
         '''For use with camera if not triggered in every frame, to get a trace with equal lenght of imaging'''
-        incl_times = numpy.logical_and(numpy.logical_not(numpy.isnan(trace_x)), numpy.logical_not(numpy.isnan(trace_x)))
+        incl_times = numpy.logical_and(numpy.logical_not(numpy.isnan(trace_x)), numpy.logical_not(numpy.isnan(trace_y)))
         incl_times = numpy.logical_and(incl_times, trace_x>0)
         all_frames = numpy.empty(self.ca.frames)
         all_frames[:] = numpy.nan
