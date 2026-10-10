@@ -293,11 +293,9 @@ class GUI_main(QtWidgets.QMainWindow):
         painter.drawPolygon(QtGui.QPolygonF(points))
 
     def coord_from_click(self, pos, widget):
-        # transform to image coordinate from widget reference
-        offset_x = (widget.width() - self.preview_w) / 2
-        offset_y = (widget.height() - self.preview_h) / 2
-        pix_x = (pos.x() - offset_x) / self.rescale_factor
-        pix_y = (pos.y() - offset_y) / self.rescale_factor
+        # transform to image coordinate from widget reference. the preview is aligned to the top left of the label
+        pix_x = pos.x() / self.rescale_factor
+        pix_y = pos.y() / self.rescale_factor
         return [pix_x, pix_y]
 
     def pick(self, pos, widget):
