@@ -67,11 +67,12 @@ class LoadImage(object):
         self.opPath = Path(procpath) / prefix
         self.data_loaded = False
         self.imdat = LoadRegistered(procpath, prefix, source)
+        if not len(self.imdat.channel_keys):
+            # before reading the size: GEVIReg movies only get it from the movie file
+            self.imdat.find_alt_path()
         self.info = {'sz': (self.imdat.Ly, self.imdat.Lx)}
         self.nframes = self.imdat.n_frames
         self.nplanes = 1
-        if not len(self.imdat.channel_keys):
-            self.imdat.find_alt_path()
         self.channels = self.imdat.channel_keys
 
     def get_frame(self, frame, ch=None, zplane=0):

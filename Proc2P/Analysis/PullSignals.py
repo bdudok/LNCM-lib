@@ -83,7 +83,7 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
         print(roi_name)
         print(prefix, ': Roi file not found: ', tag)
         return -1
-    if os.path.exists(opPath / f'{prefix}_trace_{tag}.npy') and not overwrite:
+    if os.path.exists(opPath / f'{prefix}_trace_{tag}.npy') and not (overwrite or mask_only):
         print(prefix, f': Trace file for {tag} exists, skipping...')
         return -1
 
@@ -121,8 +121,8 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
         right, bottom = roi.max(axis=1)
         # load poly for pip function
         poly = mplpath.Path(pr)
-        for x in range(left, right):
-            for y in range(top, bottom):
+        for x in range(left, right + 1):
+            for y in range(top, bottom + 1):
                 if poly.contains_point([x, y]):
                     binmask[nroi, x, y] = True
     if mask_only:
@@ -162,6 +162,7 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
         assert len(x), f'Mask for c {c} is empty, export new ROI file.'
         indices.append(x)
     rep_size = 0.20 * len(channels)
+    t_start = datetime.datetime.now()
     for chi, ch in enumerate(channels):
         t0 = datetime.datetime.now()
         next_report = rep_size
@@ -170,8 +171,8 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
             start = int(t * chunk_len)
             if start / nframes > next_report:
                 elapsed = datetime.datetime.now() - t0
-                speed = (elapsed / start).microseconds
-                print(f'Pulling {prefix}:{int(next_report*100/len(channels)+50*chi):2d}% ({speed/1000:.1f} ms/frame)')
+                speed = elapsed.total_seconds() / start * 1000
+                print(f'Pulling {prefix}:{int(next_report*100/len(channels)+50*chi):2d}% ({speed:.1f} ms/frame)')
                 next_report += rep_size
             stop = int(min(nframes, start + chunk_len))
             if use_movie == Source.Raw:
@@ -220,10 +221,10 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
         pull_info['GEVIReg_version'] = gevireg_version(path, prefix)
     with open(opPath / f'{prefix}_trace_{tag}.json', 'w') as f:
         json.dump(pull_info, f, indent=2)
-    elapsed = datetime.datetime.now() - t0
-    minutes = datetime.timedelta.total_seconds(elapsed) / 60
-    speed = (elapsed / len(channels) / nframes).microseconds
-    print(f'{prefix} finished in {minutes:.1f} minutes ({speed/1000:.1f} ms / frame)')
+    elapsed = datetime.datetime.now() - t_start
+    minutes = elapsed.total_seconds() / 60
+    speed = elapsed.total_seconds() / len(channels) / nframes * 1000
+    print(f'{prefix} finished in {minutes:.1f} minutes ({speed:.1f} ms / frame)')
     # print(traces.shape)
     avgtype = ('simple', 'weighted')[snr_weighted]
     message = f'Pulled {avgtype} average from {int(nframes)} frames ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}.'
