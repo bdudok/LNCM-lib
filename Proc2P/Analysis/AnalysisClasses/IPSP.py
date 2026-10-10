@@ -539,7 +539,7 @@ class IPSP:
         fn = self.get_fn('ipsps.npy')
         numpy.save(fn, self.responses)
         if save_fitforms:
-            numpy.save(fn.replace('s.npy', '_fits.npy'), fitforms)
+            numpy.save(fn.with_name(fn.name.replace('s.npy', '_fits.npy')), fitforms)
         return self.responses
 
     def get_ipsps(self):
