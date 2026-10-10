@@ -454,10 +454,11 @@ class IPSP:
                 return None #if didn't converge
         return popt
 
-    def get_baseline_kernel(self, t=-4, s=10):
+    def get_baseline_kernel(self, t=4, s=10):
         '''
-        get weights to measure baseline: an asymmetric, back-looking gaussian
-        :param t: gaussian center (ms before to stim)
+        get weights to measure baseline: the pre-stim part of a gaussian centered after the stim, so the weights are
+        highest in the last frame before the stim and decrease going back in time
+        :param t: gaussian center (ms after the stim)
         :param s: gaussian sigma (ms)
         :return: weights to be used by DescrStatsW
         '''
@@ -465,7 +466,7 @@ class IPSP:
         if key not in self.baseline_kernels:
             fps = self.session.fps
             indices = numpy.arange(-self.config.pre, 0).astype('int64')
-            weights = scipy.stats.norm.pdf(indices, loc=-t * fps / 1000, scale=s * fps / 1000)
+            weights = scipy.stats.norm.pdf(indices, loc=t * fps / 1000, scale=s * fps / 1000)
             self.baseline_kernels[key] = weights
         return self.baseline_kernels[key]
 
