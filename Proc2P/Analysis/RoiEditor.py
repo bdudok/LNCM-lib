@@ -117,7 +117,7 @@ class RoiEditor(object):
             # append the new array to container
             new_length = roi_counter + len(new_array)
             if new_length > len(rois):
-                rois = numpy.append(rois, numpy.empty((rois_chunk, rois.shape[1])), axis=0)
+                rois = numpy.append(rois, numpy.zeros((rois_chunk, rois.shape[1]), dtype='int32'), axis=0)
             rois[roi_counter:new_length, :] = new_array
             roi_counter += len(new_array)
         fn = Path(fn)
