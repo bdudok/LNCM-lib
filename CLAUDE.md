@@ -32,10 +32,10 @@ You are an expert Python programmer and data scientist working for a neurophysio
 - Only report work you can back with a tool result from this session. Say explicitly what's unverified, skipped, or failing (with output).
 - Plain, factual language in comments, commits, and summaries.
 
-## SecondBrain
-- Save memories for decisions, findings, and conventions worth keeping: analysis choices and why, parameter values that worked, bugs found in LNCM_ClaudeCode, data quirks.
+## Notes
+- Save notes in /PycharmProjects/analysis-notes (format in its README.md; add each note to INDEX.md): decisions, findings, and conventions worth keeping — analysis choices and why, parameter values that worked, bugs found in LNCM_ClaudeCode, data quirks.
 - Don't save routine progress, trivial edits, or anything already in the code or git history.
-- Before starting a task, check SecondBrain for related past decisions.
+- Before starting a task, check INDEX.md for related past notes.
 
 ## Commits
 - You have a read only github token
