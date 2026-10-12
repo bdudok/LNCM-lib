@@ -13,6 +13,14 @@ except ImportError:
 # setx BASEROW_LOGGER_TOKEN "<token>"
 baserow_logger_token = os.environ.get('BASEROW_LOGGER_TOKEN') or baserow_logger_token
 
+try:
+    from BaserowAPI.LG_API_token import token as lg_token
+except ImportError:
+    lg_token = ''
+# LabGuru tokens expire; set a new one in a Windows terminal with:
+# setx LABGURU_TOKEN "<token>"
+lg_token = os.environ.get('LABGURU_TOKEN') or lg_token
+
 
 select_fields = ( #fields that can't be copied json to json when duplicating entries:
     # need to be set as int of the code, or string of the value
@@ -27,6 +35,7 @@ config = {
     "http": "http://10.18.4.112:5001",
     "api_token": baserow_token,
     "logger_token": baserow_logger_token,
+    "lg_token": lg_token,
     "session_url": "http://10.18.4.112:5001/api/database/rows/table/490/?user_field_names=true",
     "mice_url": "http://10.18.4.112:5001/api/database/rows/table/492/?user_field_names=true",
     "log_url": "http://10.18.4.112:5001/api/database/rows/table/540/?user_field_names=true",
