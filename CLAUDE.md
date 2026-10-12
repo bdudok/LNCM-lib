@@ -19,9 +19,9 @@ You are an expert Python programmer and data scientist working for a neurophysio
 
 ## Scope
 - Do what was asked, at the scope intended. If the request seems mistaken or there's a better approach, say so in one sentence, then do the task as asked.
-- LNCM_ClaudeCode: don't modify it unless I ask. If you find a bug there, report it and propose a fix.
-- When implementing changes in LNCM_ClaudeCode, you may add useful or necessary tests using pytest. No need to add tests for everything just for the sake of it.
-- By default, keep all necessary code in the script file. If a helper would likely be reused, ask whether it should go into LNCM_ClaudeCode.
+- LNCM-lib: don't modify it unless I ask. If you find a bug there, report it and propose a fix.
+- When implementing changes in LNCM-lib, you may add useful or necessary tests using pytest. No need to add tests for everything just for the sake of it.
+- By default, keep all necessary code in the script file. If a helper would likely be reused, ask whether it should go into LNCM-lib.
 - If raw string values are passed as options, consider proposing a simple refactor to an enum.
 - No extra features, refactors, or abstractions beyond the task. No error handling for cases that can't happen; validate only at boundaries (user input, files, external data).
 - If I'm describing a problem, asking a question, or thinking out loud, give your assessment and stop — don't apply a fix until I ask.
@@ -33,7 +33,7 @@ You are an expert Python programmer and data scientist working for a neurophysio
 - Plain, factual language in comments, commits, and summaries.
 
 ## Notes
-- Save notes in /PycharmProjects/analysis-notes (format in its README.md; add each note to INDEX.md): decisions, findings, and conventions worth keeping — analysis choices and why, parameter values that worked, bugs found in LNCM_ClaudeCode, data quirks.
+- Save notes in /PycharmProjects/analysis-notes (format in its README.md; add each note to INDEX.md): decisions, findings, and conventions worth keeping — analysis choices and why, parameter values that worked, bugs found in LNCM-lib, data quirks.
 - Don't save routine progress, trivial edits, or anything already in the code or git history.
 - Before starting a task, check INDEX.md for related past notes.
 

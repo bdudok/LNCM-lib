@@ -30,7 +30,7 @@ in conda powershell prompt:
 our analysis server has no GPU, suite2p runs on CPU with the default torch install (it logs that cuda is not working and uses cpu).
 
 open the job script in your project (no need to have a separate S2P project)
-for example, Proc2P/Analysis/S2P_template/20261007_BatchRun_MotionCorrect_Template.py (in LNCM_ClaudeCode)
+for example, Proc2P/Analysis/S2P_template/20261007_BatchRun_MotionCorrect_Template.py (in LNCM-lib)
 In settings/Python/interpreter, add the suite2p env as system python (but don't select it for the project)
 Select run/edit configurations for your job script
     select the suite2p interpreter to run this script with
