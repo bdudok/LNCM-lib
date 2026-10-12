@@ -1,6 +1,6 @@
 from LFP.SzDet.AppSpikeSz.GUI_SpikeSzDet import launch_GUI
 #specify the path to start at
-path = 'D:\Shares\Data\_Processed\EEG\Kainate/'
+path = r'D:\Shares\Data\_Processed\EEG\Kainate/'
 
 # override the GUI's default settings (for convenience)
 # you can comment out lines to use the hard coded defaults

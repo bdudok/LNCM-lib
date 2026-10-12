@@ -1,5 +1,6 @@
 import numpy
 import os
+from pathlib import Path
 import cv2
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Analysis.LoadPolys import LoadImage
@@ -7,7 +8,7 @@ from Proc2P.Bruker.SyncTools import Sync
 from Proc2P.utils import startstop, gapless
 
 def exportstop(procpath, prefix, mode='stop', channel='Green', stimlen=15, trim=75):
-    dpath = os.path.join(procpath, prefix+'/')
+    dpath = Path(procpath) / prefix
     si = SessionInfo(dpath, prefix)
     si.load()
     image = LoadImage(procpath, prefix)
@@ -36,24 +37,6 @@ def exportstop(procpath, prefix, mode='stop', channel='Green', stimlen=15, trim=
                 incl_frames = [t for t in incl_frames if t not in bad_frames]
                 baseline_frames = [t for t in baseline_frames if t not in bad_frames]
             stoprun_image[:, :] += im[incl_frames, :, :].mean(axis=0) - im[baseline_frames, :, :].mean(axis=0)
-    # elif mode == 'opto':
-    #     suf = '_OptoActivity.tif'
-    #     opto = numpy.load(prefix + '_opto.npy')
-    #     starts = numpy.where(numpy.diff(opto.astype('byte')) > 0)[0]
-    #     for start in starts:
-    #         stoprun_image[:, :] += im[start - 100:start, :, :, ch].mean(axis=0) - im[start:start + stimlen, :, :,
-    #                                                                               ch].mean(axis=0)
-    # elif mode == 'run':
-    #     suf = '_RunActivity.tif'
-    #     for i in range(len(starts)):
-    #         start = starts[i]
-    #         stop = stops[i]
-    #         if i == 0:
-    #             t0 = 100
-    #         else:
-    #             t0 = stops[i - 1]
-    #         l = min(start - t0, stop - start)
-    #         stoprun_image[:, :] += im[start - l:start, :, :, ch].mean(axis=0) - im[start:stop, :, :, ch].mean(axis=0)
     # positive values as red, negs as green
     stoprun_rgb = numpy.zeros((*stoprun_image.shape, 3), dtype='uint8')
     neg = numpy.zeros(stoprun_image.shape)
@@ -65,7 +48,7 @@ def exportstop(procpath, prefix, mode='stop', channel='Green', stimlen=15, trim=
     r = max(numpy.percentile(neg[trim:-trim, trim:-trim], 99), numpy.percentile(pos[trim:-trim, trim:-trim], 99))
     stoprun_rgb[:, :, 2] = numpy.minimum(neg / r, 1) * 255
     stoprun_rgb[:, :, 1] = numpy.minimum(pos / r, 1) * 255
-    cv2.imwrite(dpath + prefix + suf, stoprun_rgb)
+    cv2.imwrite(str(dpath / f'{prefix}{suf}'), stoprun_rgb)
     print('Stop score export finished for', prefix)
 
 
@@ -87,7 +70,7 @@ def calc_response_image(procpath, prefix, events, window, savepath=None, suffix=
     Returns: saves the image
 
     '''
-    dpath = os.path.join(procpath, prefix+'/')
+    dpath = Path(procpath) / prefix
     if savepath is None:
         savepath = dpath
     if not suffix.endswith('.tif'):
@@ -128,6 +111,6 @@ def calc_response_image(procpath, prefix, events, window, savepath=None, suffix=
 
 
 if __name__ == '__main__':
-    procpath = 'D:\Shares\Data\_Processed/2P\PVTot\Opto/'
+    procpath = r'D:\Shares\Data\_Processed/2P\PVTot\Opto/'
     prefix = 'PVTot5_2023-09-04_opto_023'
     # exportstop(procpath, prefix)

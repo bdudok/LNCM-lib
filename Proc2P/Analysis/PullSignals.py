@@ -1,16 +1,18 @@
 import numpy
 from Proc2P.Analysis.LoadPolys import LoadImage, load_roi_file
 from Proc2P.Bruker.LoadMovie import LoadMovie, get_raw_movies
-from Proc2P.Bruker.LoadRegistered import Source
+from Proc2P.Bruker.LoadRegistered import Source, gevireg_version
 from Proc2P.Bruker.PreProc import SessionInfo
 import matplotlib.path as mplpath
 from statsmodels.stats.weightstats import DescrStatsW
 import os
+import json
 from multiprocessing import Process
 from time import time
 import datetime
 from Proc2P.utils import logger, lprint
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -35,7 +37,7 @@ class Worker(Process):
             if roi == 'Auto':
                 #locate last saved roi file
                 exs = [1]
-                for f in os.listdir():
+                for f in os.listdir(Path(path) / prefix):
                     if prefix in f and '_saved_roi_' in f:
                         try:
                             if f[-6:-4] != '-1':
@@ -54,7 +56,7 @@ class Worker(Process):
 
 
 def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_alt_path=True,
-                 overwrite=False, use_movie=Source.S2P):
+                 overwrite=False, use_movie=Source.S2P, mask_only=False):
     '''
     Compute average pixel intensity in each ROI and each frame of a movie
     :param path: the processed folder
@@ -71,16 +73,17 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
         S2P: default registered movie
         Raw: uses the raw movie instead of the registered one. Looks up path in the session info file.
         GEVIReg: uses the alternative corrected movie
+    :param mask_only: return weights instead of pulling the data. used for NWB export
     :return: saves the output traces to a file. Only returns report string (also saved in the log).
     '''
     #get binary mask
-    opPath = os.path.join(path, prefix + '/')
-    roi_name = opPath + f'{prefix}_saved_roi_{tag}.npy'
+    opPath = Path(path) / prefix
+    roi_name = opPath / f'{prefix}_saved_roi_{tag}.npy'
     if not os.path.exists(roi_name):
         print(roi_name)
         print(prefix, ': Roi file not found: ', tag)
         return -1
-    if os.path.exists(opPath + f'{prefix}_trace_{tag}.npy') and not overwrite:
+    if os.path.exists(opPath / f'{prefix}_trace_{tag}.npy') and not (overwrite or mask_only):
         print(prefix, f': Trace file for {tag} exists, skipping...')
         return -1
 
@@ -118,10 +121,13 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
         right, bottom = roi.max(axis=1)
         # load poly for pip function
         poly = mplpath.Path(pr)
-        for x in range(left, right):
-            for y in range(top, bottom):
+        for x in range(left, right + 1):
+            for y in range(top, bottom + 1):
                 if poly.contains_point([x, y]):
                     binmask[nroi, x, y] = True
+    if mask_only:
+        if not snr_weighted:
+            return binmask
     #figure out channels to pull MODES = ['All', 'Green', 'Red']
     if ch == 'All':
         if 'Ch1' in channelnames and 'Ch2' in channelnames:
@@ -156,6 +162,7 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
         assert len(x), f'Mask for c {c} is empty, export new ROI file.'
         indices.append(x)
     rep_size = 0.20 * len(channels)
+    t_start = datetime.datetime.now()
     for chi, ch in enumerate(channels):
         t0 = datetime.datetime.now()
         next_report = rep_size
@@ -164,8 +171,8 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
             start = int(t * chunk_len)
             if start / nframes > next_report:
                 elapsed = datetime.datetime.now() - t0
-                speed = (elapsed / start).microseconds
-                print(f'Pulling {prefix}:{int(next_report*100/len(channels)+50*chi):2d}% ({speed/1000:.1f} ms/frame)')
+                speed = elapsed.total_seconds() / start * 1000
+                print(f'Pulling {prefix}:{int(next_report*100/len(channels)+50*chi):2d}% ({speed:.1f} ms/frame)')
                 next_report += rep_size
             stop = int(min(nframes, start + chunk_len))
             if use_movie == Source.Raw:
@@ -186,6 +193,13 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
                     for c in range(ncells):
                         ind = indices[c]
                         weights.append(fovsnr[ind[1], ind[0]])
+                if mask_only:
+                    wmask = numpy.zeros(binmask.shape)
+                    for c in range(ncells):
+                        ind = indices[c]
+                        if mask_only:
+                            wmask[c][ind] = weights[c] / numpy.nansum(weights[c])
+                    return wmask
                 for c in range(ncells):
                     #iterate frames and compute the weighted average of the polygon pixels
                     ind = indices[c]
@@ -199,16 +213,42 @@ def pull_signals(path, prefix, tag=None, ch='All', snr_weighted=False, enable_al
                     ind = indices[c]
                     traces[c, start:stop, chi] = numpy.nanmean(inmem_data[:, ind[1], ind[0]], axis=1)
 
-    numpy.save(opPath + f'{prefix}_trace_{tag}', traces)
-    elapsed = datetime.datetime.now() - t0
-    minutes = datetime.timedelta.total_seconds(elapsed) / 60
-    speed = (elapsed / len(channels) / nframes).microseconds
-    print(f'{prefix} finished in {minutes:.1f} minutes ({speed/1000:.1f} ms / frame)')
+    numpy.save(opPath / f'{prefix}_trace_{tag}.npy', traces)
+    # record of the movie used, read by CaTrace and saved in the version info of the processed traces
+    pull_info = {'movie': use_movie.name, 'snr_weighted': snr_weighted, 'channels': channels,
+                 'date': datetime.datetime.now().isoformat(timespec='seconds')}
+    if use_movie == Source.GEVIReg:
+        pull_info['GEVIReg_version'] = gevireg_version(path, prefix)
+    with open(opPath / f'{prefix}_trace_{tag}.json', 'w') as f:
+        json.dump(pull_info, f, indent=2)
+    elapsed = datetime.datetime.now() - t_start
+    minutes = elapsed.total_seconds() / 60
+    speed = elapsed.total_seconds() / len(channels) / nframes * 1000
+    print(f'{prefix} finished in {minutes:.1f} minutes ({speed:.1f} ms / frame)')
     # print(traces.shape)
     avgtype = ('simple', 'weighted')[snr_weighted]
     message = f'Pulled {avgtype} average from {int(nframes)} frames ({ncells} regions, {nchannels} channels) from {prefix} roi {tag}.'
     message += '\r\n' + f'Channel order is: {channels}, {use_movie} movie was used.'
     return message
+
+def logged_pull_source(path, prefix, tag):
+    '''
+    The movie of the last pull of a ROI set, as written to the analysis logs by the pull Worker ('S2P', 'GEVIReg'
+    or 'Raw'). None if no pull of the tag is logged. For traces pulled before the pull info json was saved.
+    '''
+    found = []  # (timestamp, movie)
+    for fn in (Path(path) / prefix).glob(f'{prefix}_*_AnalysisLog*.txt'):
+        with open(fn, errors='replace') as f:
+            lines = [line for line in f.read().splitlines() if line.strip()]
+        # the message is two lines: '<time> - PullSignals: Pulled ... roi <tag>.', 'Channel order is: ..., <Source> movie was used.'
+        for line, next_line in zip(lines[:-1], lines[1:]):
+            if ' - PullSignals: Pulled ' in line and line.endswith(f' roi {tag}.') and 'movie was used' in next_line:
+                movie = next_line.rsplit(' movie was used', 1)[0].rsplit(' ', 1)[-1].removeprefix('Source.')
+                found.append((line.split(' - ', 1)[0], movie))
+    if not found:
+        return None
+    return max(found)[1]
+
 
 if __name__ == '__main__':
     # path = r'D:\Shares\Data\_Processed\2P\eCB-GRAB/'

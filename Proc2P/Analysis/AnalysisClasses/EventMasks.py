@@ -19,9 +19,13 @@ def PhotoStimTrain(a, w):
     event_frames = numpy.load(a.get_file_with_suffix('_photostim_trains.npy'))
     return masks_from_list(a, w, event_frames)
 
-def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_seconds=0, mask_stim=None,
+def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_seconds=0, mask_stim='auto',
                     stopresp_only=None,
                    filter_by_sz=None):
+    '''
+    :param mask_stim: frames to mask after each stim onset: 'auto' (default) masks the frames affected by each stim
+        (ImagingSession.stim_artifact_frames). Or an int (0 to n), a tuple (from, to), or None for no masking.
+    '''
     if a.opto is None:
         event_frames = []
     else:
@@ -53,7 +57,15 @@ def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_secon
     if filter_by_sz is not None:
         event_frames = Filter_events_by_sz(a, event_frames, filter_by_sz)
     event, mask = masks_from_list(a, w, event_frames)
-    if mask_stim is not None:
+    if mask_stim == 'auto':
+        # mask the frames affected by each stim, which can be one more than the opto frames (see stim_artifact_frames)
+        artifact = a.stim_artifact_frames()
+        for ri, e in enumerate(event):
+            k = 0
+            while k < w and e + k < len(artifact) and artifact[e + k]:
+                mask[ri, w + k] = numpy.nan
+                k += 1
+    elif mask_stim is not None:
         if not type(mask_stim) == tuple:
             mask_stim = (0, mask_stim)
         mask[:, w+int(mask_stim[0]):w+int(mask_stim[1])+1] = numpy.nan
@@ -75,7 +87,10 @@ def Filter_events_by_sz(a, event_frames, filter_by_sz, margin=0.5):
 
 def LFPSpikes(a, w, ch=0, from_session=True, exclude_move=True, filter_by_sz=None):
     if not from_session:
-        df = read_excel(a.get_file_with_suffix(f'_Ch{ch+1}_spiketimes.xlsx'))
+        # same file name as in ImagingSession.map_spiketimes, with the session's spiketag if set
+        spiketag = a.kwargs.get('spiketag', None)
+        tag_str = '' if spiketag in (None, 'None') else f'_{spiketag}'
+        df = read_excel(a.get_file_with_suffix(f'{tag_str}_Ch{ch+1}_spiketimes.xlsx'))
         st = df['SpikeTimes(s)'].values
         event_frames = [a.timetoframe(x) for x in st]
     else:
@@ -87,7 +102,10 @@ def LFPSpikes(a, w, ch=0, from_session=True, exclude_move=True, filter_by_sz=Non
                                 exclude_move=exclude_move)
 
 def Seizures(a, w, ch=1, eps=1, min_dur=5, off=False):
-    df = read_excel(a.get_file_with_suffix(f'_ch{ch}_seizure_times.xlsx'))
+    # same file name as in ImagingSession.map_seizuretimes, with the session's spiketag if set
+    spiketag = a.kwargs.get('spiketag', None)
+    tag_str = '' if spiketag in (None, 'None') else f'_{spiketag}'
+    df = read_excel(a.get_file_with_suffix(f'{tag_str}_Ch{ch}_seizure_times.xlsx'))
     st = df['Sz.Start(s)'].values
     event_frames = []
     for i, sz in df.iterrows():
@@ -127,11 +145,41 @@ def masks_from_list(a, w, event_list, exclude_movement=False):
         if w0 + w1 > 1:
             mask[ri, w - w0:w + w1] = numpy.arange(current_frame - w0, current_frame + w1)
     if exclude_movement:
-        speed_mask = numpy.nan_to_num(mask.astype('int16'))
-        mov_mask = a.pos.movement[speed_mask]
-        mov_mask[speed_mask == 0] = 0
+        # look up movement only at the frames in the mask (NaN means no frame)
+        valid = ~numpy.isnan(mask)
+        frames = numpy.where(valid, mask, 0).astype('int64')
+        mov_mask = a.pos.movement[frames] & valid
         mask[mov_mask] = numpy.nan
     return events, mask
+
+def merge_clusters(event_list, eps, min_n=None, clustloc='first', trace=None):
+    '''replace each cluster of events (closer than eps) with one member.
+    eps: retain all events if 0.
+    min_n: if None, clusters have at least 2 members and single events are kept.
+        Otherwise, clusters have at least min_n members and single events are dropped.
+    clustloc: 'first' - first member of each cluster, 'max': member with the max value in the trace arg
+    Returns: sorted event array
+    '''
+    events = numpy.sort(numpy.array(event_list, dtype=numpy.int64))
+    exc_single = min_n is not None
+    if min_n is None:
+        min_n = 2
+    if not eps:
+        return events
+    if len(events) < min_n:  # no clusters possible
+        return events[:0] if exc_single else events
+    # DBSCAN labels single events (noise) -1, and clusters 0, 1, ...
+    labels = cluster.DBSCAN(eps=eps, min_samples=min_n).fit(events.reshape(-1, 1)).labels_
+    kept = [] if exc_single else list(events[labels < 0])
+    for label in range(labels.max() + 1):
+        current_cluster = numpy.where(labels == label)[0]
+        if clustloc == 'first':
+            rj = current_cluster[0]
+        elif clustloc == 'max':
+            rj = current_cluster[numpy.argmax(trace[events[current_cluster]])]
+        kept.append(events[rj])
+    return numpy.sort(numpy.array(kept, dtype=numpy.int64))
+
 
 def nonoverlap_from_list(a, w, event_list, decay=6, eps=16, exclude_move=False, min_n=None,
                          clustloc='first', trace=None):
@@ -141,53 +189,7 @@ def nonoverlap_from_list(a, w, event_list, decay=6, eps=16, exclude_move=False, 
      eps: replaces clusters with onset of firsts. retain all if 0.
      clustloc: 'first' - returns first member of a cluster, 'max': returns loc of max in the trace arg
      '''
-    events = numpy.array(event_list, dtype=numpy.int64)
-    if min_n is None:
-        min_n = 2
-        exc_single = False
-    else:
-        exc_single = True
-    if eps:
-        event_t = numpy.copy(events)
-        if len(event_t) < min_n:
-            events = event_t
-        else:
-            clustering = cluster.DBSCAN(eps=eps, min_samples=min_n).fit(event_t.reshape(-1, 1))
-            single_event_indices = numpy.where(clustering.labels_ < 0)[0]
-            any_clusters = clustering.labels_.max() > 0
-            if exc_single:
-                if any_clusters:
-                    event_number = clustering.labels_.max() + (len(single_event_indices) > 0)
-                    events = numpy.empty(event_number, dtype=numpy.int64)
-                    for rci in range(clustering.labels_.max() + (
-                            len(single_event_indices) > 0)):  # indices are different if there are zero noise events
-                        current_cluster = numpy.where(clustering.labels_ == rci)[0]
-                        rj = current_cluster[0]
-                        events[rci] = event_t[rj]
-                else:
-                    events = []
-            else:
-                event_number = len(single_event_indices)
-                if any_clusters:
-                    event_number += clustering.labels_.max()
-                events = numpy.empty(event_number, dtype=numpy.int64)
-                ri, rci = 0, 0
-                for ri, rj in enumerate(single_event_indices):
-                    # try:
-                    events[ri] = event_t[rj]
-                    # except:
-                    #     print(len(event_t), len(events), len(single_event_indices), clustering.labels_.max(), ri, rj)
-                    #     assert False
-                if any_clusters:
-                    for rci in range(clustering.labels_.max() + (
-                            len(single_event_indices) > 0)):  # indices are different if there are zero noise events
-                        # get list of ripples in cluster
-                        current_cluster = numpy.where(clustering.labels_ == rci)[0]
-                        if clustloc == 'first':
-                            rj = current_cluster[0]
-                        elif clustloc == 'max':
-                            rj = current_cluster[numpy.argmax(trace[event_t[current_cluster]])]
-                        events[ri + rci] = event_t[rj]
+    events = merge_clusters(event_list, eps, min_n, clustloc, trace)
     events.sort()
     if exclude_move:
         events = events[~a.pos.movement[events]]
@@ -228,53 +230,7 @@ def mask_from_list_nosession(w, event_list, trace_len, decay=6, eps=16, min_n=No
      eps: replaces clusters with onset of firsts. retain all if 0.
      clustloc: 'first' - returns first member of a cluster, 'max': returns loc of max in the trace arg
      '''
-    events = numpy.array(event_list, dtype=numpy.int64)
-    if min_n is None:
-        min_n = 2
-        exc_single = False
-    else:
-        exc_single = True
-    if eps:
-        event_t = numpy.copy(events)
-        if len(event_t) < min_n:
-            events = event_t
-        else:
-            clustering = cluster.DBSCAN(eps=eps, min_samples=min_n).fit(event_t.reshape(-1, 1))
-            single_event_indices = numpy.where(clustering.labels_ < 0)[0]
-            any_clusters = clustering.labels_.max() > 0
-            if exc_single:
-                if any_clusters:
-                    event_number = clustering.labels_.max() + (len(single_event_indices) > 0)
-                    events = numpy.empty(event_number, dtype=numpy.int64)
-                    for rci in range(clustering.labels_.max() + (
-                            len(single_event_indices) > 0)):  # indices are different if there are zero noise events
-                        current_cluster = numpy.where(clustering.labels_ == rci)[0]
-                        rj = current_cluster[0]
-                        events[rci] = event_t[rj]
-                else:
-                    events = []
-            else:
-                event_number = len(single_event_indices)
-                if any_clusters:
-                    event_number += clustering.labels_.max()
-                events = numpy.empty(event_number, dtype=numpy.int64)
-                ri, rci = 0, 0
-                for ri, rj in enumerate(single_event_indices):
-                    # try:
-                    events[ri] = event_t[rj]
-                    # except:
-                    #     print(len(event_t), len(events), len(single_event_indices), clustering.labels_.max(), ri, rj)
-                    #     assert False
-                if any_clusters:
-                    for rci in range(clustering.labels_.max() + (
-                            len(single_event_indices) > 0)):  # indices are different if there are zero noise events
-                        # get list of ripples in cluster
-                        current_cluster = numpy.where(clustering.labels_ == rci)[0]
-                        if clustloc == 'first':
-                            rj = current_cluster[0]
-                        elif clustloc == 'max':
-                            rj = current_cluster[numpy.argmax(trace[event_t[current_cluster]])]
-                        events[ri + rci] = event_t[rj]
+    events = merge_clusters(event_list, eps, min_n, clustloc, trace)
     events.sort()
     # if exclude_move:
     #     events = events[~a.pos.gapless[events]]
@@ -460,7 +416,7 @@ def SessionPeaks(a, w, lowpass = 10, peak_size=5, param_key='rel', exclude_movem
     return masks_from_list(a, w, peaks, exclude_movement=exclude_movement)
 
 if __name__ == '__main__':
-    processed_path = 'D:\Shares\Data\_Processed/2P\PVTot/'
+    processed_path = r'D:\Shares\Data\_Processed/2P\PVTot/'
     prefix = 'PVTot7_2024-02-07_lfpOpto_178'
     from Proc2P.Analysis.ImagingSession import ImagingSession
     a = ImagingSession(processed_path, prefix, tag='IN')

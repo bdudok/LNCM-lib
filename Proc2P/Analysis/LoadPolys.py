@@ -1,3 +1,4 @@
+from pathlib import Path
 import matplotlib.path as mplpath
 import matplotlib.pyplot as plt
 import numpy
@@ -63,14 +64,15 @@ class LoadPolys(object):
 class LoadImage(object):
     def __init__(self, procpath, prefix, source=Source.S2P):
         self.prefix = prefix
-        self.opPath = procpath + prefix + '/'
+        self.opPath = Path(procpath) / prefix
         self.data_loaded = False
         self.imdat = LoadRegistered(procpath, prefix, source)
+        if not len(self.imdat.channel_keys):
+            # before reading the size: GEVIReg movies only get it from the movie file
+            self.imdat.find_alt_path()
         self.info = {'sz': (self.imdat.Ly, self.imdat.Lx)}
         self.nframes = self.imdat.n_frames
         self.nplanes = 1
-        if not len(self.imdat.channel_keys):
-            self.imdat.find_alt_path()
         self.channels = self.imdat.channel_keys
 
     def get_frame(self, frame, ch=None, zplane=0):
@@ -80,7 +82,7 @@ class LoadImage(object):
         #     return self.data[zplane][frame, :, :, ch]
 
     def show_field(self):
-        preview_fn = self.opPath + self.prefix + '_preview.tif'
+        preview_fn = self.opPath / (self.prefix + '_preview.tif')
         pic = tifffile.imread(preview_fn)
         if len(pic.shape) < 3:
             rgb_array = numpy.zeros((*pic.shape, 3), dtype='uint8')
@@ -176,15 +178,15 @@ def load_roi_file(roi_name):
         else:
             if len(poly) > 2:
                 polys.append(poly)
-            n += 1
-            poly = []
+            n = j
+            poly = [[x, y]]
     if len(poly) > 2:
         polys.append(poly)
     return [numpy.array(xi) for xi in polys]
 
 
 if __name__ == '__main__':
-    procpath = 'D:\Shares\Data\_Processed/2P\PVTot\Opto/'
+    procpath = r'D:\Shares\Data\_Processed/2P\PVTot\Opto/'
     prefix = 'PVTot5_2023-09-04_opto_023'
     img = FrameDisplay(procpath, prefix, tag='skip')
 

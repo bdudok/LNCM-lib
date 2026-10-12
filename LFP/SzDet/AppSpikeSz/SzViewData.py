@@ -5,18 +5,14 @@ import matplotlib.pyplot as plt
 from Proc2P.utils import *
 import json
 import numpy
-import math
-import cv2
 import datetime
 from PlotTools import *
-import re, datetime, os
-import numpy as np
 
 # readers
 from LFP.Pinnacle import ReadEDF
 from Proc2P.Bruker import LoadEphys
 from Proc2P.Bruker.PreProc import SessionInfo
-from Proc2P.Treadmill import rsync
+from Video import LoadVEEG
 
 # analysis for sz curation
 from scipy import signal
@@ -35,14 +31,15 @@ class SzReviewData:
     Used by Sz Review GUI to access data
     '''
 
-    def __init__(self, path, prefix, ch, tag=None, setup='Pinnacle', skip_gamma=False):
+    def __init__(self, path, prefix, ch, tag=None, setup='Pinnacle', skip_gamma=False, video_dir=None):
+        '''video_dir: folder of the vEEG recordings (Pinnacle setup), default: the EEG folder'''
         self.path = path
         self.prefix = prefix
         self.ch = ch
         self.tag = tag
         self.setup = setup
-        self.align = None
-        self.uses_video = False  # make this configurable once the functionality is ready
+        self.video_dir = path if video_dir is None else video_dir
+        self.video_map = None
         self.load_data(skip_gamma)
         self.init_output()
 
@@ -57,8 +54,8 @@ class SzReviewData:
         if not skip_gamma:
             self.get_session_gamma()
             self.sos = bessel(N=3, Wn=1.0, btype='lowpass', analog=False, output='sos', fs=self.fs)
-        if self.uses_video:
-            self.read_video()
+        if self.setup == 'Pinnacle':
+            self.load_video()
 
     def get_fn(self, suffix, timestamp=False):
         if self.setup == 'Pinnacle':
@@ -186,7 +183,8 @@ class SzReviewData:
                                            'SpikeCount': spkcount,
                                            'SpkFreq': numpy.array(spkcount) / numpy.array(szdurs),
                                            'PostIctalSuppression(s)': numpy.nan,
-                                           'Time': sztimes, 'Included': pandas.NA, 'Interictal': False, },
+                                           'Time': sztimes, 'Included': pandas.NA, 'Interictal': False,
+                                           'BehaviorSz(s)': numpy.nan, },
                                           index=[sznames])
         # load previous exclusions
         fn = self.get_fn('save')
@@ -197,7 +195,7 @@ class SzReviewData:
         if os.path.exists(fn):
             saved = read_excel(fn, keep_index=True)
             for szname in sznames:
-                curated_sz = saved[saved.iloc[:, 0] == szname]
+                curated_sz = saved[saved.index == szname]
                 for fieldname in ('Included', 'Interictal'):
                     if fieldname not in saved.columns:
                         continue
@@ -207,6 +205,8 @@ class SzReviewData:
                     elif x in falsey_values:
                         x = False
                     self.set_sz(szname, x, fieldname)
+                if 'BehaviorSz(s)' in saved.columns:
+                    self.set_sz(szname, curated_sz['BehaviorSz(s)'].item(), 'BehaviorSz(s)')
                 if 'Edited' in saved.columns and curated_sz['Edited'].item():
                     for fieldname in (
                             'Start', 'Stop', 'Duration(s)', 'SpikeCount', 'SpkFreq', 'PostIctalSuppression(s)'):
@@ -230,169 +230,23 @@ class SzReviewData:
             return self.output_sz.loc[sz].iloc[0]
         return self.output_sz.loc[sz, 'Included'].array[0]
 
-    def read_video(self):
-        ## PARSING OVERALL SEGMENT WINDOW FROM SEIZURE FILE NAME
-        m = re.search(
-            r'^(?P<mouse>[^-]+)-.*?_TS_(?P<start>\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2})',
-            self.prefix
-
-        )
-        if not m:
-            self.align = None
+    def load_video(self):
+        """Map the EEG to the vEEG recording whose TTL pulses match it. The map is saved next to the EEG and reused."""
+        fn = os.path.join(self.path, self.prefix + '_video_map.csv')
+        if os.path.exists(fn):
+            self.video_map = LoadVEEG.load_video_map(fn)
             return
+        duration = len(self.ephys.trace) / self.fs
+        self.video_map = LoadVEEG.video_map(self.ephys.get_TTL(), self.rec_info['startdate'], duration, self.video_dir)
+        if self.video_map is not None:
+            LoadVEEG.save_video_map(self.video_map, fn)
 
-        ## FINDING START AND END TIME USING SEIZURE FILE NAME
-        seg_start = datetime.datetime.strptime(m.group('start'), '%Y-%m-%d_%H_%M_%S')
-        seg_end = seg_start + datetime.timedelta(hours=1)  # seizures are typically one hour long
-
-        # GETTING EEG TTLS AS A 1-D FLOAT ARRAY (SECS FROM REC START)
-        ttls_eeg = self.ephys.get_TTL(channel='GPIO0')
-        print(ttls_eeg[len(ttls_eeg) - 1])
-
-        ## COLLECTING ALL VIDEO TTLS WHOSE CLIPS OVERLAP THE WINDOW
-        mouse = m.group('mouse')
-        vid_folder = r'D:\Shares\Data\_RawData\EEG\Dreadd' + "\\" + mouse
-        all_video_ttls = []
-
-        self.video_clips = []
-        for fn in sorted(os.listdir(vid_folder)):
-            if not fn.lower().endswith('.avi'):
-                continue
-
-            # EXTRACTING THE VIDEO CLIP'S START AND END TIME BASED ON ITS PATH
-            m2 = re.search(r'(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})', fn)
-            if not m2:
-                continue
-            vid_start = datetime.datetime.strptime(m2.group(1), '%Y-%m-%dT%H-%M-%S')
-            vid_end = vid_start + datetime.timedelta(hours=1)  ## videos are typically one hour long
-
-            # skip clips that lie entirely outside specified window
-            if not (vid_start < seg_end and vid_end > seg_start):
-                continue
-
-            # adding video to video clips
-            self.video_clips.append([
-                os.path.join(vid_folder, fn),
-                vid_start,
-                vid_end
-            ])
-
-        for clip in self.video_clips:
-            ## LOADING THIS CLIPS TTL TIMESTAMPS
-            path = clip[0]
-            npy_path = path[:-4] + '.npy'
-            raw_vid = np.load(npy_path, allow_pickle=True)
-
-            # COLUMN 4 IS THE TTLS
-            ttls_video = raw_vid[:, 4].astype(float)
-
-            ## adding this video ttls to all ttls
-            all_video_ttls.append(ttls_video)
-
-        # considering the case that there are no video ttls
-        if not all_video_ttls:
-            self.align = None
-            return
-
-        ## CONCATENATING ALL VIDEO TTLS INTO ONE TTL SEQUENCE
-        ttls_video = np.concatenate(all_video_ttls)
-
-        ## RUNNING ONE SINGLE ALIGNER ON THE FULL CONTINUOUS TTL SEQUENCE
-        try:
-            self.align = rsync.Rsync_aligner(ttls_eeg, ttls_video)
-        except Exception as e:
-            print(f"[SzReviewData] Error: {e}")
-            self.align = None
-            return
-
-        ## getting value of first and last ttl in the eeg
-        first_ttl = math.ceil(ttls_eeg[0])
-        last_ttl = math.floor(ttls_eeg[-1])
-
-        ## FINDING THE VALUE OF START FRAME FOR EACH VIDEO CLIP
-        for clip in self.video_clips:
-            ## getting how many seconds after the eeg start, the video starts
-            vid_start = clip[1]
-            seconds = int((vid_start - seg_start).total_seconds())
-
-            ## because A_to_B method returns NaN for values outside the first and
-            ## last ttl in the eeg, we need to consider (3) cases
-            ## case 1: the start of the video clip is before the first eeg ttl
-            ## case 2: the start of the video clip is in between the first and last eeg ttl
-            ## case 3: the start of the video clip is after the last ttl
-
-            if seconds < first_ttl:
-                start_frame = self.align.A_to_B(first_ttl) + 30 * (seconds - first_ttl)
-            elif seconds >= first_ttl and seconds <= last_ttl:
-                start_frame = self.align.A_to_B(seconds)
-            else:  ## seconds > last_ttl
-                start_frame = self.align.A_to_B(last_ttl) + 30 * (seconds - last_ttl)
-
-            clip.append(start_frame)
-
-    def get_frames(self, t0, t1):
-        ## t0 and t1 are the start and end times (in seconds) of the specific seizure
-
-        ## the start time (datetime) of the specific seizure
-        rec_start = self.rec_info['startdate'] + datetime.timedelta(seconds=t0)
-        video_path = None
-        shift = None
-
-        ## FINDING THE PATH OF THE VIDEO THAT CONTAINS THE SPECIFIC EEG
-        for clip in self.video_clips:
-            path = clip[0]
-            vid_start = clip[1]
-            vid_end = clip[2]
-
-            if vid_start <= rec_start < vid_end:
-                video_path = path
-                shift = clip[3]
-                break
-
-        if video_path is None:
-            print("Could not find aligned video!")
-            return
-
-        ## opening the video using its path and opencv
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            print("Could not open video.")
-            return
-
-        ## the number of the start and end frame of the video
-        ## because the frames in ttl do not start at 0,
-        ## we need to shift the number of the frames
-        ## so that start_frame is at 0
-        start_frame = self.align.A_to_B(t0) - shift
-        end_frame = self.align.A_to_B(t1) - shift
-
-        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-        ## starting at start_frame
-        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-
-        frames = []
-        current_frame = start_frame
-
-        ## GRABBING ALL FRAMES BETWEEN START AND END FRAME IN THE VIDEO AND APPEDNING TO FRAMES
-        while current_frame <= end_frame:
-            ret, frame = cap.read()
-            # print(ret)
-            if not ret:
-                break
-            frames.append(frame)
-            current_frame += 1
-
-        cap.release()
-
-        return video_path, frames
-
-    # def read_video(self, path, prefix):
-    #     #load all ttls so that each sz can be matched to relevant vid
-    #     #pull motion energy of the vids
-    #     #provide interface for getting a frame by rec time, and getting all frames between two time points
-    #     return SyncVid(path, prefix)
+    def video_frame(self, t):
+        """Video file path and frame index at EEG time t (s), or None where there is no video."""
+        loc = LoadVEEG.frame_at(self.video_map, t)
+        if loc is None:
+            return None
+        return os.path.join(self.video_dir, self.video_map['files'][loc[0]]['name']), loc[1]
 
     def edit_sz_from_gui(self, event_type, xcoord):
         sz = self.get_sz(self.active_sz, True)
@@ -468,9 +322,12 @@ class SzReviewData:
         ca.set_xticks((secs + self.plot_delta) * self.fs)
         ca.set_xticklabels(secs)
 
-        ## adding a video marker to main plot
-        marker_x = (0 + self.plot_delta) * self.fs
-        self.marker_line = ca.axvline(marker_x, color='blue', linestyle='--', zorder=100)
+        # video time marker, moved by the GUI without redrawing the figure (animated: not part of the background)
+        self.plot_t0 = t0 - self.plot_delta  # EEG time at x = 0
+        self.plot_t1 = s1 / self.fs
+        self.marker_line = ca.axvline(self.time_to_x(t0), color='blue', linestyle='--', zorder=100, animated=True)
+        if not numpy.isnan(sz['BehaviorSz(s)']):
+            ca.axvline(self.time_to_x(sz['BehaviorSz(s)']), color='magenta', linewidth=2, zorder=99)
 
         # sz start example
         ca = axd['lower left']
@@ -502,22 +359,16 @@ class SzReviewData:
         ca.set_xticklabels([-0.1, 0, 0.1])
         # return fig
 
+    def time_to_x(self, t):
+        '''x coordinate of an EEG time (s) in the plot of the active seizure'''
+        return (t - self.plot_t0) * self.fs
+
+    def x_to_time(self, x):
+        return self.plot_t0 + x / self.fs
+
     def save(self):
         try:
             self.output_sz.to_excel(self.get_fn('save'))
         except PermissionError:
             print('''Permission error writing the output spreadsheet. Saving to new file, please rename later.''')
             self.output_sz.to_excel(self.get_fn('save', timestamp=True))
-
-
-if __name__ == '__main__':
-    setup = 'Pinnacle'
-    path = 'D:\Shares\Data\_Processed\EEG\Dreadd/'
-    prefix = 'Tot9_2024-05-20_07_06_20_export'
-    setup = 'LNCM'
-    path = 'D:\Shares\Data\_Processed/2P\PVTot/'
-    # prefix = 'PVTot9_2024-02-20_lfp_181'
-    #
-    # szdat = SzReviewData(path, prefix, 2, setup=setup)
-    # self = szdat
-    # sz = szdat.get_sz(self.szlist[1], True)

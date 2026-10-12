@@ -10,7 +10,7 @@ class PhotoStim:
 
     def __init__(self, session:ImagingSession):
         self.session = session
-        self.stimframes = read_excel(session.path + session.prefix + '_StimFrames.xlsx')
+        self.stimframes = read_excel(session.get_file_with_suffix('_StimFrames.xlsx'))
 
     def get_trains(self, isi=10, tolerance=1.5):
         '''

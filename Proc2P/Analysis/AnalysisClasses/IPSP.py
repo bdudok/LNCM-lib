@@ -30,7 +30,7 @@ class IPSP:
          not including post-stim periods). Needs to be set at init. does not overwrite stored stimtimes.
         '''
         self.session = session
-        self.wdir = self.session.path + 'IPSP/'
+        self.wdir = self.session.path / 'IPSP'
         self.n_cells = self.session.ca.cells
         if self.session.ca.last_bg:
             self.n_cells -= 1
@@ -46,7 +46,7 @@ class IPSP:
         if not os.path.exists(self.wdir):
             return 0
         for f in os.listdir(self.wdir):
-            os.remove(self.wdir + f)
+            os.remove(self.wdir / f)
 
     def set_defaults(self, user_config, shuffle=False):
         default_config = {
@@ -118,7 +118,7 @@ class IPSP:
                     mask[ri] = numpy.arange(current_frame - self.config.pre, current_frame + self.config.post)
 
                 # set the resp values
-                param = self.session.getparam(self.config.param)
+                param = self.session.getparam(self.config.param)[:self.n_cells]  # without the background ROI (last_bg)
                 for ei, indices in enumerate(mask):
                     loc = numpy.where(numpy.logical_not(numpy.isnan(indices)))[0]
                     if len(loc):
@@ -139,15 +139,15 @@ class IPSP:
         :return:
         '''
         if not hasattr(self, 'stimframes'):
-            stimname = self.wdir + '_StimTimes'
-            if os.path.exists(stimname + '.npy'):
-                stimframes = numpy.load(stimname + '.npy')
+            stimname = self.wdir / '_StimTimes.npy'
+            if os.path.exists(stimname):
+                stimframes = numpy.load(stimname)
             else:
                 t = PhotoStim.PhotoStim(self.session)
                 stimframes = t.get_trains(isi=3)[
                     0]  # ignoring intensities. these are not reliable with current PreProc.
-                numpy.save(stimname + '.npy', stimframes)
-                pandas.DataFrame({'StimFrames': stimframes}).to_excel(stimname + '.xlsx')
+                numpy.save(stimname, stimframes)
+                pandas.DataFrame({'StimFrames': stimframes}).to_excel(stimname.with_suffix('.xlsx'))
             if self.shuffle:
                 frame_pool = numpy.ones(stimframes[-1], dtype='bool')
                 frame_pool[:stimframes[0]] = 0
@@ -195,13 +195,13 @@ class IPSP:
         :return: model parameters
         '''
         M = self.get_matrix()
-        self.wh_nan = numpy.where(numpy.average(numpy.isnan(M[:, ci, :]), axis=0) > 0.2)
+        # local: self.wh_nan and self.notna belong to the model fit and are used by pull_ipsps
+        wh_nan = numpy.where(numpy.average(numpy.isnan(M[:, ci, :]), axis=0) > 0.2)
         Y = numpy.nanmean(M[:, ci, self.config.pre:], axis=0)
         notna = numpy.ones(len(Y), dtype='bool')
-        for x in self.wh_nan[0]:
+        for x in wh_nan[0]:
             if x >= self.config.pre:
                 notna[x - self.config.pre] = False
-        self.notna = notna
         X = 1000 * numpy.arange(self.config.post) / self.session.fps
         fitX = X[notna]
         fitY = Y[notna]
@@ -274,7 +274,6 @@ class IPSP:
             plot_Y = self.Y_fit_all
             modstring = self.get_modstring(popt)
         if save:
-            fname = self.get_fn('model')
             fig, ax = plt.subplots()
             ax.scatter(self.X, self.Y)
             ax.plot(fitX, plot_Y, color='red')
@@ -286,17 +285,17 @@ class IPSP:
             elif self.config.order == 7:
                 ax.plot(fitX, self.Y_fit, color='red', linestyle=':')
             fig.suptitle(figure_title)
-            with open(fname + '.txt', 'w') as f:
+            with open(self.get_fn('model.txt'), 'w') as f:
                 f.write(modstring + '\n' + str(self.model))
                 if self.config.order == 2:
                     f.write('\n' + self.get_modstring(self.model))
                     f.write('\n' + str(self.model_2))
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('Response (DF/F)')
-            plt.savefig(fname + '.png')
-            # numpy.save(fname + '.npy', self.model) #this is never used and can be parsed from json in the text file
+            plt.savefig(self.get_fn('model.png'))
             plt.tight_layout()
             self.fig = fig, ax
+        numpy.save(self.get_fn('model.npy'), self.model)  # get_ipsps loads it with the saved responses
 
     def constrain_guesses(self, guesses, bounds):
         ret_guesses = []
@@ -335,7 +334,7 @@ class IPSP:
         return f'ampl:{popt[0] * 100:.2f}%, peak:{popt[1]:.1f} ms, bias:{popt[2] * 100:.1f}%, delay:{popt[3]:.1f}ms'
 
     def get_fn(self, suffix):
-        return self.wdir + f'_{self.session.tag}_{self.confighash}_{suffix}'
+        return self.wdir / f'_{self.session.tag}_{self.confighash}_{suffix}'
 
     def alpha_func(self, x, A, B, C, D):
         '''
@@ -359,28 +358,6 @@ class IPSP:
         #we clip the (inverted) EPSP so it's not negative, otherwise constraining the initial response is very fragile
         y2 = numpy.clip(A2 * (x - D2) / B2 * numpy.exp(1 - (x - D2) / B2), max=0)
         return y1 + y2
-
-    # def dual_fit(self, include_cells=None):
-            #now included in fit_model
-    #     '''Try optimizing both functions in 1 shot (7 df)'''
-    #     first_model = self.fit_model_single_order(include_cells=include_cells)
-    #     fitX = self.X[self.notna]
-    #     fitY = self.Y[self.notna]
-    #     guesses = list(self.model)
-    #     bounds = self.constraints['bounds']
-    #     for add_i in (0, 1, 3):
-    #         guesses.append(self.constraints['guesses.second'][add_i])
-    #         for b_i in (0, 1):
-    #             bounds[b_i].append(self.constraints['bounds.second'][b_i][add_i])
-    #     maxval = numpy.nanmax(fitY)
-    #     popt, pcov = curve_fit(self.dual_alpha_func, fitX, maxval - fitY, p0=guesses, bounds=bounds)
-    #     second_fit = maxval - self.dual_alpha_func(fitX, *popt)
-    #     self.model_2 = popt
-    #     self.Y_fit_2 = second_fit
-    #     plot_Y = self.Y_fit_2
-    #     plt.plot(fitX, self.Y_fit, color='red', linestyle=':')
-    #     plt.plot(fitX, self.Y_fit_2, color='orange')
-
 
 
     def ampl_func(self, x, A, C):
@@ -477,10 +454,11 @@ class IPSP:
                 return None #if didn't converge
         return popt
 
-    def get_baseline_kernel(self, t=-4, s=10):
+    def get_baseline_kernel(self, t=4, s=10):
         '''
-        get weights to measure baseline: an asymmetric, back-looking gaussian
-        :param t: gaussian center (ms before to stim)
+        get weights to measure baseline: the pre-stim part of a gaussian centered after the stim, so the weights are
+        highest in the last frame before the stim and decrease going back in time
+        :param t: gaussian center (ms after the stim)
         :param s: gaussian sigma (ms)
         :return: weights to be used by DescrStatsW
         '''
@@ -488,7 +466,7 @@ class IPSP:
         if key not in self.baseline_kernels:
             fps = self.session.fps
             indices = numpy.arange(-self.config.pre, 0).astype('int64')
-            weights = scipy.stats.norm.pdf(indices, loc=-t * fps / 1000, scale=s * fps / 1000)
+            weights = scipy.stats.norm.pdf(indices, loc=t * fps / 1000, scale=s * fps / 1000)
             self.baseline_kernels[key] = weights
         return self.baseline_kernels[key]
 
@@ -505,10 +483,8 @@ class IPSP:
         # response is ampl parameter of the fit, compared to where it returns to
         # amplitude is the peak value minus baseline value
         assert order <= self.config.order
-        if save_fitforms and (order > 1):
-            order_dims = 2
-            if order == 7:
-                order_dims += 2
+        if save_fitforms:
+            order_dims = {1: 1, 2: 2, 7: 4}[order]
             fitforms = numpy.empty((self.n_cells, self.n_stims, self.config.post, order_dims))
             fitforms[:] = numpy.nan
         if order > 1:
@@ -524,30 +500,34 @@ class IPSP:
                 if fit is None:
                     self.responses[ci, ei, 1:] = numpy.nan
                 else:
-                    # peak value:
+                    # peak value: the alpha function peaks at B+D
                     B = self.model[1]
                     D = self.model[3]
-                    y_at_peak = self.alpha_func(B, fit[0], B, fit[1], D)
+                    y_at_peak = self.alpha_func(B + D, fit[0], B, fit[1], D)
                     # note because alpha puts the response on top of the baseline, bl-y_at_peak is the actual value.
                     self.responses[ci, ei, 1:4] = bl, fit[0], bl - y_at_peak
                     if order == 2:
                         fitX, second_fit, first_Y, second_Y = self.fit_event_second_component(Y, bl, fit)
                         B = self.model_2[1]
                         D = self.model_2[3]
-                        y_at_peak = self.alpha_func(B, second_fit[0], B, second_fit[1], D)
+                        y_at_peak = self.alpha_func(B + D, second_fit[0], B, second_fit[1], D)
                         self.responses[ci, ei, -2:] = second_fit[0], bl - y_at_peak
                     elif order == 7:
                         fitX, second_fit, first_Y, second_Y = self.fit_event_7(Y, bl, fit)
                         use_model = [x for x in self.model_2]
                         for fi, mi in enumerate((0, 2, 4)): #A1, C, A2
                             use_model[mi] = second_fit[fi]
-                        y_at_peak1 = self.dual_alpha_func(self.model_2[1], *use_model) #predict at B1
-                        y_at_peak2 = self.dual_alpha_func(self.model_2[5], *use_model) #predict at B2
+                        y_at_peak1 = self.dual_alpha_func(self.model_2[1] + self.model_2[3], *use_model) #predict at B1+D1
+                        y_at_peak2 = self.dual_alpha_func(self.model_2[5] + self.model_2[6], *use_model) #predict at B2+D2
                         self.responses[ci, ei, -4:] = second_fit[0], bl - y_at_peak1, second_fit[-1], bl - y_at_peak2
                     if save_fitforms:
-                        ind_x = (fitX * self.session.fps / 1000).astype('int64')
+                        if order == 1:
+                            fitX = self.X[self.notna & numpy.logical_not(numpy.isnan(Y))]
+                            first_Y = bl - self.ampl_func(fitX, *fit)
+                        ind_x = numpy.round(fitX * self.session.fps / 1000).astype('int64')  # truncating can drop a frame
                         fitforms[ci, ei, ind_x, 0] = first_Y
-                        fitforms[ci, ei, ind_x, 1] = second_Y
+                        if order > 1:
+                            fitforms[ci, ei, ind_x, 1] = second_Y
                         if order == 7:
                             e_model = [x for x in use_model]
                             e_model[0] = 0
@@ -562,7 +542,7 @@ class IPSP:
         fn = self.get_fn('ipsps.npy')
         numpy.save(fn, self.responses)
         if save_fitforms:
-            numpy.save(fn.replace('s.npy', '_fits.npy'), fitforms)
+            numpy.save(fn.with_name(fn.name.replace('s.npy', '_fits.npy')), fitforms)
         return self.responses
 
     def get_ipsps(self):

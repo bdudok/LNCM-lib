@@ -1,15 +1,21 @@
+import os
+
 try:
     from BaserowAPI.LG_API_token import baserow_token, baserow_logger_token
-except:
-    baserow_token = 'cdjpgHN7Ipi08Ju829xbxCR7e3ARgGgk'
+except ImportError:
     baserow_logger_token = ''
+    baserow_token = 'cdjpgHN7Ipi08Ju829xbxCR7e3ARgGgk'
     # print('No tokens found, BaseRow can be used with basic read-only access.')
     # print('For full Baserow and LabGuru access, create a LG_API_token.py file in BaserowAPI.')
     # print('Do not push your tokens file to GitHub (do not commit to repo)')
 
+# The environment variable takes precedence over LG_API_token.py. In a Windows terminal, run:
+# setx BASEROW_LOGGER_TOKEN "<token>"
+baserow_logger_token = os.environ.get('BASEROW_LOGGER_TOKEN') or baserow_logger_token
+
 
 select_fields = ( #fields that can't be copied json to json when duplicating entries:
-    # need to be seat as int of the code, ore string of the value
+    # need to be set as int of the code, or string of the value
     'Channels', 'MarkPoints',
     'Voltage0', 'Voltage1', 'Voltage2', 'Voltage3', 'Voltage4',
     'Project', 'BeltType',

@@ -1,6 +1,7 @@
 import json
 import os
 import copy
+from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy
 import pandas
@@ -12,6 +13,8 @@ from Proc2P.Analysis.FitEye import FitEye
 from Proc2P.Bruker.ConfigVars import CF
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.Bruker.LoadEphys import Ephys
+from Proc2P.Bruker.LoadRegistered import GEVIRegStatus, GEVIREG_FIXED_VERSION
+from Proc2P.Analysis.PullSignals import logged_pull_source
 from LFP import Filter
 from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel, strip_ax, ewma
 from Proc2P.Analysis.Ripples import Ripples
@@ -62,13 +65,13 @@ class Pos:
 class ImagingSession(object):
     __name__ = 'ImagingSession'
 
-    def __init__(self, procpath, prefix, tag=None, norip=True, opath='.', ch=0,
+    def __init__(self, procpath, prefix, tag='dummy', norip=True, opath='.', ch=0,
                  ripple_tag=None, lfp_ch=1, **kwargs):
         self.opath = opath
         self.prefix = prefix
-        self.procpath = procpath
+        self.procpath = Path(procpath)
         self.tag = tag
-        self.path = os.path.join(procpath, prefix + '/')
+        self.path = self.procpath / prefix
         self.kwargs = kwargs
 
         # load info from json file
@@ -79,13 +82,22 @@ class ImagingSession(object):
         self.CF.fps = self.si['framerate']
 
         # load polygons, option to access image data
-        self.rois = FrameDisplay(procpath, prefix, tag=tag, lazy=True)
+        self.rois = FrameDisplay(self.procpath, prefix, tag=tag, lazy=True)
 
         # load processed traces
-        self.ca = CaTrace(procpath, prefix, tag=tag, ch=ch)
+        self.ca = CaTrace(self.procpath, prefix, tag=tag, ch=ch)
         self.has_ca = self.ca.load() is True
         if tag == 'dummy':
             self.ca.dummy_load(int(self.si['n_frames']))
+        if self.has_ca:
+            status = self.gevireg_status()
+            if status == GEVIRegStatus.OLD:
+                lprint(self, f'Warning: {prefix} trace {tag} was pulled from a GEVIReg movie registered before the '
+                             f'axis order fix. Pull it again from the rerun GEVIReg movie.')
+            elif status == GEVIRegStatus.UNKNOWN:
+                lprint(self, f'Warning: {prefix} has a GEVIReg movie, and it is not recorded whether trace {tag} '
+                             f'was pulled from it. If it was, it is from a GEVIReg movie registered before the '
+                             f'axis order fix.')
         self.ftimes = numpy.load(self.get_file_with_suffix('_FrameTimes.npy'))
 
         # load photostimulation if available:
@@ -123,7 +135,7 @@ class ImagingSession(object):
         self.version = 'LNCM'
 
     def get_file_with_suffix(self, suffix):
-        return os.path.join(self.path, self.prefix + suffix)
+        return self.path / (self.prefix + suffix)
 
     def map_opto(self):
         if self.si['has_opto']:
@@ -139,6 +151,38 @@ class ImagingSession(object):
                 self.opto_ints[intdat['ImgFrame'].values] = intdat['Intensity'].values
         else:
             self.opto = None
+
+    def stim_artifact_frames(self, threshold=10, baseline=25):
+        '''
+        Frames affected by photostimulation: the opto frames (LED on during the frame, from the voltage recording),
+        and the frame after each run of opto frames if its brightness differs by more than threshold robust SDs from
+        the frames before the stim, or if CaTrace set it to NaN as an outlier. That frame is sometimes affected when
+        the LED turns off close to a frame boundary. Brightness is the mean trace of the ROIs.
+        :param threshold: in robust SDs (1.4826 * median absolute deviation)
+        :param baseline: number of frames before the stim used as reference
+        :return: bool array (frames), None if the session has no photostimulation
+        '''
+        if self.opto is None:
+            return None
+        trace = self.ca.trace if self.ca.trace.ndim == 2 else self.ca.trace[..., 0]
+        y = numpy.nanmean(trace, axis=0)
+        mask = numpy.copy(self.opto)
+        edges = numpy.diff(self.opto.astype(int), prepend=0, append=0)
+        for start, stop in zip(numpy.where(edges == 1)[0], numpy.where(edges == -1)[0]):  # stop: first frame after
+            if stop >= len(y):
+                continue
+            if numpy.isnan(y[stop]):
+                mask[stop] = True
+                continue
+            window = slice(max(0, start - baseline), start)
+            ref = y[window][~mask[window] & ~numpy.isnan(y[window])]
+            if len(ref) < 5:
+                continue
+            med = numpy.median(ref)
+            sd = 1.4826 * numpy.median(numpy.abs(ref - med))
+            if sd > 0 and abs(y[stop] - med) > threshold * sd:
+                mask[stop] = True
+        return mask
 
     def map_pos(self):
         self.pos = Pos(self.ca.sync, self.fps)
@@ -156,9 +200,8 @@ class ImagingSession(object):
                 self.has_behavior = True
 
     def get_face_path(self):
-        self.face_path = os.path.join(self.path, '_face/')
-        if not os.path.exists(self.face_path):
-            os.mkdir(self.face_path)
+        self.face_path = self.path / '_face'
+        self.face_path.mkdir(exist_ok=True)
         return self.face_path
 
     def map_face(self):
@@ -168,7 +211,7 @@ class ImagingSession(object):
         for whisker pad motion, use map_whiskers
         '''
         self.get_face_path()
-        trace_file = self.face_path + '_motion_energy.npy'
+        trace_file = self.face_path / '_motion_energy.npy'
         if os.path.exists(trace_file):
             self.mm_trace = numpy.load(trace_file)
         else:
@@ -191,7 +234,7 @@ class ImagingSession(object):
 
     def map_eye(self, thr=0.2, model_name='final'):
         if model_name == 'final':
-            self.eye_trace = numpy.load(os.path.join(self.get_face_path(), '_pupil_trace_final.npy'))
+            self.eye_trace = numpy.load(self.get_face_path() / '_pupil_trace_final.npy')
         else:
             self.eye_trace = FitEye(self.get_face_path(), thr, model_name=model_name).get_trace()
         self.eye_trace /= numpy.nanmax(self.eye_trace) #norm to max
@@ -207,7 +250,7 @@ class ImagingSession(object):
 
     def interpolate_trace(self, trace_x, trace_y):
         '''For use with camera if not triggered in every frame, to get a trace with equal lenght of imaging'''
-        incl_times = numpy.logical_and(numpy.logical_not(numpy.isnan(trace_x)), numpy.logical_not(numpy.isnan(trace_x)))
+        incl_times = numpy.logical_and(numpy.logical_not(numpy.isnan(trace_x)), numpy.logical_not(numpy.isnan(trace_y)))
         incl_times = numpy.logical_and(incl_times, trace_x>0)
         all_frames = numpy.empty(self.ca.frames)
         all_frames[:] = numpy.nan
@@ -230,21 +273,19 @@ class ImagingSession(object):
         Args:
             sign: True - mobile; False -immobile
             expand: if pulling immobility, expand movement periods by this many secs
-            return_trace: if True, also returns the boolean mask for the session
+            return_mask: if True, also returns the boolean mask for the session
 
-        Returns: starts, stops of the periods
+        Returns: starts, stops of the periods (frame indices, stop is the last frame of the period)
         '''
         v = gapless(numpy.abs(self.pos.smspd), threshold=1, expand=int(self.fps * expand))
         if not sign:
             v = numpy.logical_not(v)
-        count_starts = numpy.cumsum(numpy.diff(v) > 0)
-        periods = count_starts * v[1:]
-        starts, stops = [], []
-        for p in range(count_starts[-1]):
-            wh = numpy.where(periods == (p + 1))[0]
-            if len(wh) > 2:
-                starts.append(wh[0])
-                stops.append(wh[-1])
+        # pad with False so that periods at the start or end of the session also have both edges
+        edges = numpy.diff(numpy.asarray(v, dtype=int), prepend=0, append=0)
+        all_starts = numpy.where(edges == 1)[0]
+        all_stops = numpy.where(edges == -1)[0] - 1
+        keep = (all_stops - all_starts) >= 2
+        starts, stops = list(all_starts[keep]), list(all_stops[keep])
         if return_mask:
             return starts, stops, v
         return starts, stops
@@ -286,18 +327,16 @@ class ImagingSession(object):
             elif param == 'vms':
                 #only available if saved by script
                 param = numpy.load(os.path.join(self.ca.pf, 'vms_interp.npy'))
+            elif param == 'xtalk':
+                # crosstalk-corrected rel, saved by AnalysisClasses.Crosstalk in this channel's trace folder
+                try:
+                    param = self.ca.get_custom('rel_xtalk')
+                except FileNotFoundError:
+                    raise FileNotFoundError(f'No crosstalk-corrected trace in {self.ca.pf}. '
+                                            f'Run AnalysisClasses.Crosstalk with this channel as target first.') from None
             elif 'custom' in param:
                 ckey = param.split('custom')[1]
                 param = self.ca.get_custom(ckey)
-            # elif param == 'peaks':
-            #     self.disc_param = True
-            #     param = numpy.nan_to_num(self.ca.peaks.astype('bool'))
-            # elif param == 'aupeaks':
-            #     param = numpy.maximum(0, self.ca.smtr * self.ca.b2)
-            # elif param == 'bin_onset':  # onset frame of 3 sd events
-            #     param = numpy.zeros(self.ca.rel.shape, dtype='bool')
-            #     for event in self.ca.eventarray:
-            #         param[event[0], event[1]] = 1
             elif param == 'diff':
                 param = numpy.empty(self.ca.rel.shape)
                 param[:, 0] = numpy.nan
@@ -311,6 +350,8 @@ class ImagingSession(object):
                 #deprecated, pass any param and a kw mask_stim instead
                 mask_stim = int(param[-1]) + 1
                 param=numpy.copy(self.ca.rel)
+            else:
+                raise ValueError(f'Unknown param: {param}')
         elif type(param) == int:
             param = self.ewma_smooth(param)
 
@@ -417,12 +458,15 @@ class ImagingSession(object):
                 break
 
     def map_instrate(self):
-        '''get the instantaneous rate of LFP spikes in each 2P imaging frame'''
-        mapped_fn = self.get_file_with_suffix(f'_Ch{self.lfp_ch}_instrate_mapped.npy')
+        '''get the instantaneous rate of LFP spikes in each 2P imaging frame, from the spike times of the session's
+        spiketag (file names as in map_spiketimes). Cached per channel and spiketag.'''
+        spiketag = self.kwargs.get('spiketag', None)
+        tag_str = '' if spiketag in (None, 'None') else f'_{spiketag}'
+        mapped_fn = self.get_file_with_suffix(f'{tag_str}_Ch{self.lfp_ch}_instrate_mapped.npy')
         if os.path.exists(mapped_fn):
             return numpy.load(mapped_fn)
         else:
-            spikes = read_excel(self.get_file_with_suffix(f'_Ch{self.lfp_ch}_spiketimes.xlsx'))
+            spikes = read_excel(self.get_file_with_suffix(f'{tag_str}_Ch{self.lfp_ch}_spiketimes.xlsx'))
             spk_times = spikes['SpikeTimes(s)'].values
             nframes = self.si.info['n_frames']
             X = self.ftimes[1:-1, 0] # skip first and last frames, because ephys samples may not align with imaging
@@ -461,9 +505,9 @@ class ImagingSession(object):
         path = self.ripples.path
         # later extend this to use multiple channels
         for band, key in zip(bands, keys):
-            cfn = path + key + '.npy'
+            cfn = path / f'{key}.npy'
             if os.path.exists(cfn):
-                setattr(self.ephys, key, numpy.load(path + key + '.npy'))
+                setattr(self.ephys, key, numpy.load(cfn))
             else:
                 lprint(self, f'Saving {band} power file ...')
                 filt = Filter.Filter(self.ephys.trace, fs)
@@ -525,12 +569,33 @@ class ImagingSession(object):
         self.zscores[self.pltnum] = zscores
         return zscores
 
+    def gevireg_status(self):
+        '''
+        Which movie the loaded trace was pulled from (GEVIRegStatus). Assert FIXED to make sure that a trace is from
+        a GEVIReg movie registered after the axis order fix (2026-10-09).
+        Traces pulled since then have a pull record in their version info. For older traces, the pull is looked up in
+        the analysis logs (only pulls from the GUI are logged) if the session has a GEVIReg folder.
+        '''
+        if 'movie' in self.ca.version_info:
+            if self.ca.version_info['movie'] != 'GEVIReg':
+                return GEVIRegStatus.NOT_GEVIREG
+            fixed = int(self.ca.version_info['GEVIReg_version']) >= GEVIREG_FIXED_VERSION
+            return GEVIRegStatus.FIXED if fixed else GEVIRegStatus.OLD
+        if not (self.path / 'GEVIReg').exists():
+            return GEVIRegStatus.NOT_GEVIREG
+        movie = logged_pull_source(self.procpath, self.prefix, self.tag)
+        if movie is None:
+            return GEVIRegStatus.UNKNOWN
+        # pulls without a pull record were made before the fix
+        return GEVIRegStatus.OLD if movie == 'GEVIReg' else GEVIRegStatus.NOT_GEVIREG
+
     def qc(self, trim=10, nnd=None):
         '''returns a bool mask for cells that pass qc
         trim: if >0, remove cells that are close to the top or bottom row to avoid artefacts
+        With dual channel traces (ch='All'), a cell passes if it passes in any channel.
         '''
-
-        qc_pass = numpy.any(numpy.nan_to_num(self.getparam('ntr')) > 3, axis=1)
+        ntr = numpy.nan_to_num(self.getparam('ntr'))
+        qc_pass = numpy.any(ntr > 3, axis=tuple(range(1, ntr.ndim)))
         if hasattr(self.ca, 'nnd') and nnd is not None:
             nnd_pass = numpy.any(self.ca.nnd > nnd, axis=1)
             qc_pass = numpy.logical_and(nnd_pass, qc_pass)
@@ -802,7 +867,7 @@ class ImagingSession(object):
         self.fig.clf()
 
 if __name__ == '__main__':
-    procpath = 'D:\Shares\Data\_Processed/2P\PVTot/'
+    procpath = r'D:\Shares\Data\_Processed/2P\PVTot/'
     prefix = 'PVtot9_2024-03-07_RF_224'
     tag = 'skip'
     a = ImagingSession(procpath, prefix, tag=tag)

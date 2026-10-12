@@ -6,6 +6,8 @@ conda create --name lncm python=3.11 -c conda-forge --strict-channel-priority
 conda activate lncm
 conda install -c conda-forge -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph pyedflib lsq-ellipse pandas-stubs pyarrow qt6-multimedia
 
+# See pycharm-workspace.md for how to set up Pycharm in a clean way
+# see Pycharm console starting script.py for setting up console in PyCharm (required for run configs with Python console)
 
 # To use SIMA for ROI detection in 2P movies, we need a Python 3.6 env ("lncm36"), 
 # Note that calls to the functions that use this are made from the main env, and the path to the python 3.6 executable needs to be specified in envs/site_config.json
@@ -16,18 +18,19 @@ conda activate lncm36
 conda install -c conda-forge -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph
 pip install sima
 
-# To use Suite2P for motion correction, we need a Python 3.9 env ("suite2p"):
-if you have a previous suite2p env, delete it (conda env remove --name suite2p),
+# To use Suite2P for motion correction, we need a Python 3.11 env ("suite2p") with suite2p 1.x (tested with 1.1.0):
+if you have a previous suite2p env (0.x), delete it (conda env remove --name suite2p),
 and delete the remaining empty folder in envs called suite2p
-note: s2p 1.0 has breaking changes, we stick to an older version until the pipeline is updated. 0.14.6 works.
+note: suite2p 0.x envs don't work with the current pipeline.
 in conda powershell prompt:
-    conda create --name suite2p python=3.9 -c defaults --strict-channel-priority --no-default-packages
+    conda create --name suite2p python=3.11 -c conda-forge --strict-channel-priority
     conda activate suite2p
-    pip install suite2p=0.14.6
-    pip install pandas requests openpyxl
+    python -m pip install suite2p
+    python -m pip install pandas requests openpyxl pyarrow
+our analysis server has no GPU, suite2p runs on CPU with the default torch install (it logs that cuda is not working and uses cpu).
 
 open the job script in your project (no need to have a separate S2P project)
-for example, Proc2P/Analysis/S2P_template/20260113_BatchRun_MotionCorrect_Template.py (in LNCM-lib)
+for example, Proc2P/Analysis/S2P_template/20261007_BatchRun_MotionCorrect_Template.py (in LNCM_ClaudeCode)
 In settings/Python/interpreter, add the suite2p env as system python (but don't select it for the project)
 Select run/edit configurations for your job script
     select the suite2p interpreter to run this script with

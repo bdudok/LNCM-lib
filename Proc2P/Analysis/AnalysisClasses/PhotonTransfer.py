@@ -108,17 +108,17 @@ class ExportPhotonTransfer:
         :return: flux #saves the figure and flux array, also returns it in photons/px/frame
         '''
 
-        # path = r'D:\Shares\Data\_Processed\2P\JEDI/'
-        # prefix = 'JEDI-PV21_2024-05-10_Fast_045' #prefix(without btag)
-        # channel_name = 'Ch2' #'Ch1' or 'Ch2', # Ch1 is red; Ch2 is green
         # init an ImagingSession
         session = ImagingSession(path, prefix, tag='skip', norip=True)
         dpath = session.si.info['dpath']
-        filelist = [fn for fn in os.listdir(dpath) if ((prefix in fn) and ('.ome.tif' in fn))]
+        # the raw data folder may have been moved to a backup location
+        filelist = [fn for fn in os.listdir(dpath) if ((prefix in fn) and ('.ome.tif' in fn))] if os.path.isdir(dpath) else []
         if not len(filelist):
             # look in alternative paths
             path1 = str(dpath)
             key = '_RawData'
+            if key not in path1:
+                raise FileNotFoundError(f'No raw movie in {dpath}. Alternative paths are only searched for folders in {key}')
             rpath = path1[path1.find(key) + len(key):]
             parent_folders = path_to_list(rpath)
             # check in each alt path and stop if found em

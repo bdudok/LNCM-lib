@@ -1,0 +1,112 @@
+# NWB export config for NWBExporter. Copy and edit for each export.
+# Usage: NWBExporter(prefix, 'path/to/this.yaml').run()
+
+output:
+  directory: E:/NWB_export/
+  filename: "{prefix}-lean.nwb"   # {prefix} is replaced with the session prefix
+  overwrite: false
+
+session:
+  procpath: null             # null: look up Processed.Path in the DB
+  use_db: true               # look up the session in the DB (for procpath and db_entry)
+  imaging_session_kwargs:    # passed to ImagingSession
+    tag: CellsRe             # there can be multiple tags exported, specify one here that we can use for exporting
+    lfp_ch: 1
+
+nwbfile:
+  lab: LNCM
+  institution: BCM
+  experimenter:              # "Last, First"; experimenters from export_metadata() are added
+    - Dudok, Barna
+  session_description: null  # null: use the prefix
+  experiment_description: 2P ImagingSession
+  keywords: [LNCM, 2P, CA1, jRGECO1a]
+  related_publications: []   # e.g. doi:10.1016/j.neuron.2016.12.011
+
+subject:                     # pynwb Subject fields; override the values from export_metadata()
+  species: Mus musculus
+
+imaging:
+  brain_region: CA1
+  excitation_lambda: null    # nm; null: take from export_metadata()
+  device:
+    name: Bruker Investigator
+    model_name: Bruker Ultima Investigator Plus
+    description: Two-photon microscope for in vivo imaging
+    manufacturer: Bruker
+    model_number: Ultima Investigator Plus
+    serial_number: SN-4988
+  channels:                  # in the order of the channels returned by export_2p_movie and export_traces
+    - name: Ch1_Red
+      description: Red fluorescence channel
+      emission_lambda: 595.0
+      indicator: jRGECO1a
+    - name: Ch2_Green
+      description: Green fluorescence channel
+      emission_lambda: 525.0
+      indicator: GCaMP8m
+
+lfp:
+  channels: null             # LFP channel numbers to export (rows of _ephys.npy, from 1, as lfp_ch); null: all
+  location: CA1 (contralateral)
+  description: LFP recording
+  device_name: A-M Systems Model 300
+  device_description: twisted wire pair, differential amplifier, 1000x gain
+  filtering: 0.1-1000 Hz band-pass
+  reference: null
+
+include:                     # frame times are always included
+  fov_image: true
+  2p_movie: false
+  speed: true
+  abspos: true
+  treadmill: true            # belt position and laps
+  behavior_events: true      # licks, rewards and reward zones (_bdat.json), if the session has them
+  opto: true                 # photostimulation pulses and stimulated frames, if the session has opto
+  lfp: false                 # LFP, if the session has it. Also enables:
+  ripples: true              #   ripple events (not the filtered LFP or power, those are recomputed when needed)
+  lfp_events: true           #   spike and seizure tables and detection settings of the exported LFP channels
+  video: false
+
+roi_sets:
+  - tag: CellsRe
+    source: S2P # one of valid registered source names ['S2P', 'GEVIReg', 'Raw']
+    weighted: false # whether to use snr-weighted or binary masks. check this matches what's recorded in the processing log.
+    # when available from metadata, this option is ignored
+    description: All GECO-expressing PCs segmented
+    channels: [Ch1_Red]      # imaging.channels names of the trace channels, in the order they were pulled.
+    # pull_signals with ch='All' stores dual-channel traces as [Ch2_Green, Ch1_Red]
+    traces:                  # trace tags; either a str, or a dict with tag, description and unit
+      - tag: trace
+        description: raw fluorescence
+        unit: F
+      - tag: rel
+        description: DF/F
+        unit: dfof
+
+
+opto:
+  device_name: LED
+  device_description: null
+  description: Photostimulation
+  excitation_lambda: null    # nm
+  location: null
+
+ripples:
+  tags: null                 # ripple tags (_ripples/<tag>.ripples) to export; null: all
+
+video:
+  storage: external          # external: link to the video file by name, for upload to DANDI next to the NWB file
+  # (writes <nwb name>_dandi.json for DandiUpload.py); embedded: decoded frames in the NWB file
+
+dandi:
+  dandiset_path: null        # local dandiset folder, made with:
+  # dandi download --download dandiset.yaml https://dandiarchive.org/dandiset/<id>/draft
+
+point_events: []             # other event types, see ExportImagingSession.export_point_events
+interval_events: []          # other event types, see ExportImagingSession.export_interval_events
+
+compression:
+  2p_movie: 4                # gzip level, 0 for no compression
+  video: 4                   # with video.storage: embedded
+  buffer_frames: 100         # frames written at a time

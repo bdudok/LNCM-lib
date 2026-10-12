@@ -13,10 +13,9 @@ from matplotlib import pyplot as plt
 from LFP.SzDet.AppSpikeSz.SzViewData import SzReviewData
 
 from PySide6.QtCore import Qt
-from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtGui import QAction
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import (QSlider, QStyle, QApplication, QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
+from PySide6.QtWidgets import (QApplication, QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
                              QGroupBox, QListWidget,QAbstractItemView, QLineEdit)
 
 from Proc2P.utils import *
@@ -42,9 +41,7 @@ class GUI_main(QtWidgets.QMainWindow):
         # main groupbox (horizonal)
         self.szlist_groupbox = self.make_szlist_groupbox()
         self.display_traces_groupbox = self.make_traces_groupbox()
-        self.disable_video_vidgets = True # hide video, as these as not used.
-        if not self.disable_video_vidgets:
-            self.video_groupbox = self.make_video_groupbox()
+        self.video_groupbox = self.make_video_groupbox()  # shown when the recording has video
 
         # central widget
         centralwidget = QWidget(self)
@@ -52,9 +49,11 @@ class GUI_main(QtWidgets.QMainWindow):
 
         # add main layouts
         horizontal_layout.addWidget(self.szlist_groupbox)
-        horizontal_layout.addWidget(self.display_traces_groupbox)
-        if not self.disable_video_vidgets:
-            horizontal_layout.addWidget(self.video_groupbox)
+        splitter = QtWidgets.QSplitter(Qt.Horizontal)
+        splitter.addWidget(self.display_traces_groupbox)
+        splitter.addWidget(self.video_groupbox)
+        splitter.setSizes([2000, 1000])
+        horizontal_layout.addWidget(splitter)
 
         self.setCentralWidget(centralwidget)
         self.centralWidget().setLayout(horizontal_layout)
@@ -67,6 +66,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.separator = QLabel("<hr>")
         self.viewer_on = True
         self.unsaved_changes = 0
+        self.settings['video_dir'] = None  # folder of the vEEG recordings, default: the EEG folder
         if self.setup == 'Pinnacle':
             self.settings['rec_suffix'] = '_seizure_times.xlsx'
             self.settings['pardir'] = 'D:/Shares/Data/_Processed/EEG/'
@@ -156,9 +156,6 @@ class GUI_main(QtWidgets.QMainWindow):
         button.clicked.connect(self.previous_callback)
 
         # toggle button
-        # sp = "\u2423"
-        # up = "\u2191"
-        # down = "\u2193"
         button = QPushButton(f'Toggle [t]', )
         horizontal_layout.addWidget(button)
         button.clicked.connect(self.toggle_callback)
@@ -215,178 +212,169 @@ class GUI_main(QtWidgets.QMainWindow):
         vbox.addWidget(self.separator)
         # later add a middle, thinner row for motion
         self.FigCanvas1 = SubplotsCanvas()
-        custom_toolbar = SelectorToolbar(self.FigCanvas1, self)
-        vbox.addWidget(custom_toolbar)
+        self.toolbar = SelectorToolbar(self.FigCanvas1, self)
+        vbox.addWidget(self.toolbar)
         vbox.addWidget(self.FigCanvas1)
 
         return groupbox
 
     def make_video_groupbox(self):
-
         groupbox = QGroupBox('Video')
         vbox = QVBoxLayout()
         groupbox.setLayout(vbox)
-        # horizontal layout for buttons
-        horizontal_layout = QHBoxLayout()
 
-        # video button
-        button = QPushButton(f'Show [M]', )
-        horizontal_layout.addWidget(button)
-        button.clicked.connect(self.video_callback)
-        vbox.addLayout(horizontal_layout)
-
-        # information on video
-        self.video_info = QLabel("")
-        self.video_info.setMinimumSize(240, 150)
-        self.video_info.setAlignment(Qt.AlignCenter)
-        self.video_info.setWordWrap(True)
+        self.video_label = FrameLabel()
+        vbox.addWidget(self.video_label, stretch=1)
+        self.video_info = QLabel('')
+        # text width must not resize the panel: that resizes the plot, and its full redraw stalls playback
+        self.video_info.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
         vbox.addWidget(self.video_info)
-        vbox.addWidget(self.separator)
 
-        self.frame_index = 0
-        self.frames = []  # will be filled in video_callback
-        self.frameTimer = QtCore.QTimer()
-        self.frameTimer.timeout.connect(self.display_next_frame)
+        controls = QHBoxLayout()
+        self.play_button = QPushButton('Play [p]')
+        self.play_button.clicked.connect(self.play_callback)
+        controls.addWidget(self.play_button)
+        button = QPushButton('Mark behavior [b]')
+        button.clicked.connect(self.behavior_callback)
+        controls.addWidget(button)
+        button = QPushButton('Clear mark')
+        button.clicked.connect(self.clear_behavior_callback)
+        controls.addWidget(button)
+        vbox.addLayout(controls)
 
-        ## video
-        self.playback_framerate = 30
-        self.videoLabel = QLabel()
-        self.videoLabel.setMinimumSize(240, 150)
-        self.videoLabel.setAlignment(Qt.AlignCenter)
-        vbox.addWidget(self.videoLabel)
+        for name, key, callback in (('Play', 'p', self.play_callback), ('Mark behavior', 'b', self.behavior_callback)):
+            action = QAction(name, self)
+            action.setShortcut(key)
+            action.triggered.connect(callback)
+            self.addAction(action)
 
-        # Control row: Play/Pause + Slider
-        controlLayout = QHBoxLayout()
-        controlLayout.setContentsMargins(0, 0, 0, 0)
-
-        # Play/Pause button
-        self.playButton = QPushButton()
-        self.playButton.setEnabled(False)
-        self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
-        self.playButton.clicked.connect(self.play)
-        controlLayout.addWidget(self.playButton)
-
-        # Position slider
-        self.positionSlider = QSlider(Qt.Horizontal)
-        self.positionSlider.setRange(0, 0)
-        self.positionSlider.sliderMoved.connect(self.setPosition)
-        controlLayout.addWidget(self.positionSlider)
-
-        vbox.addLayout(controlLayout)
-
+        self.frame_timer = QtCore.QTimer(self)
+        self.frame_timer.timeout.connect(self.next_frame)
+        self.cap, self.cap_path, self.cap_next = None, None, None  # open video file, frame that read() returns next
+        self.video_t = None  # EEG time (s) of the displayed frame
+        self.dragging = False
+        self.marker_background = None
+        self.FigCanvas1.mpl_connect('draw_event', self.on_draw)
+        self.FigCanvas1.mpl_connect('button_press_event', self.marker_press)
+        self.FigCanvas1.mpl_connect('motion_notify_event', self.marker_motion)
+        self.FigCanvas1.mpl_connect('button_release_event', self.marker_release)
+        groupbox.setVisible(False)
         return groupbox
 
-    def show_frame(self, frame):
-        # displaying specific frame (when frame is an opencv frame)
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = frame_rgb.shape
-        bytes_per_line = ch * w
-        qimg = QtGui.QImage(frame_rgb.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
-
-        # Resize while preserving aspect ratio to fit QLabel width
-        target_width = self.videoLabel.width()
-        aspect_ratio = h / w
-        target_height = int(target_width * aspect_ratio)
-
-        qimg_resized = qimg.scaled(target_width, target_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.videoLabel.setPixmap(QtGui.QPixmap.fromImage(qimg_resized))
-
-    def display_next_frame(self):
-        # displays a new frame every 1/30 second
-        if self.frame_index >= len(self.frames):
-            self.frameTimer.stop()
-            self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
-            return
-
-        # showing frame and updating position in slider
-        self.show_frame(self.frames[self.frame_index])
-        self.positionSlider.setValue(self.frame_index)
-
-        # updating position of video marker and adding to main plot
-        marker_x = (self.frame_index / self.playback_framerate + self.szdat.plot_delta) * self.szdat.fs
-        self.szdat.marker_line.set_xdata([marker_x, marker_x])
-        self.FigCanvas1.draw()
-
-        self.frame_index += 1
-
-    def play(self):
-        if self.frameTimer.isActive():
-            self.frameTimer.stop()
-            self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
-        else:
-            self.frameTimer.start(int(1000 / self.playback_framerate))
-            self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
-
-    def exitCall(self):
-        sys.exit(self.app.exec_())
-
-    def mediaStateChanged(self, state):
-        # changes icon when play/pause button are pressed
-        if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
-            self.playButton.setIcon(
-                self.style().standardIcon(QStyle.SP_MediaPause))
-        else:
-            self.playButton.setIcon(
-                self.style().standardIcon(QStyle.SP_MediaPlay))
-
-    def positionChanged(self, position):
-        # changes position in slider
-        self.positionSlider.setValue(position)
-
-    def durationChanged(self, duration):
-        self.positionSlider.setRange(0, duration)
-
-    def setPosition(self, position):
-        # moving to specific position in video and showing that frame
-        self.frame_index = position
-        self.show_frame(self.frames[self.frame_index])
-
-    def reset_video_player(self):
-        if self.disable_video_vidgets:
-            return 0
-        self.frameTimer.stop()
-        self.frames = []
-        self.frame_index = 0
-        self.videoLabel.clear()
+    def reset_video(self):
+        self.pause()
+        if self.cap is not None:
+            self.cap.release()
+        self.cap, self.cap_path, self.cap_next = None, None, None
+        self.video_t = None
+        self.video_label.set_frame(None)
         self.video_info.clear()
-        self.positionSlider.setRange(0, 0)
-        self.playButton.setEnabled(False)
-        self.playButton.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
 
-    def video_callback(self):
-        if self.disable_video_vidgets:
-            return 0
-        # considering the case that alignment did not work or
-        # user has not yet picked a specific seizure
-        if self.szdat.align is None or self.active_sz is None:
-            self.video_info.setText("No alignment available.")
-            QApplication.processEvents()
+    def show_video_time(self, t):
+        """Display the frame at EEG time t (s) and move the marker there."""
+        self.video_t = t
+        loc = self.szdat.video_frame(t)
+        sz_start = self.szdat.get_sz(self.active_sz, full=True)['Start']
+        if loc is None:
+            self.video_label.set_frame(None)
+            self.video_info.setText(f'No video at {t - sz_start:+.2f} s from seizure start')
+        else:
+            path, frame = loc
+            if path != self.cap_path:
+                if self.cap is not None:
+                    self.cap.release()
+                self.cap, self.cap_path, self.cap_next = cv2.VideoCapture(path), path, None
+            # the frame on display again needs no read (EEG time steps during playback are not exactly one frame)
+            if self.cap_next is None or frame != self.cap_next - 1:
+                if self.cap_next is not None and 0 <= frame - self.cap_next < 30:
+                    for _ in range(frame - self.cap_next):  # a few frames ahead: decode on instead of seeking
+                        self.cap.grab()
+                else:
+                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame)
+                self.read_frame(frame)
+            self.video_info.setText(f'{t - sz_start:+.2f} s from seizure start | {os.path.basename(path)} frame {frame}')
+        self.move_marker()
+
+    def read_frame(self, frame):
+        ok, img = self.cap.read()
+        self.cap_next = frame + 1 if ok else None
+        self.video_label.set_frame(img[:, :, 0] if ok else None)  # mono camera: all channels are equal
+
+    def play_callback(self):
+        if self.video_t is None:
             return
-
-        self.video_info.setText("Loading video ... Please wait.")
-        QApplication.processEvents()
-
-        # GETTING SEIZURE START AND END TIMES
-        sz = self.szdat.get_sz(self.active_sz, full=True)
-        t0, t1 = sz['Start'], sz['Stop']
-
-        ## GETTING THE VIDEO PATH AND SPECIFIC OPENCV FRAMES BASED ON THE START AND END TIMES
-        video_path, self.frames = self.szdat.get_frames(t0, t1)
-        # considering the case that the method fails
-        if self.frames is None:
-            self.video_info.setText("No frames found.")
-            QApplication.processEvents()
+        if self.frame_timer.isActive():
+            self.pause()
             return
+        if self.video_t >= self.szdat.plot_t1:
+            self.show_video_time(self.szdat.get_sz(self.active_sz, full=True)['Start'])
+        self.frame_timer.start(int(1000 / self.szdat.video_map['fps']))
+        self.play_button.setText('Pause [p]')
 
-        # letting the user know what specific video is playing
-        self.video_info.setText("Playing video: " + video_path)
-        QApplication.processEvents()
+    def pause(self):
+        self.frame_timer.stop()
+        self.play_button.setText('Play [p]')
 
-        ## updating slider, play button, frame_index and showing the first frame in the video
-        self.positionSlider.setRange(0, len(self.frames) - 1)
-        self.playButton.setEnabled(True)
-        self.frame_index = 0
-        self.show_frame(self.frames[0])
+    def next_frame(self):
+        t = self.video_t + 1 / self.szdat.video_map['fps']
+        if t > self.szdat.plot_t1:
+            self.pause()
+            return
+        self.show_video_time(t)
+
+    def on_draw(self, event):
+        # the figure was redrawn: store it without the marker, then draw the marker on top
+        if self.video_t is None:
+            return
+        ax = self.FigCanvas1.axd['top']
+        self.marker_background = self.FigCanvas1.copy_from_bbox(ax.bbox)
+        self.szdat.marker_line.set_xdata([self.szdat.time_to_x(self.video_t)] * 2)
+        ax.draw_artist(self.szdat.marker_line)
+
+    def move_marker(self):
+        if self.marker_background is None:
+            return
+        canvas = self.FigCanvas1
+        line = self.szdat.marker_line
+        line.set_xdata([self.szdat.time_to_x(self.video_t)] * 2)
+        canvas.restore_region(self.marker_background)
+        line.axes.draw_artist(line)
+        canvas.blit(line.axes.bbox)
+
+    def marker_press(self, event):
+        ax = self.FigCanvas1.axd['top']
+        if self.video_t is None or event.inaxes is not ax or self.toolbar.mode or self.toolbar.cid is not None:
+            return
+        if self.frame_timer.isActive():  # while playing, a click anywhere jumps there and playback continues
+            self.show_video_time(min(max(self.szdat.x_to_time(event.xdata), self.szdat.plot_t0), self.szdat.plot_t1))
+            return
+        marker_px = ax.transData.transform((self.szdat.time_to_x(self.video_t), 0))[0]
+        if abs(event.x - marker_px) < 10:
+            self.dragging = True
+            self.pause()
+
+    def marker_motion(self, event):
+        if not self.dragging or event.inaxes is not self.FigCanvas1.axd['top']:
+            return
+        t = min(max(self.szdat.x_to_time(event.xdata), self.szdat.plot_t0), self.szdat.plot_t1)
+        self.show_video_time(t)
+
+    def marker_release(self, event):
+        self.dragging = False
+
+    def behavior_callback(self):
+        if self.video_t is None:
+            return
+        self.szdat.set_sz(self.active_sz, self.video_t, 'BehaviorSz(s)')
+        self.flag_unsaved()
+        self.refresh_data()
+
+    def clear_behavior_callback(self):
+        if self.video_t is None:
+            return
+        self.szdat.set_sz(self.active_sz, numpy.nan, 'BehaviorSz(s)')
+        self.flag_unsaved()
+        self.refresh_data()
 
     def select_rec_callback(self):
         # open a recording: display filedioalog, call SzReviewData, update listbox.
@@ -404,7 +392,10 @@ class GUI_main(QtWidgets.QMainWindow):
 
         # load data
         print(f'Calling szdat with prefix {self.prefix} ch {self.ch}, tag {self.tag}')
-        self.szdat = SzReviewData(self.wdir, self.prefix, self.ch, tag=self.tag, setup=self.setup)
+        self.reset_video()
+        self.szdat = SzReviewData(self.wdir, self.prefix, self.ch, tag=self.tag, setup=self.setup,
+                                  video_dir=self.settings['video_dir'])
+        self.video_groupbox.setVisible(self.szdat.video_map is not None)
 
         # set list widget
         self.sz_list.clear()
@@ -427,7 +418,6 @@ class GUI_main(QtWidgets.QMainWindow):
         # print(excluded_sz)
 
         self.path_label.setText(self.prefix)
-        self.reset_video_player()
 
     def mark_complete(self, i, color):
         color = self.color_lut(color)
@@ -466,8 +456,11 @@ class GUI_main(QtWidgets.QMainWindow):
             self.active_sz = current_item.text()
             self.sz_list.setCurrentItem(current_item)
             self.new_plot = True
+            self.reset_video()
             self.refresh_data()
             self.color_next_button()
+            if self.szdat.video_map is not None:
+                self.show_video_time(self.szdat.get_sz(self.active_sz, full=True)['Start'])
 
     def check_true(self, val, missing=False):
         if pandas.isna(val) or val == '':
@@ -516,7 +509,6 @@ class GUI_main(QtWidgets.QMainWindow):
     def list_clicked(self):
         self.current_selected_i = self.sz_list.currentRow()
         self.select_sz()
-        self.reset_video_player()
 
     def previous_callback(self):
         if self.current_selected_i is None:
@@ -579,6 +571,37 @@ class GUI_main(QtWidgets.QMainWindow):
             self.save_callback()
 
 
+class FrameLabel(QLabel):
+    '''Shows a video frame scaled to the label, keeping the aspect ratio; rescales when the label is resized.'''
+
+    def __init__(self):
+        super().__init__()
+        self.setAlignment(Qt.AlignCenter)
+        self.setMinimumSize(160, 120)
+        # Ignored: the label follows the layout instead of growing to the size of the frame
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
+        self.image = None
+
+    def set_frame(self, frame):
+        if frame is None:
+            self.image = None
+            self.clear()
+            return
+        frame = numpy.ascontiguousarray(frame)
+        h, w = frame.shape
+        self.image = QtGui.QImage(frame.data, w, h, w, QtGui.QImage.Format_Grayscale8).copy()
+        self.update_pixmap()
+
+    def update_pixmap(self):
+        if self.image is not None:
+            self.setPixmap(QtGui.QPixmap.fromImage(self.image).scaled(self.size(), Qt.KeepAspectRatio,
+                                                                      Qt.FastTransformation))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_pixmap()
+
+
 class SubplotsCanvas(FigureCanvasQTAgg):
 
     def __init__(self, *args, **kwargs):
@@ -593,6 +616,7 @@ class SelectorToolbar(NavigationToolbar2QT):
     def __init__(self, canvas, parent=None):
         super().__init__(canvas, parent)
         self.main_gui = parent
+        self.cid = None  # click handler waiting for the edit
         # Add a custom button to the toolbar
         self.addSeparator()
         self.start_button = QPushButton("Edit start")
@@ -603,15 +627,20 @@ class SelectorToolbar(NavigationToolbar2QT):
         self.addWidget(self.stop_button)
 
     def start_action(self, event):
-        self.event_type = 'Start'
-        self.cid = self.canvas.mpl_connect('button_press_event', self.on_click)
+        self.wait_for_click('Start')
 
     def stop_action(self):
-        self.event_type = 'Stop'
-        self.cid = self.canvas.mpl_connect('button_press_event', self.on_click)
+        self.wait_for_click('Stop')
+
+    def wait_for_click(self, event_type):
+        self.event_type = event_type
+        if self.cid is None:
+            self.cid = self.canvas.mpl_connect('button_press_event', self.on_click)
 
     def on_click(self, event):
         if event.inaxes:
+            self.canvas.mpl_disconnect(self.cid)
+            self.cid = None
             self.main_gui.edit_sz_callback(self.event_type, event.xdata)
 
 

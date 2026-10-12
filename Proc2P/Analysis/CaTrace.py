@@ -1,8 +1,9 @@
+from pathlib import Path
 import numpy
 import multiprocessing
 from multiprocessing import Process, Queue
 import os
-from scipy import signal
+import json
 import pandas
 import shutil
 from Proc2P.Bruker.SyncTools import Sync
@@ -48,9 +49,9 @@ class CaTrace(object):
         if verbose:
             print(f'Firing called with ch={ch}, tag={tag}')
         self.peakdet = peakdet  # removed peakdet from old Firing class, this doesn't do anything.
-        self.path = path
+        self.path = Path(path)
         self.prefix = prefix
-        self.opPath = os.path.join(self.path, self.prefix + '/')
+        self.opPath = self.path / self.prefix
         self.is_dual = False
         self.log = logger()
         self.log.set_handle(path, prefix)
@@ -68,7 +69,7 @@ class CaTrace(object):
             assert False
         self.ch = ch
         self.tag = tag
-        self.pf = self.opPath + f'{prefix}_trace_{tag}-ch{ch}'  # folder name
+        self.pf = self.opPath / f'{prefix}_trace_{tag}-ch{ch}'  # folder name
         self.sync = Sync(path, prefix)
         self.keys = ['bsl', 'rel', 'ntr', 'trace', 'smtr', ]
         self.verbose = verbose
@@ -82,6 +83,7 @@ class CaTrace(object):
         if verbose:
             print(prefix, 'firing init')
         self.version_info = {}  # should contain only single strings as values
+        self.pull_info = {}  # saved by pull_signals with the raw trace
 
     # def open_trace(self):
     #     self.open_raw(trace=numpy.load(self.pf))
@@ -104,12 +106,16 @@ class CaTrace(object):
         if trace is not None:
             self.trace = trace
         else:
-            file_name = self.opPath + f'{self.prefix}_trace_{self.tag}.npy'
+            file_name = self.opPath / f'{self.prefix}_trace_{self.tag}.npy'
             if os.path.exists(file_name):
                 self.trace = numpy.load(file_name)
             else:
-                lprint(self, 'Missing file: ' + file_name)
+                lprint(self, f'Missing file: {file_name}')
                 return -1
+            info_name = file_name.with_suffix('.json')
+            if os.path.exists(info_name):
+                with open(info_name) as f:
+                    self.pull_info = json.load(f)
         if len(self.trace.shape) == 3:
             # print(self.ch, self.trace.shape)
             if not self.ch < self.trace.shape[2]:
@@ -121,7 +127,7 @@ class CaTrace(object):
             self.trace = self.trace[:, :trunc]
         self.cells, self.frames = self.trace.shape
         if not self.cells:
-            lprint(self, 'Zero cells in roi: ' + file_name)
+            lprint(self, f'Zero cells in roi: {file_name}')
             return -1
         if self.verbose:
             print(self.prefix, 'Traces loaded', str(self.cells))
@@ -167,10 +173,13 @@ class CaTrace(object):
         if self.verbose:
             print('Saving cell ' + str(c))
         for att in self.keys:
-            # print('saving', att, self.__getattribute__(att).shape, data[att].shape)
             tr = data[att]
             if self.invert:
-                tr = numpy.nanmax(tr) - tr
+                # inverted sensor (GEVI): trace becomes Fmax-F, dF/F is computed from the real baseline and sign flipped
+                if att == 'trace':
+                    tr = numpy.nanmax(tr) - tr
+                elif att in ('rel', 'ntr', 'smtr'):
+                    tr = -tr
             self.__getattribute__(att)[c] = tr
 
         self.computed_cells += 1
@@ -185,22 +194,27 @@ class CaTrace(object):
             shutil.rmtree(self.pf)
         os.mkdir(self.pf)
         for key in self.keys:
-            numpy.save(self.pf + '//' + key, self.__getattribute__(key))
+            numpy.save(self.pf / f'{key}.npy', self.__getattribute__(key))
         self.version_info = {'v': '13', 'bsltype': self.bsltype, 'sz_mode': str(self.ignore_saturation),
                              'channel': str(self.ch),
                              'fps': f'{round(self.fps, 1)}',
-                             'bg_corr': str(self.last_bg)}  # should contain only single strings as values
-        numpy.save(self.pf + '//' + 'info', self.version_info)
+                             'bg_corr': str(self.last_bg),
+                             'invert': str(self.invert)}  # should contain only single strings as values
+        # movie that the raw trace was pulled from. Missing if the trace was pulled before this was recorded.
+        for key in ('movie', 'GEVIReg_version'):
+            if key in self.pull_info:
+                self.version_info[key] = str(self.pull_info[key])
+        numpy.save(self.pf / 'info.npy', self.version_info)
         message = f'Tag: {self.tag}, Ch: {self.ch}, sz_mode: {self.ignore_saturation}, baseline: {self.bsltype}'
         lprint(self, self.prefix, self.cells, 'cells saved.', message, logger=self.log)
 
     # these functions are used to save additional time series shaped (c, f) in the traces folder.
     def save_custom(self, key, value):
-        numpy.save(self.pf + '//' + key, value)
+        numpy.save(self.pf / f'{key}.npy', value)
 
     def get_custom(self, key):
         if not hasattr(self, key):
-            fn = self.pf + '//' + key + '.npy'
+            fn = self.pf / f'{key}.npy'
             if os.path.exists(fn):
                 self.__setattr__(key, numpy.load(fn))
             else:
@@ -209,18 +223,18 @@ class CaTrace(object):
 
     def load(self):
         if not os.path.exists(self.pf):
-            self.pf = self.opPath + f'{self.prefix}_trace_{self.tag}'
+            self.pf = self.opPath / f'{self.prefix}_trace_{self.tag}'
         if not os.path.exists(self.pf):
             if self.tag == None:
                 self.tag = ''
             pf_try = [self.tag + '.np', self.tag + '-ch0.np', '1' + '.np', '1' + '-ch0.np', self.tag + 'dual.np',
                       '1-dual.np']
             for x in pf_try:
-                pf = self.opPath + self.prefix + '-' + x
+                pf = self.opPath / f'{self.prefix}-{x}'
                 if os.path.exists(pf):
                     self.pf = pf
                     lprint(self, 'Loading traces from', pf)
-                break
+                    break
         if not os.path.exists(self.pf):
             if self.tag in ('skip', 'off', 'dummy'):
                 lprint(self, 'skipped loading ca')
@@ -228,7 +242,7 @@ class CaTrace(object):
             else:
                 raise FileNotFoundError(f'Make sure the .np folder exists: {self.pf}\nPath is: {os.getcwd()}')
         for key in self.keys:
-            fn = self.pf + '//' + key + '.npy'
+            fn = self.pf / f'{key}.npy'
             if os.path.exists(fn):
                 self.__setattr__(key, numpy.load(fn))
             else:
@@ -242,10 +256,10 @@ class CaTrace(object):
         # keeping the version above for backwards compatibility with 'dual' np folders.
         # if the existing data is dual, we're good. if not, read second single and append.
         if self.channels == 1 and self.is_dual:
-            second_folder = self.opPath + f'{self.prefix}_trace_{self.tag}-ch{1}'  # folder name
+            second_folder = self.opPath / f'{self.prefix}_trace_{self.tag}-ch{1}'  # folder name
             found_second = False
             for key in self.keys:
-                fn = second_folder + '//' + key + '.npy'
+                fn = second_folder / f'{key}.npy'
                 if os.path.exists(fn):
                     found_second = True
                     tr1 = self.__getattribute__(key)
@@ -253,7 +267,7 @@ class CaTrace(object):
                     self.__setattr__(key, numpy.dstack((tr1, tr2)))
             if not found_second:
                 self.is_dual = False
-        vfn = self.pf + '//' + 'info' + '.npy'
+        vfn = self.pf / 'info.npy'
         # load version info text into dict
         if os.path.exists(vfn):
             vtx = str(numpy.load(vfn, allow_pickle=True))
@@ -335,24 +349,6 @@ class Worker(Process):
             else:
                 if bsltype == 'poly':
                     # instead of original sliding window minimum, use a polynom fit for baseline
-                    # iteratively remove negative peaks from the smoothed trace
-                    for _ in range(5):
-                        sneg = []
-                        for chunk in range(trim, frames - trim, trim):
-                            pks = signal.find_peaks_cwt(-smw[chunk:chunk + trim],
-                                                        numpy.array([5, 10, 20, 50, 100]), min_length=10, min_snr=2)
-                            sneg.extend(numpy.array(pks) + chunk)
-                        if len(sneg) > 1:
-                            nsmw = numpy.copy(smw)
-                            for t in sneg:
-                                start, stop = int(max(0, t - (5 * fps))), int(min(frames, t + 5 * fps))
-                                tc1, tc2 = numpy.nanargmax(smw[start:t]) + start, numpy.nanargmax(smw[t:stop]) + t
-                                inds = list(numpy.arange(start, max(tc1, start + 0.5 * self.fps)))
-                                inds.extend(numpy.arange(min(tc2, stop - 0.5 * fps), stop))
-                                nsmw[tc1:tc2] = numpy.nanmean(smw[inds])
-                            smw = nsmw
-                        else:
-                            break
                     # fit polynom (for periods outside movement
                     x = []
                     for t in numpy.arange(trim, frames - trim):
@@ -385,7 +381,7 @@ class Worker(Process):
                     if numpy.any(bsl < 0):
                         lprint(self, f'Baseline flips 0 in cell {c}, running sliding minimum baseline', )
                         bsltype = 'original'
-                elif bsltype in ['original', 'both']:  # both not implemented
+                if bsltype in ['original', 'both']:  # both not implemented
                     # the F0 method described in Jia Nat Prot 2011 paper
                     for t in range(1, frames):
                         ti0, ti1 = max(0, t - t2), min(t, frames)
@@ -426,21 +422,6 @@ if __name__ == '__main__':
     wdir = 'D:/Shares/Data/_Processed/2P/testing/'
     prefix = 'SncgTot4_2023-10-23_movie_000'
     tag = '1'
-    # b = CaTrace(wdir, prefix, verbose=True, ch=0, tag=tag)
-    # c = CaTrace(wdir, prefix, verbose=True, ch=1, tag=tag)
-    # b.open_raw()
-    # c.open_raw()
-    # print(b.pack_data(0)[1][:2], c.pack_data(0)[1][:2])
     a = CaTrace(wdir, prefix, verbose=True, ch='Dual', tag=tag)
     self = a
     a.load()
-    # a.open_raw()
-    # for c in range(a.cells):
-    #     if nworker < ncpu * 0.8:
-    #         Worker(request_queue, result_queue).start()
-    #         nworker += 1
-    #     request_queue.put(a.pack_data(c))
-    # for data in iter(result_queue.get, None):
-    #     finished = a.unpack_data(data)
-    #     if finished:
-    #         break

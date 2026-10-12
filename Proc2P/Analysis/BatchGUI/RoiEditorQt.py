@@ -352,7 +352,7 @@ class GUI_main(QtWidgets.QMainWindow):
             print('0 rois, roi file not saved for', prefix)
             return -1
         fn = prefix + suffix + self.preferred_tag
-        if os.path.exists(opPath + fn + '.npy'):
+        if os.path.exists(opPath / f'{fn}.npy'):
             exs = [0]
             for f in os.listdir(opPath):
                 if prefix in f and suffix in f:
@@ -360,12 +360,12 @@ class GUI_main(QtWidgets.QMainWindow):
                         # keep autodetected rois from breaking numbering
                         roi_id = f[:-4].split('_')[-1]
                         if roi_id.isdigit():
-                            exs.append(int())
+                            exs.append(int(roi_id))
             exi = max(exs) + 1
-            while os.path.exists(opPath + prefix + suffix + str(exi) + '.npy'):
+            while os.path.exists(opPath / f'{prefix}{suffix}{exi}.npy'):
                 exi += 1
             fn = prefix + suffix + str(exi)
-        RoiEditor.save_roi(self.saved_rois, opPath + fn, self.rois.img.image.info['sz'])
+        RoiEditor.save_roi(self.saved_rois, opPath / fn, self.rois.img.image.info['sz'])
         msg = f'{len(self.saved_rois)} saved in {fn}'
         lprint(self, msg, logger=self.log)
         QtWidgets.QMessageBox(QtWidgets.QMessageBox.NoIcon,  # no standard icon → no system chime
@@ -618,10 +618,6 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
         elif event.button() == QtCore.Qt.RightButton:
             self.finishPoly()
 
-    # def move_cursor_to_clicked(self):
-    #     p = [round((self.zoom_point[i] - self.zoom_offset[i]) * self.rescale_factor) for i in (0, 1)]
-    #     QtGui.QCursor.setPos(self.label.mapToGlobal(QtCore.QPoint(*p)))
-    #     #this does not seem to do anything.
 
     def mouseMoveEvent(self, event):
         if self._drawing and (event.buttons() & QtCore.Qt.LeftButton):
@@ -630,11 +626,6 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
             self._points.append(QtCore.QPointF(child_pos))
             self.update()
 
-    # def mouseReleaseEvent(self, event):
-    #     if event.button() == QtCore.Qt.LeftButton and self._drawing:
-    #         global_pos = event.globalPosition().toPoint()
-    #         child_pos = self.label.mapFromGlobal(global_pos)
-    #         self._points.append(QtCore.QPointF(child_pos))
 
     def finishPoly(self):
         if len(self._points) > 3:
@@ -698,7 +689,7 @@ def main():
 
 def test_launcher():
     #
-    wdir = 'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
+    wdir = r'D:\Shares\Data\_Processed/2P\JEDI-IPSP/'
     prefix = 'JEDI-Sncg124_2025-05-06_opto_burst_665'
     # wdir = 'D:\Shares\Data\_Processed/2P\CCK/'
     # prefix = 'Sncg146_2025-07-29_optostim_127'

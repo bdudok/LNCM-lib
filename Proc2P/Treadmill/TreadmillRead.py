@@ -1,6 +1,8 @@
+import contextlib
 import os
 
 import numpy
+from pathlib import Path
 import numpy as np
 import pandas as pd
 from _Dependencies.PyControlv1.code.tools import data_import, session_plot
@@ -18,7 +20,7 @@ class Treadmill:
         :param path: data folder
         :param prefix: session name (ending with timestamp)
         '''
-        self.path = path
+        self.path = Path(path)
         self.pycontrol_version = 0
         self.prefix = prefix
         self.flist = os.listdir(path)
@@ -54,20 +56,26 @@ class Treadmill:
         else:
             self.calib = calib
 
-        self.d = d = self.data_import_function.Session(self.path + self.filename)
+        # pyControl's data import fails with the string dtype that pandas 3 infers by default
+        if int(pd.__version__.split('.')[0]) >= 3:
+            string_dtype_off = pd.option_context('future.infer_string', False)
+        else:
+            string_dtype_off = contextlib.nullcontext()
+        with string_dtype_off:
+            self.d = d = self.data_import_function.Session(self.path / self.filename)
         d.analog = {}
         if self.pycontrol_version == 1:
             for f in self.flist:
                 if self.prefix in f and f.endswith('.pca'):
                     tag = (f.split('_')[-1].split('.')[0])
-                    d.analog[tag] = data_import.load_analog_data(self.path + f)
+                    d.analog[tag] = data_import.load_analog_data(self.path / f)
             # store calibrated position
             self.abspos = d.analog['pos'][:, 1] / self.calib  # cms
             self.pos_tX = d.analog['pos'][:, 0] / 1000  # seconds
         elif self.pycontrol_version == 2:
             # we won't search for multiple analog races, implement later if necessary
-            self.abspos = numpy.load(self.path+self.filename[:-4]+'_pos.data.npy') / self.calib # cms
-            self.pos_tX = numpy.load(self.path+self.filename[:-4]+'_pos.time.npy')  # seconds
+            self.abspos = numpy.load(self.path / f'{self.filename[:-4]}_pos.data.npy') / self.calib # cms
+            self.pos_tX = numpy.load(self.path / f'{self.filename[:-4]}_pos.time.npy')  # seconds
 
             # convert to speed
         spd = np.diff(self.abspos)
@@ -105,7 +113,7 @@ class Treadmill:
                 for _, event in d.variables_df.iterrows():
                     this_lap = event[('values', 'lap_counter')]
                     if not numpy.isnan(this_lap) and this_lap > curr_lap:
-                        e_time = float(event['time'][0])
+                        e_time = float(event['time'].iloc[0])
                         e_idx = np.searchsorted(self.pos_tX, e_time)
                         if e_idx < len(self.abspos): #summary print at session end should be ignored
                             self.lapends.append(e_idx)
@@ -138,13 +146,13 @@ class Treadmill:
 
     def export_plot(self):
         if self.pycontrol_version == 1:
-            return self.session_export_function.session_plot(self.path + self.filename, fig_no=1, return_fig=True)
+            return self.session_export_function.session_plot(self.path / self.filename, fig_no=1, return_fig=True)
         else:
             return None
 
 
 if __name__ == '__main__':
-    dpath = 'D:\Shares\Data\_RawData\Bruker/testing/treadmill update test/JEDI-PV18_2024-03-13_Fast_043-000/'
+    dpath = r'D:\Shares\Data\_RawData\Bruker/testing/treadmill update test/JEDI-PV18_2024-03-13_Fast_043-000/'
     prefix = 'JEDI-PV18_2024-03-13_Fast_043'
     tm = Treadmill(dpath, prefix)
 

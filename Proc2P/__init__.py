@@ -1,10 +1,13 @@
+import os
+import sys
 import matplotlib
 mpl_backend = 'TkAgg'
-if not matplotlib.get_backend() == mpl_backend:
+# TkAgg can't load without a display (e.g. in a container or CI); keep matplotlib's default there
+has_display = sys.platform in ('win32', 'darwin') or bool(os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'))
+if has_display and not matplotlib.get_backend() == mpl_backend:
     matplotlib.use(mpl_backend)
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
-import os
 import numpy
 np = numpy
 from matplotlib import pyplot as plt
@@ -13,7 +16,6 @@ import datetime
 pd = pandas
 from scipy import stats
 
-# from .Legacy.MyColorLib import get_color
 
 from BaserowAPI.BaserowRequests import GetSessions
 from Proc2P.utils import read_excel, lprint, norm, ewma, completed_list, ts

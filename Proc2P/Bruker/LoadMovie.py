@@ -12,11 +12,14 @@ def get_raw_movies(info):
     '''
     dpath = info['dpath']
     prefix = info.prefix
-    filelist = [fn for fn in os.listdir(dpath) if ((prefix in fn) and ('.ome.tif' in fn))]
+    # the raw data folder may have been moved to a backup location
+    filelist = [fn for fn in os.listdir(dpath) if ((prefix in fn) and ('.ome.tif' in fn))] if os.path.isdir(dpath) else []
     if not len(filelist):
         # look in alternative paths
         path1 = str(dpath)
         key = '_RawData'
+        if key not in path1:
+            raise FileNotFoundError(f'No raw movie in {dpath}. Alternative paths are only searched for folders in {key}')
         rpath = path1[path1.find(key) + len(key):]
         parent_folders = path_to_list(rpath)
         # check in each alt path and stop if found em
@@ -114,19 +117,6 @@ if __name__ == '__main__':
 
     lprint(None, 'started reading')
     f = LoadMovie(fn, preload=False)
-    # # data = f.f.asarray() # slow
-    # # data = f.f.asarray(out="memmap") # slow
-    # # data = f.f.series[0].asarray() # slow
-    #
-    # mmap = f.f.pages
-    # n_pages = len(mmap)
-    # frameshape = mmap[0].shape
-    # data = numpy.empty((n_pages, *frameshape), dtype=mmap[0].dtype)
-    # for i in range(n_pages):
-    #     data[i] = mmap[i].asarray()
-    # data = data[..., ::-1, ::-2]
-    #
-    # lprint(None, data.shape)
     im = f.preview()
     lprint(None, f.data.shape)
 

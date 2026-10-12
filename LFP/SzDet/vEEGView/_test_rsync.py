@@ -22,12 +22,11 @@ from LFP.SpikeDet import SpikesPower
 from LFP.SzDet import InstRate
 
 #Readers
-from Proc2P.Legacy.Loaders import load_ephys
 from Proc2P.Bruker import LoadEphys
 from LFP.Pinnacle import ReadEDF
 from Proc2P.Treadmill import rsync
 
-path = 'D:\Shares\Data\_Processed\EEG/test/'
+path = r'D:\Shares\Data\_Processed\EEG/test/'
 eeg_fn = 'VKPV1_s2_0033_2024-01-11_12_28_30_TS_2024-01-11_12_28_30_export.edf'
 vid_fn = 'VKPV1_s2-2024-01-11T12-28-29'
 

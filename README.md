@@ -1,9 +1,7 @@
 # LNCM-lib
 Resources for data analysis in LNCM / Dudok lab
-Recently updated to leave Python 3.6 behind - now all code works in the same 3.11 env. Reach out if you need help with the transition.
 
-
-# The following libraries are included:
+# The following resources are included:
 
 ## Ephys
 ### LFP.SpikeDet
@@ -16,8 +14,6 @@ read EDF files exported by the Pinnacle recorder
 ## 2-photon
 ### Proc2P.Treadmill
 load treadmill data from PyControl file
-### Proc2P.Legacy
-all scanbox reader classes made during Soltesz lab times
 ### Proc2p.Bruker
 classes for reading BCM Dudok lab raw data recorded on the Bruker setup
 ### Proc2p.Analysis
@@ -37,6 +33,14 @@ SzViewGUI - review EEG with synced video, manually curate and edit automatically
 ## 2-photon
 ### Proc2p.Analysis.BatchGUI
 GUI for processing and inspecting ImagingSession 
+
+# Conventions for paths
+- Library classes store paths as `pathlib.Path` and accept `str` or `Path` as input.
+- Join folders with `/` on `Path` objects. Don't use string `+`, hard-coded separators or trailing slashes.
+- Each class builds its own file names in one method (e.g. `ImagingSession.get_file_with_suffix`).
+- Library code does not call `os.chdir`.
+- `touch_path` returns a string with a trailing slash, for use in analysis scripts.
+- GUIs may keep their own folder strings. `_Dependencies` is not converted.
 
 # See also from the lab:
 

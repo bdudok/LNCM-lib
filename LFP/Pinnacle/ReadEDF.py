@@ -74,6 +74,6 @@ class EDF:
             self.raw_trace = None
 
 if __name__ == '__main__':
-    path = 'D:\Shares\Data\_RawData\EEG\Kainate\VKPV6/2024-03-25/'
+    path = r'D:\Shares\Data\_RawData\EEG\Kainate\VKPV6/2024-03-25/'
     fn = 'VKPV6_2024-03-25_2024-03-25_12_31_50_TS_2024-03-25_14_31_50_export.edf'
     a = EDF(path, fn)

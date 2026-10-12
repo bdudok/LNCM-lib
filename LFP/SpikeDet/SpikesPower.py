@@ -1,3 +1,4 @@
+from pathlib import Path
 import pandas
 from scipy import signal
 import numpy
@@ -100,17 +101,17 @@ class Detect:
     def spiketimes_to_excel(self, path, prefix, ch=None, savetag=None):
         op = pandas.DataFrame({'SpikeTimes(s)': self.spiketimes, 'SpikeApmlitudes': self.spikeamp,
                                'SpikePower': self.spikepower})
-        of = path+prefix
+        of = prefix
         if savetag is not None:
             of += '_' + savetag
         if ch is None:
-            f = of + '_spiketimes.xlsx'
+            f = Path(path) / f'{of}_spiketimes.xlsx'
         else:
-            f = of + f'_Ch{ch}_spiketimes.xlsx'
+            f = Path(path) / f'{of}_Ch{ch}_spiketimes.xlsx'
         op.to_excel(f)
 
 if __name__ == '__main__':
-    processed_path = 'D:\Shares\Data\_Processed/2P\PVTot\LFP/'
+    processed_path = r'D:\Shares\Data\_Processed/2P\PVTot\LFP/'
     prefix = 'PVTot5_2023-09-15_LFP_025'
     from Proc2P.Bruker import LoadEphys
     fs = 2000

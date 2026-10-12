@@ -10,7 +10,9 @@ import numpy
 import json
 import sys
 import datetime
+import typing
 from dataclasses import dataclass, fields, asdict
+from enum import Enum
 
 from Proc2P.Analysis.BatchGUI.Config import *
 from Proc2P.Analysis.AssetFinder import AssetFinder, get_processed_tags
@@ -321,6 +323,10 @@ class GUI_main(QtWidgets.QMainWindow):
             elif ftype is bool:
                 w = QtWidgets.QCheckBox()
                 w.setChecked(fvalue)
+            elif isinstance(ftype, type) and issubclass(ftype, Enum):
+                w = QtWidgets.QComboBox()
+                w.addItems([x.name for x in ftype])
+                w.setCurrentText(fvalue.name)
             else:
                 w = QtWidgets.QLineEdit()
                 w.setText(fvalue)
@@ -338,6 +344,10 @@ class GUI_main(QtWidgets.QMainWindow):
                 setattr(cfg, fname, ftype(w.value()))
             elif ftype == bool:
                 setattr(cfg, fname, w.isChecked())
+            elif isinstance(ftype, type) and issubclass(ftype, Enum):
+                setattr(cfg, fname, ftype[w.currentText()])
+            elif w.text() == '' and type(None) in typing.get_args(ftype):
+                setattr(cfg, fname, None)  # an empty field of an optional setting means None
             else:
                 setattr(cfg, fname, w.text())
 
@@ -570,16 +580,6 @@ class GUI_main(QtWidgets.QMainWindow):
         elif self.active_tab == Tabs.ROI:
             self.update_editor_callback()
 
-    def save_gui_state(self):
-        for fieldname in self.saved_fields:
-            if fieldname in self.selector_fields:
-                v = getattr(self, fieldname).currentText()  # dropdowns
-            else:
-                v = getattr(self, fieldname).text()  # simple entry
-            self.settings_dict[fieldname] = v
-        with open(self.settings_filename, 'w') as f:
-            json.dump(self.settings_dict, f)
-
     def select_path_callback(self):
         start_dir = self.wdir
         if not os.path.exists(str(start_dir)):
@@ -603,16 +603,6 @@ class GUI_main(QtWidgets.QMainWindow):
         elif self.active_tab == Tabs.Preview:
             self.update_preview_session()
 
-    # def setup_live_fig(self):
-    #     ca = self.FigCanvasRT.ax
-    #     ca.spines['right'].set_visible(False)
-    #     ca.spines['top'].set_visible(False)
-    #     duration_seconds = self.config.LiveLineDuration
-    #     data_len = int(duration_seconds * self.config.fs / self.config.LiveLineDecimate)
-    #     xdata = numpy.linspace(-duration_seconds, 0, data_len)
-    #     ydata = numpy.zeros(data_len)
-    #     self.live_line = ca.plot(xdata, ydata, color='black')[0]
-    #     ca.set_ylim(-self.config.PlotYScale, self.config.PlotYScale)
 
     def save_gui_state(self):
         for fieldname in self.saved_fields:

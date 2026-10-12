@@ -10,6 +10,7 @@ from sklearn import cluster
 from Proc2P.Bruker.LoadEphys import Ephys
 from Proc2P.utils import lprint, logger
 from dataclasses import dataclass
+from pathlib import Path
 
 @dataclass
 class RippleConfig:
@@ -69,7 +70,7 @@ class Ripples(object):
         self.channels = None
         self.ephys_channel = ephys_channel
         if prefix is not None:
-            self.path = os.path.join(procpath, prefix, '_ripples//')
+            self.path = Path(procpath) / prefix / '_ripples'
             self.read_phys()
             exist = os.path.exists(self.path)
             if not exist:
@@ -106,18 +107,18 @@ class Ripples(object):
 
     def save(self):
         for attr in self.attrs:
-            self.__getattribute__(attr).tofile(self.path + attr + '.np')
+            self.__getattribute__(attr).tofile(self.path / f'{attr}.np')
 
     def load(self):
         for attr in self.attrs:
-            fn = self.path + attr + '.np'
+            fn = self.path / f'{attr}.np'
             if os.path.exists(fn):
                 self.__setattr__(attr, numpy.fromfile(fn))
         for attr in self.load_attrs:
             if attr not in self.attrs:
-                fn = self.path + attr + '.np'
+                fn = self.path / f'{attr}.np'
                 if os.path.exists(fn):
-                    self.__setattr__(attr, numpy.fromfile(self.path + attr + '.np'))
+                    self.__setattr__(attr, numpy.fromfile(fn))
         if hasattr(self, 'ftr'):
             self.std = self.ftr.std()
 
@@ -147,10 +148,6 @@ class Ripples(object):
         self.frame_array = self.ephys.frames
         self.n = len(self.trace)
         self.ephys_all_channels = self.ephys.edat[1:]
-        # # if more channels are available, load it:
-        # mpn = self.prefix + '.morephys'
-        # if os.path.exists(mpn):
-        #     self.channels = numpy.fromfile(mpn, dtype='float32')
 
     def gen_filt(self):
         highcut = self.highcut
@@ -600,7 +597,7 @@ class Ripples(object):
             return -1
         if tag not in (None, ''):
             self.tag = tag
-        if (self.tag is not None) and os.path.exists(self.path + self.tag + '.ripples') and not overwrite:
+        if (self.tag is not None) and os.path.exists(self.path / f'{self.tag}.ripples') and not overwrite:
             print(f'Ripple tag {self.tag} already exists, creating new timestamp')
             self.tag = None
         if self.tag is None:
@@ -618,7 +615,7 @@ class Ripples(object):
             ea = numpy.empty((len(events), 2))
             for i, p in enumerate(events):
                 ea[i, :] = p
-        ea.tofile(self.path + ts)
+        ea.tofile(self.path / ts)
         lprint(self, f'{ts} saved with {self.count_included()} events. Tr1: {self.tr1}, Tr2:{self.tr2}',
                logger=self.log)
 
@@ -632,16 +629,16 @@ class Ripples(object):
             for i, p in enumerate(events):
                 ea[i, :] = p
         pandas.DataFrame(ea,
-                         columns=['RippleStart', 'RippleStop']).to_excel(self.path + self.prefix + '_ripple_times.xlsx')
+                         columns=['RippleStart', 'RippleStop']).to_excel(self.path / f'{self.prefix}_ripple_times.xlsx')
         print(self.prefix, 'ripples exported.')
 
     def load_ripples(self, fn=None):
         if fn is not None and not fn.endswith('ripples'):
             fn += '.ripples'
         if fn is not None and self.strict_tag:
-            if not os.path.exists(self.path + fn):
+            if not os.path.exists(self.path / fn):
                 raise FileNotFoundError(f'{fn} not available')
-        if fn is None or not os.path.exists(self.path + fn):
+        if fn is None or not os.path.exists(self.path / fn):
             flist = []
             for f in os.listdir(self.path):
                 if f.endswith('.ripples'):
@@ -654,7 +651,7 @@ class Ripples(object):
                 fn = flist[-1]
         print('Loading ripples', fn)
         self.ripples_fn = fn
-        events = numpy.fromfile(self.path + fn)
+        events = numpy.fromfile(self.path / fn)
         events = events.reshape((int(len(events) / 2), 2))
         self.events = []
         if hasattr(self, 'envelope'):
@@ -690,7 +687,7 @@ class Ripples(object):
         mat = {'__header__': header, '__version__': version, '__globals__': globals, 'fs': self.fs, 'gn': gn, 'of': gn,
                's': s, 'total_ns': self.n}
 
-        scipy.io.savemat(self.path + self.prefix + '_ephysexport.mat', mat)
+        scipy.io.savemat(self.path / f'{self.prefix}_ephysexport.mat', mat)
 
 
 def single_ripple_onsets(events, gap=4000):
@@ -699,46 +696,19 @@ def single_ripple_onsets(events, gap=4000):
     event_t = numpy.array([e.p[0] for e in events])
     clustering = cluster.DBSCAN(eps=gap, min_samples=2).fit(event_t.reshape(-1, 1))
     single_ripple_indices = numpy.where(clustering.labels_ < 0)[0]
-    event_number = len(single_ripple_indices) + clustering.labels_.max() + 1
-    events = numpy.empty(event_number, dtype=numpy.int64)
-    ri, rci = 0, 0
-    for ri, rj in enumerate(single_ripple_indices):
-        events[ri] = event_t[rj]
+    n_single = len(single_ripple_indices)
+    events = numpy.empty(n_single + clustering.labels_.max() + 1, dtype=numpy.int64)
+    events[:n_single] = event_t[single_ripple_indices]
+    # DBSCAN labels single events -1 and clusters 0, 1, ...; each cluster is replaced by its first member
     for rci in range(clustering.labels_.max() + 1):
-        # get list of ripples in cluster
         current_cluster = numpy.where(clustering.labels_ == rci)[0]
-        rj = current_cluster[0]
-        events[ri + rci] = event_t[rj]
-    return events[:ri + rci + 1]
-
-
-def export_SCA(path, prefix, channels=(1, 1)):
-    savepath = path + '_LFP/'
-    if not os.path.exists(savepath):
-        os.mkdir(savepath)
-    suffix = '_SpikeAnalyzerExport.mat'
-    # if os.path.exists(ofn):
-    #     print(f'Skipping {prefix}')
-    # else:
-    for chi in range(channels[1]):
-        r = Ripples(prefix, ephys_channels=(chi + 1, channels[1]), load_minimal=True)
-
-        header = str.encode(f'Ephys trace from {prefix} ch {chi}')
-        version = '1.0'
-        globals = ['sbuf', 'fs', 'samples']
-        s = r.trace.astype('<f4')
-
-        mat = {'__header__': header, '__version__': version, '__globals__': globals, 'sbuf': s, 'fs': r.fs,
-               'samples': len(s)}
-        ofn = savepath + prefix + f'_ch{chi}' + suffix
-
-        savemat(ofn, mat)
-        print(f'Exported: {prefix}')
+        events[n_single + rci] = event_t[current_cluster[0]]
+    return events
 
 
 #
 if __name__ == '__main__':
-    procpath = 'D:\Shares\Data\_Processed/2P\JEDI/'
+    procpath = r'D:\Shares\Data\_Processed/2P\JEDI/'
     prefix = 'JEDI-PV16_2024-03-05_Movie_032'
     r = Ripples(procpath, prefix)
     r.rec_enum_ripples()

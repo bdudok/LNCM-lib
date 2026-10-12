@@ -95,7 +95,7 @@ def gapless(trace, gap=5, threshold=0, expand=None):
     if trace is None:
         return None
     elif not numpy.count_nonzero(trace):
-        return numpy.zeros(len(trace))
+        return numpy.zeros(len(trace), dtype='bool')
     gapless = trace > threshold
     ready = False
     gap = int(gap)
@@ -187,16 +187,20 @@ def read_excel(*args, keep_index=False, **kwargs):
     :return: DataFrame
     '''
     fn = args[0]
-    keep_index = False
-    if fn.endswith('csv'):
+    if str(fn).endswith('csv'):
         return pandas.read_csv(*args, **kwargs)
     df = pandas.read_excel(*args, **kwargs, engine='openpyxl', index_col=0)
     # index_col=0 makes the first column index. It's not accessible by .loc or by name.
     if keep_index:
         return df
-    # if the input file was already saved by pandas, it has an unnamed index column. We don't want to keep that.
-    drop_index = df.index.name == "Unnamed: 0"
-    # reset_index will change the index column into a regular (named) column (unless it was unnamed, then drops it).
+    # if the input file was saved by pandas, its first column is the unnamed index. The default index (row numbers
+    # 0..n-1) is dropped; other unnamed indexes (e.g. labels) are kept as a column named 'index'.
+    # The unnamed index is read with name None or 'Unnamed: 0', depending on the pandas version.
+    unnamed = df.index.name is None or str(df.index.name).startswith('Unnamed')
+    drop_index = unnamed and pandas.api.types.is_integer_dtype(df.index) and (df.index == range(len(df))).all()
+    if unnamed:
+        df.index.name = 'index'
+    # reset_index will change the index column into a regular (named) column (unless dropped).
     return df.reset_index(drop=drop_index)
 
 
@@ -218,6 +222,7 @@ def p_lookup(p):
 
 
 def path_to_list(path):
+    path = str(path)
     parent_folders = []
     while path[-1] in ('//', '/', '\\'):
         path = path[:-1]

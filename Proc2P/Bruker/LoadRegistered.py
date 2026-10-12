@@ -1,5 +1,6 @@
 import numpy
 import os
+from pathlib import Path
 from envs import CONFIG
 from Proc2P.utils import path_to_list
 from enum import Enum
@@ -9,6 +10,33 @@ class Source(Enum):
     S2P = 0
     GEVIReg = 1
     Raw = 2
+
+
+class GEVIRegStatus(Enum):
+    '''Whether a trace was pulled from a GEVIReg movie, and from which version'''
+    FIXED = 'fixed'  # GEVIReg movie made by version GEVIREG_FIXED_VERSION or later
+    OLD = 'old'  # GEVIReg movie made before the axis order fix (2026-10-09)
+    NOT_GEVIREG = 'not GEVIReg'  # pulled from another movie
+    UNKNOWN = 'unknown'  # no pull record, the session has a GEVIReg movie
+
+
+GEVIREG_FIXED_VERSION = 1  # first GEVIReg.Register.VERSION with the axis order fix (2026-10-09)
+
+
+def gevireg_version(procpath, prefix):
+    '''
+    Version of register() that made the session's GEVIReg output, from the regconfig json. 0 if the run was before
+    versions were saved (before the axis order fix), or not finished (the regconfig is saved last).
+    None if there is no GEVIReg output.
+    '''
+    folder = Path(procpath) / prefix / 'GEVIReg'
+    if not folder.exists():
+        return None
+    fn = folder / f'{prefix}_regconfig.json'
+    if not fn.exists():
+        return 0
+    with open(fn) as f:
+        return json.load(f).get('version', 0)
 
 
 class LoadRegistered():
@@ -23,17 +51,17 @@ class LoadRegistered():
         Open a registered 2P movie (saved by Suite2P or by GEVIReg)
         :param source: 'S2P' or 'GEVIReg'
         '''
-        self.path = os.path.join(procpath, prefix)
+        self.path = Path(procpath) / prefix
         self.prefix = prefix
         self.source = source
         if source == Source.S2P:
-            lp = os.path.join(self.path, 'suite2p/plane0/ops_compat.json')
+            lp = self.path / 'suite2p' / 'plane0' / 'ops_compat.json'
             if os.path.exists(lp):
                 with open(lp, "r") as f:
                     ops = json.load(f)
                 self.n_frames = ops['n_frames']
             else:
-                lp = os.path.join(self.path, 'suite2p/plane0/ops.npy')
+                lp = self.path / 'suite2p' / 'plane0' / 'ops.npy'
                 ops = numpy.load(lp, allow_pickle=True).item()
                 self.n_frames = ops['frames_per_folder'][0]
             self.Ly = ops['Ly']
@@ -46,6 +74,7 @@ class LoadRegistered():
         self.load()
 
     def find_files_in_folder(self, path):
+        path = Path(path)
         # find available files
         tags = '', '_Ch1', '_Ch2'
         keys = (None, 'Ch1', 'Ch2')
@@ -53,9 +82,9 @@ class LoadRegistered():
         self.channel_keys = []
         for ti, (tag, key) in enumerate(zip(tags, keys)):
             if self.source == Source.S2P:
-                bp = os.path.join(path, self.prefix + f'_registered{tag}.bin')
+                bp = path / f'{self.prefix}_registered{tag}.bin'
             elif self.source == Source.GEVIReg:
-                bp = os.path.join(path, 'GEVIReg', self.prefix + f'_registered{tag}.npy')
+                bp = path / 'GEVIReg' / f'{self.prefix}_registered{tag}.npy'
             if os.path.exists(bp):
                 self.input_files.append(bp)
                 self.channel_keys.append(key)
@@ -69,11 +98,14 @@ class LoadRegistered():
         #get last subfolders
         path1 = str(self.path)
         key = '_Processed'
+        if key not in path1:
+            print(f'Alternative paths are only searched for folders in {key}, not for {path1}')
+            return
         path = path1[path1.find(key)+len(key):]
         parent_folders = path_to_list(path)
         #check in each alt path and stop if found em
         for alt_path in CONFIG.alt_processed_paths:
-            path2 = os.path.join(os.path.realpath(alt_path), *parent_folders)
+            path2 = Path(os.path.realpath(alt_path)).joinpath(*parent_folders)
             self.find_files_in_folder(path2)
             if len(self.input_files):
                 print(f'Image data loaded from {path2}')
@@ -98,7 +130,7 @@ class LoadRegistered():
 
     def get_channel(self, ch=None):
         '''
-        :param ch 1: returns second channel. 'Green': Ch2; 'Red: Ch1. Any other value returns first channel
+        :param ch 1: returns second channel. 'Green': Ch2; 'Red': Ch1. Any other value returns first channel
         :return: memory mapped data corresponding to the selected channel
         '''
         ret_ch = 0
@@ -124,9 +156,9 @@ class LoadRegistered():
             return self.data2
 
 def check_compatible_ops(procpath, prefix):
-    path = os.path.join(procpath, prefix)
-    in_file = os.path.join(path, 'suite2p/plane0/ops.npy')
-    out_file = os.path.join(path, 'suite2p/plane0/ops_compat.json')
+    ops_folder = Path(procpath) / prefix / 'suite2p' / 'plane0'
+    in_file = ops_folder / 'ops.npy'
+    out_file = ops_folder / 'ops_compat.json'
     if os.path.exists(in_file) and not os.path.exists(out_file):
         ops = numpy.load(in_file, allow_pickle=True).item()
         op = {

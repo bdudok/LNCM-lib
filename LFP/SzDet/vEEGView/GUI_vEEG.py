@@ -24,10 +24,10 @@ from LFP.SpikeDet import SpikesPower
 from LFP.SzDet import InstRate
 
 # Readers
-from Proc2P.Legacy.Loaders import load_ephys
 from Proc2P.Bruker import LoadEphys
 from LFP.Pinnacle import ReadEDF
 from Proc2P.Treadmill import rsync
+from Video.LoadVEEG import VEEGVideo
 
 
 class GUI_main(QtWidgets.QMainWindow):
@@ -46,7 +46,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.savepath = savepath
         self.input_prefix = prefix_list
-        self.setup = setupID  # 'LNCM' or "Soltesz'
+        self.setup = setupID  # 'LNCM' or 'Pinnacle'
         # self.settings = QtCore.QSettings("pyqt_settings.ini", QtCore.QSettings.IniFormat)
         # self.settings.value("LastFile")
 
@@ -106,10 +106,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.param['SzDet.Framesize'] = 50
         self.param['fs'] = 2000
         self.param['PlotDur'] = 10
-        if self.setup == 'Soltesz':
-            self.param['fs'] = 10000
-            self.param['SzDet.Framesize'] = 64
-        elif self.setup == 'LNCM':
+        if self.setup == 'LNCM':
             self.param['SzDet.Framesize'] = 50
             self.param['fs'] = 5000
         if self.setup == 'Pinnacle':
@@ -260,13 +257,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         flist = os.listdir(self.wdir)
         # get prefix list
-        if self.setup == 'Soltesz':
-            suffix = '.ephys'
-            if self.input_prefix is None:
-                prefix_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
-            else:
-                prefix_list = [prefix for prefix in self.input_prefix if prefix + suffix in flist]
-        elif self.setup == 'LNCM':
+        if self.setup == 'LNCM':
             suffix = '_ephys.npy'
             self.dirpaths = {}
             prefix_list = []
@@ -280,15 +271,15 @@ class GUI_main(QtWidgets.QMainWindow):
                             prefix_list.append(fn)
             if self.input_prefix is not None:
                 prefix_list = [prefix for prefix in self.input_prefix if prefix in self.dirpaths]
+            video_list = []
         elif self.setup == 'Pinnacle':
             suffix = '.edf'
             prefix_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
             if self.input_prefix is not None:
                 prefix_list = [x for x in prefix_list if x in self.input_prefix]
-            suffix = '.avi'
-            video_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
+            # .avi: old EEG-Cam recordings with .npy sync; .mkv: vEEG recorder with _frames.csv and _ttl.csv
+            video_list = [fn[:-4] for fn in flist if fn.endswith('.avi') or fn.endswith('.mkv')]
         # set list widget
-        print(video_list)
         self.prefix_list.clear()
         self.prefix_list.addItems(prefix_list)
         self.video_list.clear()
@@ -296,7 +287,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         # check if output exist
         flist = os.listdir(self.savepath)
-        if self.setup in ['Soltesz', 'Pinnacle']:
+        if self.setup == 'Pinnacle':
             for pi, prefix in enumerate(prefix_list):
                 if prefix + self.suffix + '.json' in flist:
                     self.mark_complete(pi, color='#fcaf38')
@@ -306,6 +297,8 @@ class GUI_main(QtWidgets.QMainWindow):
                     self.mark_complete(pi, color='#fcaf38')
 
     def align_callback(self):
+        if os.path.exists(self.wdir + self.active_video + '_ttl.csv'):
+            return self.align_veeg()
         #load video npy and perform align
         vttl = numpy.load(self.wdir + self.active_video + '.npy')[:, -1]
         self.refresh_data()
@@ -346,10 +339,43 @@ class GUI_main(QtWidgets.QMainWindow):
         self.FigCanvas0.draw()
         plt.tight_layout()
 
+    def align_veeg(self):
+        # recordings of the vEEG recorder: frame times from the camera clock, aligned with rsync
+        self.refresh_data()
+        ttl = self.edf.get_TTL()
+        video = VEEGVideo(self.wdir + self.active_video)
+        try:
+            frametimes = video.align(ttl)
+        except rsync.RsyncError:
+            frametimes = None
+        eegdur = len(self.edf.trace) / self.edf.fs
+        xunit = 60
+        ca = self.FigCanvas0.ax
+        ca.cla()
+        ca.plot((0, eegdur / xunit), (1, 1), color='black')
+        ca.scatter((0, eegdur / xunit), (1, 1), marker='|', color='black')
+        if frametimes is not None:
+            self.alignment = video.alignment
+            ca.scatter(ttl / xunit, numpy.ones(len(ttl)) * 0.5, marker='|', c=numpy.isnan(self.alignment.cor_times_B))
+            ca.plot((frametimes[0] / xunit, frametimes[-1] / xunit), (1, 1), color='green', linewidth=2)
+            self.v_fps = video.fps
+            self.v_frametimes = frametimes
+            self.load_movie(fn=self.wdir + self.active_video)
+            self.new_plot = True
+            self.update_plot1()
+        else:
+            self.alignment = None
+            ca.plot((0, video.frame_times[-1] / xunit), (0, 0), color='red')
+        ca.set_ylim(-0.1, 1.1)
+        ca.set_xlabel('Minutes')
+        self.FigCanvas0.draw()
+        plt.tight_layout()
+
     def load_movie(self, fn):
         if os.path.exists(fn+'.avi'):
             pass #todo load with cv2 reader
         suffix = '_motion.npy'
+        self.motion_energy = None
         if os.path.exists(fn+ suffix):
             self.motion_energy = numpy.load(fn+suffix)
 
@@ -387,14 +413,9 @@ class GUI_main(QtWidgets.QMainWindow):
         #Todo add emg
 
         #Motion
-        if self.alignment is not None:
+        if self.alignment is not None and self.motion_energy is not None:
             ax[1].plot(self.v_frametimes[:len(self.motion_energy)], self.motion_energy, color='orange', zorder=1, linewidth=1)
 
-
-        # ax[2].plot(X, sz_burden, color='blue', linewidth=1)
-        # for sz in sz_times_raw:
-        #     for ca in (0, 2):
-        #         ax[ca].axvspan(sz[0], sz[1], color='red', alpha=0.4, zorder=0)
 
         if not self.new_plot:
             for ca, xlim, ylim in zip(ax, xlims, ylims):
@@ -413,9 +434,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def save_output_callback(self):
         # save settings
-        if self.setup == 'Soltesz':
-            output_fn = self.savepath + self.active_prefix + self.suffix
-        elif self.setup == 'Pinnacle':
+        if self.setup == 'Pinnacle':
             output_fn = self.savepath + self.active_prefix + f'_Ch{self.get_field("Channel")}' + self.suffix
         elif self.setup == 'LNCM':
             output_fn = os.path.join(self.savepath, self.active_prefix, self.active_prefix + self.suffix)
@@ -434,9 +453,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def refresh_data(self):
         print(self.active_prefix)
-        if self.setup == 'Soltesz':
-            r = load_ephys(self.active_prefix)
-        elif self.setup == 'LNCM':
+        if self.setup == 'LNCM':
             r = LoadEphys.Ephys(self.savepath, self.active_prefix)
         elif self.setup == 'Pinnacle':
             r = ReadEDF.EDF(self.savepath, self.active_prefix, rejection_ops=self.param)
@@ -467,5 +484,5 @@ def launch_GUI(*args, **kwargs):
 
 
 if __name__ == '__main__':
-    path = 'D:\Shares\Data\_Processed\EEG\Tottering/'
+    path = r'D:\Shares\Data\_Processed\EEG\Tottering/'
     launch_GUI(path)
