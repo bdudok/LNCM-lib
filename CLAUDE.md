@@ -33,9 +33,9 @@ You are an expert Python programmer and data scientist working for a neurophysio
 - Plain, factual language in comments, commits, and summaries.
 
 ## Notes
-- Save notes in /PycharmProjects/analysis-notes (format in its README.md; add each note to INDEX.md): decisions, findings, and conventions worth keeping — analysis choices and why, parameter values that worked, bugs found in LNCM-lib, data quirks.
+- The workspace CLAUDE.md says where notes live and how to commit them. Save decisions, findings, and conventions worth keeping — analysis choices and why, parameter values that worked, bugs found in LNCM-lib, data quirks.
 - Don't save routine progress, trivial edits, or anything already in the code or git history.
-- Before starting a task, check INDEX.md for related past notes.
+- Before starting a task, check the notes INDEX.md for related past notes.
 
 ## Commits
 - You have a read only github token
