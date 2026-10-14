@@ -14,7 +14,7 @@ def pull_motion_energy(vid_fn, output_fn, crop=None, keep_map=False, save_previe
     Computes the motion enerhy (optical flow) in each frame
     Args:
         vid_fn: handle (full path, filename and extension) of the avi file
-        output_fn: handle (.npy) of the output files, e.g. session.face_path / '_motion_energy.npy'
+        output_fn: handle (.npy) of the output files, e.g. session.face_path / '_face_motion.npy'
         crop: [x0, x1, y0, y1] of an area, relative to the raw movie.
         keep_map: if True, saves the full map, else just the average of each frame.
          a hash of the crop will be added to the name
@@ -114,7 +114,7 @@ def recrop_motion_map(output_fn, recrop, orig_crop, crop_tag):
     '''
     measures motion energy in a cropped region of the map
     Args:
-        output_fn: handle (.npy) of the output files, e.g. session.face_path / '_motion_energy.npy'
+        output_fn: handle (.npy) of the output files, e.g. session.face_path / '_face_motion.npy'
         orig_crop: [x0, x1, y0, y1] used to export the original motion map from which the peaks are
     saves to file
     '''
@@ -133,7 +133,7 @@ def peak_averaged_motion_map(output_fn, peaks, orig_crop=None, time_constant=30)
     '''
     Displays the movement map average on included peaks
     Args:
-        output_fn: handle (.npy) of the output files, e.g. session.face_path / '_motion_energy.npy'
+        output_fn: handle (.npy) of the output files, e.g. session.face_path / '_face_motion.npy'
         orig_crop: [x0, x1, y0, y1] used to export the original motion map from which the peaks are
     Returns: the image
     '''

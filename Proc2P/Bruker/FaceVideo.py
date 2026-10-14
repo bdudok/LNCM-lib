@@ -181,8 +181,9 @@ class CropVideo:
         print(self.savepath, 'eye trace saved')
 
     def compute_motion_map(self):
-        '''uses Video.PullMotion'''
-        output_fn = self.savepath / '_motion_energy.npy'
+        '''uses Video.PullMotion. Output files are named _face_motion*, so traces and maps in _motion_energy* files,
+        made before the crop axis fix in PullMotion, are not used.'''
+        output_fn = self.savepath / '_face_motion.npy'
         if os.path.exists(output_fn):
             return numpy.load(output_fn)
         crop = self.load_motion_crop()
