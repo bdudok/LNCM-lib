@@ -329,11 +329,12 @@ class GUI_main(QtWidgets.QMainWindow):
         self.show_video_time(t)
 
     def on_draw(self, event):
-        # the figure was redrawn: store it without the marker, then draw the marker on top
-        if self.video_t is None:
-            return
+        # the figure was redrawn: store it without the marker, then draw the marker on top. Store it on every draw,
+        # also before the video time is set (select_sz draws first), so move_marker never restores an older plot
         ax = self.FigCanvas1.axd['top']
         self.marker_background = self.FigCanvas1.copy_from_bbox(ax.bbox)
+        if self.video_t is None:
+            return
         self.szdat.marker_line.set_xdata([self.szdat.time_to_x(self.video_t)] * 2)
         ax.draw_artist(self.szdat.marker_line)
 
