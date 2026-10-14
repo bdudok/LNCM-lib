@@ -4,14 +4,16 @@ curation GUIs show it the first time a recording is opened. Run it with GUIs/lau
 Each .edf in the EEG folders (searched recursively) without <prefix>_motion_energy.npy is processed once it has not
 been modified for settle_h hours: the video files rotate every hour, so by then the file covering the end of the EDF
 is closed. The EDF's video map is saved as well.
-Only EDFs modified in the last max_age_days are considered, so old recordings without video are not read again at
-each start.
+Only EDFs modified in the last max_age_days and recorded (EDF header start) after recorded_after are considered, so
+old recordings are not read again at each start, and recordings from before a recorder fix can be left out.
 EDFs without a matching video, or that fail, are reported and skipped until the watcher restarts.
 2P sessions are not watched: their trace needs a motion crop, and saving the crop starts the computation.
 """
 import os
 import time
 import traceback
+
+from pyedflib import highlevel
 
 from LFP.Setup import Setup
 from Proc2P.utils import lprint
@@ -31,10 +33,16 @@ def pinnacle_jobs(eeg_dirs, settle_s, max_age_s):
                     yield Setup.PINNACLE, dirpath, prefix
 
 
-def watch(eeg_dirs, video_dir=None, interval_min=10, settle_h=1.5, max_age_days=3, n_workers=N_WORKERS):
+def edf_start(path, prefix):
+    return highlevel.read_edf_header(os.path.join(path, prefix + '.edf'), read_annotations=False)['startdate']
+
+
+def watch(eeg_dirs, video_dir=None, recorded_after=None, interval_min=10, settle_h=1.5, max_age_days=3,
+          n_workers=N_WORKERS):
     """
     eeg_dirs: folders of Pinnacle EDF files
     video_dir: folder of the vEEG recordings, default: the folder of each EDF (as in the curation GUI)
+    recorded_after: datetime; EDFs that start earlier are skipped. None: no limit
     interval_min: time between scans of the folders
     """
     skipped = set()
@@ -43,8 +51,12 @@ def watch(eeg_dirs, video_dir=None, interval_min=10, settle_h=1.5, max_age_days=
             if job in skipped or is_running(*job):  # running: started from a GUI, check again at the next scan
                 continue
             setup, path, prefix = job
-            lprint(None, f'Pulling motion energy: {setup} {prefix}')
             try:
+                if recorded_after is not None and edf_start(path, prefix) < recorded_after:
+                    lprint(None, f'{prefix} was recorded before {recorded_after}, skipping')
+                    skipped.add(job)
+                    continue
+                lprint(None, f'Pulling motion energy: {setup} {prefix}')
                 if pull_motion(setup, path, prefix, video_dir, n_workers) is None:
                     lprint(None, f'No video found for {prefix}, skipping')
                     skipped.add(job)
