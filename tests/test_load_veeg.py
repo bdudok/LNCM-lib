@@ -95,3 +95,41 @@ def test_video_map_spans_files_and_picks_camera(tmp_path):
     assert loaded['files'] == vmap['files']
     assert numpy.allclose(loaded['frame'], vmap['frame'], atol=0.01, equal_nan=True)
     assert abs(loaded['fps'] - vmap['fps']) < 0.01
+
+
+class StubEDF:
+    """What build_video_map_for_edf uses of ReadEDF.EDF"""
+
+    def __init__(self, ttl, start, duration, fs=2000):
+        self.ttl, self.fs = ttl, fs
+        self.d = [{'startdate': start}]
+        self.trace = numpy.zeros(int(duration * fs))
+
+    def get_TTL(self):
+        return self.ttl
+
+
+def test_video_map_for_edf_in_another_folder(tmp_path):
+    # videos in <tmp>/_Raw, EDF and map in <tmp>/_Processed; two cameras recorded the same pulses (wrong camera
+    # chosen on purpose with camera=...)
+    raw, proc = tmp_path / '_Raw', tmp_path / '_Processed'
+    raw.mkdir()
+    proc.mkdir()
+    pulse_pc, exposure_pc = write_recording(str(raw / 'camA-2026-10-07T17-00-00'), numpy.random.default_rng(1))
+    open(raw / 'camA-2026-10-07T17-00-00.mkv', 'w').close()
+    write_recording(str(raw / 'camB-2026-10-07T17-00-00'), numpy.random.default_rng(2))
+    open(raw / 'camB-2026-10-07T17-00-00.mkv', 'w').close()
+    eeg_t0 = exposure_pc[0] + 60
+    edf = StubEDF(pulse_pc[(pulse_pc > eeg_t0) & (pulse_pc < eeg_t0 + 480)] - eeg_t0,
+                  datetime.datetime(2026, 10, 7, 17, 1), 480)
+    fn = str(proc / 'eeg_video_map.csv')
+
+    assert LoadVEEG.build_video_map_for_edf(edf, str(raw), fn, camera='camB') is None
+    assert not os.path.exists(fn)
+    vmap = LoadVEEG.build_video_map_for_edf(edf, str(raw), fn, camera='camA')
+    name = os.path.join('..', '_Raw', 'camA-2026-10-07T17-00-00.mkv')
+    assert [f['name'] for f in vmap['files']] == [name]
+    # loaded again from the EDF folder, the name still points to the video
+    loaded = LoadVEEG.video_map_for_edf(edf, str(proc), fn)
+    assert [f['name'] for f in loaded['files']] == [name]
+    assert os.path.exists(os.path.join(proc, loaded['files'][0]['name']))

@@ -131,7 +131,8 @@ def _save(out, fn):
 
 def pull_veeg_motion(vmap, video_dir, out_fn, n_workers=N_WORKERS):
     """Motion energy of the video frames shown during an EEG file, saved with their EEG times.
-    vmap: video map of the EEG (LoadVEEG.video_map or load_video_map); video_dir: folder of the video files."""
+    vmap: video map of the EEG (LoadVEEG.video_map or video_map_for_edf); video_dir: folder that the file names in the
+    map are relative to (the EDF folder for maps from video_map_for_edf)."""
     k = vmap['frame']
     valid = ~numpy.isnan(k)
     eeg_s = numpy.arange(len(k))[valid]
@@ -243,7 +244,7 @@ def pull_motion(setup, path, prefix, video_dir=None, n_workers=N_WORKERS):
         if vmap is None:
             lprint(None, f'Motion energy: no video matches {prefix}')
             return None
-        return pull_veeg_motion(vmap, video_dir, trace_fn(setup, path, prefix), n_workers)
+        return pull_veeg_motion(vmap, path, trace_fn(setup, path, prefix), n_workers)  # names relative to path
     finally:
         lock.unlink(missing_ok=True)
 

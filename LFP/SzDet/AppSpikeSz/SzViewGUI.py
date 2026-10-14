@@ -118,6 +118,12 @@ class GUI_main(QtWidgets.QMainWindow):
         select_path_button = QPushButton('Select recording', )
         vbox.addWidget(select_path_button)
         select_path_button.clicked.connect(self.select_rec_callback)
+        # for when the matching video is not found automatically (vEEG recordings)
+        self.locate_video_button = QPushButton('Locate video...')
+        self.locate_video_button.clicked.connect(self.locate_video_callback)
+        self.locate_video_button.setEnabled(False)
+        self.locate_video_button.setVisible(self.setup == Setup.PINNACLE)
+        vbox.addWidget(self.locate_video_button)
         vbox.addWidget(self.separator)
 
         # label
@@ -396,6 +402,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.szdat = SzReviewData(self.wdir, self.prefix, self.ch, tag=self.tag, setup=self.setup,
                                   video_dir=self.settings['video_dir'], pull_motion=True)
         self.video_groupbox.setVisible(self.szdat.video_map is not None)
+        self.locate_video_button.setEnabled(True)
 
         # set list widget
         self.sz_list.clear()
@@ -417,7 +424,28 @@ class GUI_main(QtWidgets.QMainWindow):
         # print(self.szdat.output_sz['Included'])
         # print(excluded_sz)
 
+        if self.setup == Setup.PINNACLE and self.szdat.video_map is None:
+            self.path_label.setText(f'{self.prefix}\nNo matching video found. Use Locate video to select it.')
+        else:
+            self.path_label.setText(self.prefix)
+
+    def locate_video_callback(self):
+        fn, _ = QtWidgets.QFileDialog.getOpenFileName(self, caption='Select a video of this recording',
+                                                      dir=str(self.szdat.video_dir), filter='*.mkv')
+        if not fn:
+            return
+        self.path_label.setText('Matching the video ... Please wait.')
+        QApplication.processEvents()
+        try:
+            self.szdat.locate_video(fn)
+        except ValueError as e:
+            QtWidgets.QMessageBox.warning(self, 'Locate video', str(e))
+            self.path_label.setText(self.prefix)
+            return
         self.path_label.setText(self.prefix)
+        self.video_groupbox.setVisible(True)
+        if self.active_sz is not None:
+            self.select_sz()  # show the video at the current seizure
 
     def mark_complete(self, i, color):
         color = self.color_lut(color)

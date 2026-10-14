@@ -80,16 +80,19 @@ class VEEGVideo(VEEGRecording):
         self.video_fn = stem + '.mkv'
 
 
-def find_recordings(folder, start=None, stop=None, margin_s=600):
+def find_recordings(folder, start=None, stop=None, margin_s=600, camera=None):
     """Group the vEEG files in a folder into recordings: consecutive files of one camera without a recorder restart.
     start, stop: datetimes; if given, only files that may overlap this period (+- margin_s, for clock differences
-    between PCs) are read. Returns a list of lists of stems."""
+    between PCs) are read. camera: file name prefix of one camera; None: all cameras.
+    Returns a list of lists of stems."""
     by_prefix = {}
     for fn in os.listdir(folder):
         if not fn.endswith('.mkv'):
             continue
         m = STEM_PATTERN.match(fn[:-4])
         if m is None or not os.path.exists(os.path.join(folder, fn[:-4] + '_frames.csv')):
+            continue
+        if camera is not None and m.group('prefix') != camera:
             continue
         t = datetime.datetime.strptime(m.group('start'), '%Y-%m-%dT%H-%M-%S')
         by_prefix.setdefault(m.group('prefix'), []).append((t, os.path.join(folder, fn[:-4])))
@@ -115,17 +118,18 @@ def find_recordings(folder, start=None, stop=None, margin_s=600):
     return recordings
 
 
-def video_map(eeg_ttl_times, eeg_start, eeg_duration, folder):
+def video_map(eeg_ttl_times, eeg_start, eeg_duration, folder, camera=None):
     """Map each second of an EEG file to a video frame, using the vEEG recording whose TTL pulses match the EEG.
     eeg_ttl_times: TTL pulse times in s from the EEG start; eeg_start: datetime of the EEG start;
-    eeg_duration: s. Returns None if no recording in the folder matches, else a dict:
+    eeg_duration: s; camera: only try this camera's files (file name prefix).
+    Returns None if no recording in the folder matches, else a dict:
         files: [{'name', 'first_frame'}]  video files of the recording, first_frame in the joined recording
         frame: float frame index in the joined recording at each EEG second 0, 1, ...; nan where there is no video
         fps
     """
     eeg_stop = eeg_start + datetime.timedelta(seconds=eeg_duration)
     best = None
-    for stems in find_recordings(folder, eeg_start, eeg_stop):
+    for stems in find_recordings(folder, eeg_start, eeg_stop, camera=camera):
         rec = VEEGRecording(stems)
         try:
             frame_times = rec.align(eeg_ttl_times)
@@ -147,19 +151,35 @@ def video_map(eeg_ttl_times, eeg_start, eeg_duration, folder):
 
 
 def video_map_for_edf(edf, folder, fn):
-    """Video map of a Pinnacle EDF (ReadEDF.EDF): loaded from fn if it exists, else built from the EDF's TTLs and
-    saved to fn. folder: folder of the vEEG recordings. Returns None if no recording matches."""
+    """Video map of a Pinnacle EDF (ReadEDF.EDF): loaded from fn if it exists, else built with build_video_map_for_edf.
+    Video file names in the map are relative to the folder of fn (the EDF folder)."""
     if os.path.exists(fn):
         return load_video_map(fn)
-    vmap = video_map(edf.get_TTL(), edf.d[-1]['startdate'], len(edf.trace) / edf.fs, folder)
-    if vmap is not None:
-        save_video_map(vmap, fn)
+    return build_video_map_for_edf(edf, folder, fn)
+
+
+def build_video_map_for_edf(edf, folder, fn, camera=None):
+    """Build the video map of a Pinnacle EDF from its TTLs and save it to fn, replacing an existing one.
+    folder: folder of the vEEG recordings; camera: only try this camera's files (file name prefix).
+    Video file names in the map are made relative to the folder of fn (absolute if on another drive), so the map
+    finds the videos wherever they are. Returns None (and saves nothing) if no recording matches."""
+    vmap = video_map(edf.get_TTL(), edf.d[-1]['startdate'], len(edf.trace) / edf.fs, folder, camera)
+    if vmap is None:
+        return None
+    for f in vmap['files']:
+        video_fn = os.path.join(folder, f['name'])
+        try:
+            f['name'] = os.path.relpath(video_fn, os.path.dirname(os.path.abspath(fn)))
+        except ValueError:  # another drive (Windows)
+            f['name'] = os.path.abspath(video_fn)
+    save_video_map(vmap, fn)
     return vmap
 
 
 def save_video_map(vmap, fn):
     """CSV with one row per EEG second: eeg_s, file, frame (in that file), rec_frame (in the joined recording).
-    file and frames are empty where there is no video."""
+    file and frames are empty where there is no video. file is as in vmap: video_map_for_edf makes it relative to the
+    folder of the map."""
     k = vmap['frame']
     has_video = ~numpy.isnan(k)
     first = [f['first_frame'] for f in vmap['files']]

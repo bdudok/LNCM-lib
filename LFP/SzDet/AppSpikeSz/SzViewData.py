@@ -241,6 +241,23 @@ class SzReviewData:
         fn = os.path.join(self.path, self.prefix + '_video_map.csv')
         self.video_map = LoadVEEG.video_map_for_edf(self.ephys, self.video_dir, fn)
 
+    def locate_video(self, video_fn):
+        """Match the EEG to the recording of the camera that made video_fn, searching that file's folder. For when the
+        automatic search doesn't find the video, e.g. because it is in another folder. Replaces the saved video map.
+        Raises ValueError if the file is not from the vEEG recorder or its recording doesn't match the EEG's TTLs."""
+        folder, name = os.path.split(video_fn)
+        m = LoadVEEG.STEM_PATTERN.match(os.path.splitext(name)[0])
+        if m is None:
+            raise ValueError(f'{name} is not named like a vEEG recorder file (<camera>-<YYYY-MM-DDTHH-MM-SS>.mkv)')
+        fn = os.path.join(self.path, self.prefix + '_video_map.csv')
+        vmap = LoadVEEG.build_video_map_for_edf(self.ephys, folder, fn, camera=m.group('prefix'))
+        if vmap is None:
+            raise ValueError(f'The TTL pulses of camera {m.group("prefix")} in {folder} do not match this EEG '
+                             f'(EEG start: {self.rec_info["startdate"]})')
+        self.video_map = vmap
+        MotionEnergy.trace_fn(self.setup, self.path, self.prefix).unlink(missing_ok=True)  # from a previous match
+        self.load_motion()
+
     def load_motion(self):
         """Motion energy of the video, (time in EEG s, value), or None if it is not saved.
         If pull_motion, a missing trace is computed in a background process."""
@@ -253,7 +270,7 @@ class SzReviewData:
         loc = LoadVEEG.frame_at(self.video_map, t)
         if loc is None:
             return None
-        return os.path.join(self.video_dir, self.video_map['files'][loc[0]]['name']), loc[1]
+        return os.path.join(self.path, self.video_map['files'][loc[0]]['name']), loc[1]  # names relative to the EDF
 
     def edit_sz_from_gui(self, event_type, xcoord):
         sz = self.get_sz(self.active_sz, True)
