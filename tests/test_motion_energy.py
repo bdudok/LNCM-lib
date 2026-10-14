@@ -57,3 +57,27 @@ def test_pull_motion_skips_locked_recording(tmp_path):
     assert MotionEnergy.is_running(Setup.LNCM, tmp_path, session.name)
     assert MotionEnergy.pull_motion('LNCM', tmp_path, session.name) is None
     assert MotionEnergy.lock_fn(Setup.LNCM, tmp_path, session.name).exists()  # left for the process that owns it
+
+
+def test_crop(tmp_path):
+    # the square moves at x 20..160, y 40..80; a crop below it sees no motion
+    fn = tmp_path / 'test.avi'
+    write_video(fn)
+    inside = MotionEnergy.motion_energy(fn, n_workers=2, crop=[0, 160, 30, 90])
+    outside = MotionEnergy.motion_energy(fn, n_workers=2, crop=[0, 160, 90, 120])
+    assert numpy.median(inside[110:190]) > 5 * numpy.median(outside[110:190])
+
+
+def test_bruker_crop_and_background_start(tmp_path, monkeypatch):
+    prefix = 'mouse_2026-10-14_test_001'
+    started = []
+    monkeypatch.setattr(MotionEnergy.subprocess, 'Popen', lambda args, **kwargs: started.append(args))
+    (tmp_path / prefix / '_face').mkdir(parents=True)
+    assert MotionEnergy.bruker_crop(tmp_path, prefix) is None
+    MotionEnergy.pull_in_background(Setup.LNCM, tmp_path, prefix)
+    assert started == []  # no crop: nothing to compute
+    # dragged from the lower right to the upper left corner
+    (tmp_path / prefix / '_face' / '_motion-crop.json').write_text('[300.4, 100.6, 250.2, 50.9]')
+    assert MotionEnergy.bruker_crop(tmp_path, prefix) == [100, 301, 50, 251]
+    MotionEnergy.pull_in_background(Setup.LNCM, tmp_path, prefix)
+    assert len(started) == 1 and started[0][-3:] == ['LNCM', str(tmp_path), prefix]

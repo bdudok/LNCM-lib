@@ -4,6 +4,8 @@ import tifffile
 from matplotlib import pyplot as plt
 from matplotlib.widgets import RectangleSelector, Button
 from Video.PullMotion import pull_motion_energy
+from Video import MotionEnergy
+from LFP.Setup import Setup
 from Proc2P.utils import lprint
 # import h5py
 import json
@@ -116,6 +118,11 @@ class CropVideo:
                 json.dump(self.rect, f)
                 self.m_save.label.set_text('Motion Saved')
                 print(self.rect, 'saved.')
+            if self.savepath.name == '_face':  # <procpath>/<prefix>/_face, as set by ImagingSession
+                # compute the motion energy trace of the new crop in the background
+                procpath, prefix = self.savepath.parent.parent, self.savepath.parent.name
+                MotionEnergy.trace_fn(Setup.LNCM, procpath, prefix).unlink(missing_ok=True)
+                MotionEnergy.pull_in_background(Setup.LNCM, procpath, prefix)
 
     def save_custom_crop(self, *args):
         if self.rect is not None:

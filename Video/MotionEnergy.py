@@ -2,7 +2,8 @@
 
 Same measure as PullMotion.pull_motion_energy: a rolling background (alpha=0.3) is subtracted from each frame and the
 absolute difference is smoothed (beta=0.9); the trace is the mean of that map. Differences from pull_motion_energy:
-- uses the full frame, downsampled 4x by area averaging, in float32 with OpenCV operations
+- uses the full frame (vEEG) or the saved motion crop (2P face camera, which shows only part of the face; without a
+  crop the trace isn't computed), downsampled 4x by area averaging, in float32 with OpenCV operations
 - reads the luma plane from the decoder instead of converting to BGR and back to gray
 - splits the video into chunks that are processed in parallel threads (OpenCV releases the GIL). Each chunk starts
   WARMUP frames early, so the rolling averages are settled (0.7 ** 30 < 1e-4) and the result matches a single pass.
@@ -11,8 +12,10 @@ Values are on a different scale than traces from pull_motion_energy (luma range,
 Output of the pull_ functions: <prefix>_motion_energy.npy in the processed folder, shape (2, n_frames):
 row 0 is the time of each video frame in EEG seconds (from the start of the EDF or of the Bruker voltage recording),
 row 1 is the motion energy.
-The GUIs start pull_in_background when the file is missing; Video/MotionWatcher.py pulls new recordings ahead of time.
+The GUIs start pull_in_background when the file is missing. Video/MotionWatcher.py pulls new vEEG recordings ahead of
+time; for 2P sessions, FaceVideo.CropVideo starts it when the motion crop is saved.
 """
+import json
 import os
 import subprocess
 import sys
@@ -40,7 +43,7 @@ SUFFIX = '_motion_energy.npy'
 LOCK_MAX_AGE_S = 3 * 3600  # an older lock file is left over from a process that was killed
 
 
-def _chunk_trace(fn, start, stop, decoder_threads):
+def _chunk_trace(fn, start, stop, decoder_threads, crop=None):
     """Motion energy of frames start..stop-1 (stop=None: to the end of the file)"""
     cap = cv2.VideoCapture(str(fn), cv2.CAP_FFMPEG, [cv2.CAP_PROP_N_THREADS, decoder_threads])
     # without conversion, yuv420p frames come as the luma plane (h, w)
@@ -57,6 +60,8 @@ def _chunk_trace(fn, start, stop, decoder_threads):
             break
         if frame.ndim == 3:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if crop is not None:
+            frame = frame[crop[2]:crop[3], crop[0]:crop[1]]
         if dsize is None:
             dsize = (frame.shape[1] // DOWNSAMPLE, frame.shape[0] // DOWNSAMPLE)
         im = cv2.resize(frame, dsize, interpolation=cv2.INTER_AREA).astype(numpy.float32)
@@ -73,8 +78,9 @@ def _chunk_trace(fn, start, stop, decoder_threads):
     return numpy.array(values, dtype=numpy.float32)
 
 
-def motion_energy(fn, start=0, stop=None, n_workers=N_WORKERS):
+def motion_energy(fn, start=0, stop=None, n_workers=N_WORKERS, crop=None):
     """Motion energy of each frame of a video from start to stop (frame indices; stop=None: to the end).
+    crop: [x0, x1, y0, y1] in pixels, None: full frame.
     Returns a float32 array; it is shorter than stop - start if the file ends earlier."""
     if stop is None:
         cap = cv2.VideoCapture(str(fn))
@@ -89,7 +95,7 @@ def motion_energy(fn, start=0, stop=None, n_workers=N_WORKERS):
     cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)  # 'unsupported format yuv420p' on every frame
     try:
         with ThreadPoolExecutor(n_workers) as ex:
-            parts = list(ex.map(lambda job: _chunk_trace(fn, *job, decoder_threads), jobs))
+            parts = list(ex.map(lambda job: _chunk_trace(fn, *job, decoder_threads, crop), jobs))
     finally:
         cv2.utils.logging.setLogLevel(log_level)
     trace = numpy.concatenate(parts)
@@ -172,16 +178,34 @@ def bruker_frame_times(procpath, prefix):
     return None
 
 
+def bruker_crop(procpath, prefix):
+    """Motion crop of a 2P session, [x0, x1, y0, y1] in pixels, saved by FaceVideo.CropVideo in
+    <session>/_face/_motion-crop.json. None if not saved."""
+    fn = Path(procpath) / prefix / '_face' / '_motion-crop.json'
+    if not fn.exists():
+        return None
+    x1, x2, y1, y2 = json.loads(fn.read_text())  # corners of the selection, in the order they were dragged
+    return [int(min(x1, x2)), int(max(x1, x2)) + 1, int(min(y1, y2)), int(max(y1, y2)) + 1]
+
+
 def pull_bruker_motion(procpath, prefix, n_workers=N_WORKERS):
-    """Motion energy of the 2P session's camera, saved with frame times in EEG (voltage recording) seconds.
-    Returns None (and saves nothing) if the session has no camera file or camera timing."""
+    """Motion energy of the 2P session's camera in the motion crop, saved with frame times in EEG (voltage recording)
+    seconds. Returns None (and saves nothing) if the session has no camera file, camera timing or motion crop."""
     found = bruker_frame_times(procpath, prefix)
-    if found is None:
-        lprint(None, f'Motion energy: no camera file or camera timing for {prefix}')
+    crop = bruker_crop(procpath, prefix)
+    if found is None or crop is None:
+        lprint(None, f'Motion energy: no camera file, camera timing or motion crop for {prefix}')
         return None
     cam_file, t = found
-    lprint(None, f'Motion energy: {cam_file.name}')
-    me = motion_energy(cam_file, n_workers=n_workers)
+    while True:
+        lprint(None, f'Motion energy: {cam_file.name}, crop {crop}')
+        me = motion_energy(cam_file, n_workers=n_workers, crop=crop)
+        new_crop = bruker_crop(procpath, prefix)
+        if new_crop == crop:
+            break
+        crop = new_crop  # the crop was saved again during the computation
+        if crop is None:
+            return None
     if len(me) != len(t):
         raise ValueError(f'{prefix}: {len(me)} video frames, {len(t)} camera timers')
     out = numpy.array([t, me])
@@ -228,6 +252,8 @@ def pull_in_background(setup, path, prefix, video_dir=None):
     """Start pull_motion in a separate process that keeps running when the GUI is closed, unless the trace exists or
     is being computed. Errors are written to <prefix>_motion_energy.error.txt next to the trace file."""
     if trace_fn(setup, path, prefix).exists() or is_running(setup, path, prefix):
+        return
+    if setup == Setup.LNCM and bruker_crop(path, prefix) is None:
         return
     root = Path(__file__).resolve().parents[1]  # LNCM-lib
     env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(root), os.environ.get('PYTHONPATH', '')]))
