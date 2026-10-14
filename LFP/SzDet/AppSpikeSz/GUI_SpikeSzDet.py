@@ -26,6 +26,7 @@ from LFP.SzDet import InstRate, ProcessSeizures
 #Readers
 from Proc2P.Bruker import LoadEphys
 from LFP.Pinnacle import ReadEDF
+from Video import MotionEnergy
 from LFP.Setup import Setup
 
 #for processing in background
@@ -181,6 +182,9 @@ class GUI_main(QtWidgets.QMainWindow):
         #raw
         self.FigCanvas1 = SubplotsCanvas(nrows=3, sharex=True, figsize=(12, 9))
         self.format_plot(self.FigCanvas1)
+        self.motion_ax = self.FigCanvas1.ax[1].twinx()  # motion energy, if the trace file exists
+        self.FigCanvas1.ax[1].set_zorder(self.motion_ax.get_zorder() + 1)  # envelope and spikes in front of motion
+        self.FigCanvas1.ax[1].patch.set_visible(False)
         toolbar = NavigationToolbar2QT(self.FigCanvas1, self)
         vbox.addWidget(toolbar)
         vbox.addWidget(self.FigCanvas1)
@@ -387,6 +391,16 @@ class GUI_main(QtWidgets.QMainWindow):
             v = float(self.get_field(hv))
             ax[1].axhline(self.spikedet.mean_env + self.spikedet.stdev_env * v, color='black', linewidth=0.5)
         ax[1].set_ylabel('HF envelope')
+        self.motion_ax.cla()
+        self.motion_ax.set_visible(self.motion is not None)
+        if self.motion is not None:
+            t, me = self.motion
+            t = t - self.trace_t0
+            incl = (t >= 0) & (t <= time_xvals[-1])
+            self.motion_ax.plot(t[incl], me[incl], color='tab:purple', zorder=1, linewidth=1, alpha=0.7)
+            self.motion_ax.yaxis.tick_right()  # cla() moves the twin axis to the left
+            self.motion_ax.yaxis.set_label_position('right')
+            self.motion_ax.set_ylabel('Motion', color='tab:purple')
 
         ax[2].plot(X, sz_burden, color='blue', linewidth=1)
         for sz in sz_times_raw:
@@ -513,6 +527,10 @@ class GUI_main(QtWidgets.QMainWindow):
         self.fs = int(self.param['fs'])
         self.param_fields['fs'].setText(str(self.param['fs']))
         plotdur = self.get_field('PlotDur')
+        self.motion = MotionEnergy.load_trace(self.setup, self.savepath, self.active_prefix)
+        if self.motion is None:  # for the next time this recording is opened
+            MotionEnergy.pull_in_background(self.setup, self.savepath, self.active_prefix)
+        self.trace_t0 = 0  # EEG time of the first displayed sample
 
         if hasattr(r, 'raw_trace'):
             raw_trace = r.raw_trace
@@ -524,6 +542,7 @@ class GUI_main(QtWidgets.QMainWindow):
             if len(trace) > t_want:
                 want_slice = slice(int(len(trace)/2 - t_want/2), int(len(trace)/2 + t_want/2))
                 trace = trace[want_slice]
+                self.trace_t0 = want_slice.start / self.fs
                 raw_trace = raw_trace[want_slice]
         self.raw_trace = raw_trace
         self.trace = trace

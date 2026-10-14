@@ -211,7 +211,6 @@ class GUI_main(QtWidgets.QMainWindow):
         vbox.addLayout(horizontal_layout)
 
         vbox.addWidget(self.separator)
-        # later add a middle, thinner row for motion
         self.FigCanvas1 = SubplotsCanvas()
         self.toolbar = SelectorToolbar(self.FigCanvas1, self)
         vbox.addWidget(self.toolbar)
@@ -395,7 +394,7 @@ class GUI_main(QtWidgets.QMainWindow):
         print(f'Calling szdat with prefix {self.prefix} ch {self.ch}, tag {self.tag}')
         self.reset_video()
         self.szdat = SzReviewData(self.wdir, self.prefix, self.ch, tag=self.tag, setup=self.setup,
-                                  video_dir=self.settings['video_dir'])
+                                  video_dir=self.settings['video_dir'], pull_motion=True)
         self.video_groupbox.setVisible(self.szdat.video_map is not None)
 
         # set list widget
@@ -607,9 +606,12 @@ class SubplotsCanvas(FigureCanvasQTAgg):
 
     def __init__(self, *args, **kwargs):
         self.fig, self.axd = plt.subplot_mosaic([['top', 'top'],
+                                                 ['motion', 'motion'],
                                                  ['lower left', 'lower right']],
-                                                gridspec_kw={'width_ratios': [1, 0.3, ]},
+                                                gridspec_kw={'width_ratios': [1, 0.3, ],
+                                                             'height_ratios': [1, 0.35, 1]},
                                                 figsize=(12, 6), layout="constrained")
+        self.axd['motion'].sharex(self.axd['top'])
         super(SubplotsCanvas, self).__init__(self.fig)
 
 

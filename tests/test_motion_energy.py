@@ -1,6 +1,7 @@
 import cv2
 import numpy
 
+from LFP.Setup import Setup
 from Video import MotionEnergy
 
 
@@ -47,3 +48,12 @@ def test_pull_veeg_motion_times(tmp_path):
     assert len(t) == len(me) == 19 * 30 + 1  # frames 0..570
     numpy.testing.assert_allclose(t, 2 + numpy.arange(len(t)) / 30)
     numpy.testing.assert_array_equal(numpy.load(out_fn), [t, me])
+
+
+def test_pull_motion_skips_locked_recording(tmp_path):
+    session = tmp_path / 'mouse_2026-10-14_test_001'
+    session.mkdir()
+    MotionEnergy.lock_fn(Setup.LNCM, tmp_path, session.name).touch()
+    assert MotionEnergy.is_running(Setup.LNCM, tmp_path, session.name)
+    assert MotionEnergy.pull_motion('LNCM', tmp_path, session.name) is None
+    assert MotionEnergy.lock_fn(Setup.LNCM, tmp_path, session.name).exists()  # left for the process that owns it

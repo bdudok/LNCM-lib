@@ -2,8 +2,7 @@
 
 Same measure as PullMotion.pull_motion_energy: a rolling background (alpha=0.3) is subtracted from each frame and the
 absolute difference is smoothed (beta=0.9); the trace is the mean of that map. Differences from pull_motion_energy:
-- uses the full frame, downsampled 4x by area averaging, in float32 with OpenCV operations (pull_motion_energy
-  crops to the left h columns because the crop indices are swapped, and stretches that to the full width)
+- uses the full frame, downsampled 4x by area averaging, in float32 with OpenCV operations
 - reads the luma plane from the decoder instead of converting to BGR and back to gray
 - splits the video into chunks that are processed in parallel threads (OpenCV releases the GIL). Each chunk starts
   WARMUP frames early, so the rolling averages are settled (0.7 ** 30 < 1e-4) and the result matches a single pass.
@@ -12,17 +11,24 @@ Values are on a different scale than traces from pull_motion_energy (luma range,
 Output of the pull_ functions: <prefix>_motion_energy.npy in the processed folder, shape (2, n_frames):
 row 0 is the time of each video frame in EEG seconds (from the start of the EDF or of the Bruker voltage recording),
 row 1 is the motion energy.
+The GUIs start pull_in_background when the file is missing; Video/MotionWatcher.py pulls new recordings ahead of time.
 """
 import os
+import subprocess
+import sys
+import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import cv2
 import numpy
 
+from LFP.Pinnacle import ReadEDF
+from LFP.Setup import Setup
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.utils import lprint
-from LFP.Setup import Setup
+from Video import LoadVEEG
 
 ALPHA = 0.3  # background update rate
 BETA = 0.9  # weight of the current frame in the smoothed difference
@@ -31,6 +37,7 @@ WARMUP = 30  # frames read before each chunk
 CHUNK = 1800  # frames per parallel job
 N_WORKERS = min(8, os.cpu_count())
 SUFFIX = '_motion_energy.npy'
+LOCK_MAX_AGE_S = 3 * 3600  # an older lock file is left over from a process that was killed
 
 
 def _chunk_trace(fn, start, stop, decoder_threads):
@@ -109,6 +116,13 @@ def load_trace(setup, path, prefix):
     return t, me
 
 
+def _save(out, fn):
+    """Write to a temporary file and rename it, so readers never see a partly written file"""
+    tmp = fn.with_name(fn.stem + '.partial.npy')
+    numpy.save(tmp, out)
+    os.replace(tmp, fn)
+
+
 def pull_veeg_motion(vmap, video_dir, out_fn, n_workers=N_WORKERS):
     """Motion energy of the video frames shown during an EEG file, saved with their EEG times.
     vmap: video map of the EEG (LoadVEEG.video_map or load_video_map); video_dir: folder of the video files."""
@@ -130,7 +144,7 @@ def pull_veeg_motion(vmap, video_dir, out_fn, n_workers=N_WORKERS):
     rec_frames = numpy.concatenate(rec_frames)
     t = numpy.interp(rec_frames, k, eeg_s)
     out = numpy.array([t, numpy.concatenate(traces)])
-    numpy.save(out_fn, out)
+    _save(out, Path(out_fn))
     return out
 
 
@@ -171,5 +185,67 @@ def pull_bruker_motion(procpath, prefix, n_workers=N_WORKERS):
     if len(me) != len(t):
         raise ValueError(f'{prefix}: {len(me)} video frames, {len(t)} camera timers')
     out = numpy.array([t, me])
-    numpy.save(trace_fn(Setup.LNCM, procpath, prefix), out)
+    _save(out, trace_fn(Setup.LNCM, procpath, prefix))
     return out
+
+
+def lock_fn(setup, path, prefix):
+    return trace_fn(setup, path, prefix).with_suffix('.lock')
+
+
+def is_running(setup, path, prefix):
+    """True if another process is computing the trace of this recording"""
+    fn = lock_fn(setup, path, prefix)
+    return fn.exists() and time.time() - fn.stat().st_mtime < LOCK_MAX_AGE_S
+
+
+def pull_motion(setup, path, prefix, video_dir=None, n_workers=N_WORKERS):
+    """Compute and save the motion energy trace of a recording. Returns None if the recording has no video, or if
+    another process is computing it.
+    setup: Setup.PINNACLE (path: EDF folder) or Setup.LNCM (path: parent of the session folder)
+    video_dir: folder of the vEEG recordings (Pinnacle), default: the EDF folder"""
+    setup = Setup(setup)
+    if is_running(setup, path, prefix):
+        lprint(None, f'Motion energy of {prefix} is being computed by another process')
+        return None
+    lock = lock_fn(setup, path, prefix)
+    lock.touch()
+    try:
+        if setup == Setup.LNCM:
+            return pull_bruker_motion(path, prefix, n_workers)
+        video_dir = path if video_dir is None else video_dir
+        edf = ReadEDF.EDF(path, prefix)
+        vmap = LoadVEEG.video_map_for_edf(edf, video_dir, os.path.join(path, prefix + '_video_map.csv'))
+        if vmap is None:
+            lprint(None, f'Motion energy: no video matches {prefix}')
+            return None
+        return pull_veeg_motion(vmap, video_dir, trace_fn(setup, path, prefix), n_workers)
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def pull_in_background(setup, path, prefix, video_dir=None):
+    """Start pull_motion in a separate process that keeps running when the GUI is closed, unless the trace exists or
+    is being computed. Errors are written to <prefix>_motion_energy.error.txt next to the trace file."""
+    if trace_fn(setup, path, prefix).exists() or is_running(setup, path, prefix):
+        return
+    root = Path(__file__).resolve().parents[1]  # LNCM-lib
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(root), os.environ.get('PYTHONPATH', '')]))
+    args = [sys.executable, '-m', 'Video.MotionEnergy', str(setup), str(path), prefix]
+    if video_dir is not None:
+        args.append(str(video_dir))
+    # DETACHED_PROCESS (Windows only): no console, and closing the GUI's console doesn't stop it
+    subprocess.Popen(args, env=env, cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     creationflags=getattr(subprocess, 'DETACHED_PROCESS', 0))
+    lprint(None, f'Computing the motion energy of {prefix} in the background')
+
+
+if __name__ == '__main__':
+    # python -m Video.MotionEnergy <setup> <path> <prefix> [<video_dir>], started by pull_in_background
+    setup, path, prefix = sys.argv[1:4]
+    try:
+        pull_motion(setup, path, prefix, *sys.argv[4:5])
+    except Exception:
+        error_fn = trace_fn(Setup(setup), path, prefix).with_suffix('.error.txt')
+        error_fn.write_text(traceback.format_exc())
+        raise

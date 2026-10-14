@@ -146,6 +146,17 @@ def video_map(eeg_ttl_times, eeg_start, eeg_duration, folder):
             'frame': frame, 'fps': float(rec.fps)}
 
 
+def video_map_for_edf(edf, folder, fn):
+    """Video map of a Pinnacle EDF (ReadEDF.EDF): loaded from fn if it exists, else built from the EDF's TTLs and
+    saved to fn. folder: folder of the vEEG recordings. Returns None if no recording matches."""
+    if os.path.exists(fn):
+        return load_video_map(fn)
+    vmap = video_map(edf.get_TTL(), edf.d[-1]['startdate'], len(edf.trace) / edf.fs, folder)
+    if vmap is not None:
+        save_video_map(vmap, fn)
+    return vmap
+
+
 def save_video_map(vmap, fn):
     """CSV with one row per EEG second: eeg_s, file, frame (in that file), rec_frame (in the joined recording).
     file and frames are empty where there is no video."""

@@ -12,7 +12,7 @@ from PlotTools import *
 from LFP.Pinnacle import ReadEDF
 from Proc2P.Bruker import LoadEphys
 from Proc2P.Bruker.PreProc import SessionInfo
-from Video import LoadVEEG
+from Video import LoadVEEG, MotionEnergy
 
 # analysis for sz curation
 from scipy import signal
@@ -32,8 +32,11 @@ class SzReviewData:
     Used by Sz Review GUI to access data
     '''
 
-    def __init__(self, path, prefix, ch, tag=None, setup=Setup.PINNACLE, skip_gamma=False, video_dir=None):
-        '''video_dir: folder of the vEEG recordings (Pinnacle setup), default: the EEG folder'''
+    def __init__(self, path, prefix, ch, tag=None, setup=Setup.PINNACLE, skip_gamma=False, video_dir=None,
+                 pull_motion=False):
+        '''video_dir: folder of the vEEG recordings (Pinnacle setup), default: the EEG folder
+        pull_motion: if the motion energy trace is not saved yet, start computing it in the background (it is shown
+            when the recording is opened next time)'''
         self.path = path
         self.prefix = prefix
         self.ch = ch
@@ -41,6 +44,7 @@ class SzReviewData:
         self.setup = Setup(setup)
         self.video_dir = path if video_dir is None else video_dir
         self.video_map = None
+        self.pull_motion = pull_motion
         self.load_data(skip_gamma)
         self.init_output()
 
@@ -57,6 +61,7 @@ class SzReviewData:
             self.sos = bessel(N=3, Wn=1.0, btype='lowpass', analog=False, output='sos', fs=self.fs)
         if self.setup == Setup.PINNACLE:
             self.load_video()
+        self.load_motion()
 
     def get_fn(self, suffix, timestamp=False):
         if self.setup == Setup.PINNACLE:
@@ -234,13 +239,14 @@ class SzReviewData:
     def load_video(self):
         """Map the EEG to the vEEG recording whose TTL pulses match it. The map is saved next to the EEG and reused."""
         fn = os.path.join(self.path, self.prefix + '_video_map.csv')
-        if os.path.exists(fn):
-            self.video_map = LoadVEEG.load_video_map(fn)
-            return
-        duration = len(self.ephys.trace) / self.fs
-        self.video_map = LoadVEEG.video_map(self.ephys.get_TTL(), self.rec_info['startdate'], duration, self.video_dir)
-        if self.video_map is not None:
-            LoadVEEG.save_video_map(self.video_map, fn)
+        self.video_map = LoadVEEG.video_map_for_edf(self.ephys, self.video_dir, fn)
+
+    def load_motion(self):
+        """Motion energy of the video, (time in EEG s, value), or None if it is not saved.
+        If pull_motion, a missing trace is computed in a background process."""
+        self.motion = MotionEnergy.load_trace(self.setup, self.path, self.prefix)
+        if self.motion is None and self.pull_motion and (self.setup == Setup.LNCM or self.video_map is not None):
+            MotionEnergy.pull_in_background(self.setup, self.path, self.prefix, self.video_dir)
 
     def video_frame(self, t):
         """Video file path and frame index at EEG time t (s), or None where there is no video."""
@@ -329,6 +335,19 @@ class SzReviewData:
         self.marker_line = ca.axvline(self.time_to_x(t0), color='blue', linestyle='--', zorder=100, animated=True)
         if not numpy.isnan(sz['BehaviorSz(s)']):
             ca.axvline(self.time_to_x(sz['BehaviorSz(s)']), color='magenta', linewidth=2, zorder=99)
+
+        # motion energy, x axis shared with the top plot
+        ca = axd['motion']
+        strip_ax(ca, False)
+        ca.set_ylabel('Motion')
+        if self.motion is None:
+            ca.text(0.5, 0.5, 'No motion energy trace', transform=ca.transAxes, ha='center', va='center')
+        else:
+            t, me = self.motion
+            incl = (t >= self.plot_t0) & (t <= self.plot_t1)
+            ca.plot(self.time_to_x(t[incl]), me[incl], color='tab:purple', linewidth=1)
+        ca.axvline(first_plot_sample, color='red')
+        ca.axvline(last_plot_sample, color='red')
 
         # sz start example
         ca = axd['lower left']
