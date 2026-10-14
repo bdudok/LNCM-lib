@@ -91,13 +91,17 @@ def motion_energy(fn, start=0, stop=None, n_workers=N_WORKERS, crop=None):
     bounds = list(range(start, n, CHUNK)) or [start]
     jobs = [(b, bounds[i + 1] if i + 1 < len(bounds) else stop) for i, b in enumerate(bounds)]
     decoder_threads = 1 if n_workers > 1 else 0  # 0: decoder picks
-    log_level = cv2.utils.logging.getLogLevel()
-    cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)  # 'unsupported format yuv420p' on every frame
+    # 'unsupported format yuv420p' on every frame; cv2.utils.logging is missing in some builds (conda-forge 4.12)
+    logging = getattr(cv2.utils, 'logging', None)
+    if logging is not None:
+        log_level = logging.getLogLevel()
+        logging.setLogLevel(logging.LOG_LEVEL_ERROR)
     try:
         with ThreadPoolExecutor(n_workers) as ex:
             parts = list(ex.map(lambda job: _chunk_trace(fn, *job, decoder_threads, crop), jobs))
     finally:
-        cv2.utils.logging.setLogLevel(log_level)
+        if logging is not None:
+            logging.setLogLevel(log_level)
     trace = numpy.concatenate(parts)
     if start == 0 and len(trace) > 1:
         trace[0] = trace[1]  # no background yet in the first frame
