@@ -22,6 +22,7 @@ import numpy
 
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.utils import lprint
+from LFP.Setup import Setup
 
 ALPHA = 0.3  # background update rate
 BETA = 0.9  # weight of the current frame in the smoothed difference
@@ -91,10 +92,10 @@ def motion_energy(fn, start=0, stop=None, n_workers=N_WORKERS):
 
 
 def trace_fn(setup, path, prefix):
-    """Motion energy file. setup: 'Pinnacle' (path: EDF folder) or 'LNCM' (path: parent of the session folder)"""
-    if setup == 'Pinnacle':
+    """Motion energy file. setup: Setup.PINNACLE (path: EDF folder) or Setup.LNCM (path: parent of the session folder)"""
+    if setup == Setup.PINNACLE:
         return Path(path) / (prefix + SUFFIX)
-    elif setup == 'LNCM':
+    elif setup == Setup.LNCM:
         return Path(path) / prefix / (prefix + SUFFIX)
     raise ValueError(f'Unknown setup: {setup}')
 
@@ -170,5 +171,5 @@ def pull_bruker_motion(procpath, prefix, n_workers=N_WORKERS):
     if len(me) != len(t):
         raise ValueError(f'{prefix}: {len(me)} video frames, {len(t)} camera timers')
     out = numpy.array([t, me])
-    numpy.save(trace_fn('LNCM', procpath, prefix), out)
+    numpy.save(trace_fn(Setup.LNCM, procpath, prefix), out)
     return out

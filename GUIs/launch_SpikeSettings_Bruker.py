@@ -1,4 +1,5 @@
 from LFP.SzDet.AppSpikeSz.GUI_SpikeSzDet import launch_GUI
+from LFP.Setup import Setup
 
 #specify the path to start at
 path = r'D:\Shares\Data\_Processed/2P/'
@@ -39,5 +40,5 @@ defs['hippocampus'] = { #aiming to detect ripples and HFOs
     'PlotDur': 'all', #displayed trace length in minutes, or 'all'
 }
 
-launch_GUI(path=path, savepath=path, setupID='LNCM', defaults=defs[use_deafults])
+launch_GUI(path=path, savepath=path, setupID=Setup.LNCM, defaults=defs[use_deafults])
 

@@ -1,4 +1,5 @@
 from LFP.SzDet.vEEGView.GUI_vEEG import launch_GUI
+from LFP.Setup import Setup
 
 #specify the path to start at
 path = r'D:\Shares\Data\_Processed\EEG/test/'
@@ -8,4 +9,4 @@ path = r'D:\Shares\Data\_Processed\EEG/test/'
 settings = {
 }
 
-launch_GUI(path=path, savepath=path, setupID='Pinnacle', defaults=settings)
+launch_GUI(path=path, savepath=path, setupID=Setup.PINNACLE, defaults=settings)

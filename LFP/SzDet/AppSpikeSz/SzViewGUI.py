@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QApplication, QLabel, QWidget, QHBoxLayout, QVBox
                              QGroupBox, QListWidget,QAbstractItemView, QLineEdit)
 
 from Proc2P.utils import *
+from LFP.Setup import Setup
 
 '''
 Manually review automatically detected seizures
@@ -26,7 +27,7 @@ Manually review automatically detected seizures
 
 
 class GUI_main(QtWidgets.QMainWindow):
-    def __init__(self, app, setupID='Pinnacle', defaults=None):
+    def __init__(self, app, setupID=Setup.PINNACLE, defaults=None):
         super().__init__()
 
         self.setWindowTitle(f'Curate seizures')
@@ -35,7 +36,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.user_defaults = defaults
 
         # peristent settings
-        self.setup = setupID  # 'LNCM' or 'Pinnacle'
+        self.setup = Setup(setupID)
         self.set_defaults()
 
         # main groupbox (horizonal)
@@ -67,10 +68,10 @@ class GUI_main(QtWidgets.QMainWindow):
         self.viewer_on = True
         self.unsaved_changes = 0
         self.settings['video_dir'] = None  # folder of the vEEG recordings, default: the EEG folder
-        if self.setup == 'Pinnacle':
+        if self.setup == Setup.PINNACLE:
             self.settings['rec_suffix'] = '_seizure_times.xlsx'
             self.settings['pardir'] = 'D:/Shares/Data/_Processed/EEG/'
-        elif self.setup == 'LNCM':
+        elif self.setup == Setup.LNCM:
             self.settings['rec_suffix'] = '_seizure_times.xlsx'
             self.settings['pardir'] = 'D:/Shares/Data/_Processed/2P/'
         if self.user_defaults is not None:
@@ -78,7 +79,7 @@ class GUI_main(QtWidgets.QMainWindow):
                 self.settings[key] = value
 
     def get_prefix(self, ps, use_tag=''):
-        if self.setup == 'Pinnacle':
+        if self.setup == Setup.PINNACLE:
             s1 = '.edf_Ch'
             if s1 in ps:
                 # if saved with no tag
@@ -94,7 +95,7 @@ class GUI_main(QtWidgets.QMainWindow):
                 tag = match.group(1)
                 ch = match.group(2)
                 return prefix, ch, tag
-        elif self.setup == 'LNCM':
+        elif self.setup == Setup.LNCM:
             s1 = '_Ch'
             f1 = ps.find(s1)
             if use_tag in ('', None, 'None'):
@@ -382,7 +383,7 @@ class GUI_main(QtWidgets.QMainWindow):
         fn = QtWidgets.QFileDialog.getOpenFileName(self, caption='Select Recording', dir=self.settings['pardir'],
                                                    filter=f'*{self.settings["rec_suffix"]}')
         self.wdir = os.path.dirname(fn[0])
-        if self.setup == 'LNCM':
+        if self.setup == Setup.LNCM:
             self.wdir = os.path.dirname(self.wdir) + '/'
         self.prefix, self.ch, self.tag = self.get_prefix(os.path.basename(fn[0]), use_tag=self.tag_field.text())
 

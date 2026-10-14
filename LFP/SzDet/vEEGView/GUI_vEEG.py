@@ -28,10 +28,11 @@ from Proc2P.Bruker import LoadEphys
 from LFP.Pinnacle import ReadEDF
 from Proc2P.Treadmill import rsync
 from Video.LoadVEEG import VEEGVideo
+from LFP.Setup import Setup
 
 
 class GUI_main(QtWidgets.QMainWindow):
-    def __init__(self, app, path=None, savepath=None, prefix_list=None, setupID='LNCM',
+    def __init__(self, app, path=None, savepath=None, prefix_list=None, setupID=Setup.LNCM,
                  defaults=None):
         super().__init__()
 
@@ -46,7 +47,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.savepath = savepath
         self.input_prefix = prefix_list
-        self.setup = setupID  # 'LNCM' or 'Pinnacle'
+        self.setup = Setup(setupID)
         # self.settings = QtCore.QSettings("pyqt_settings.ini", QtCore.QSettings.IniFormat)
         # self.settings.value("LastFile")
 
@@ -106,10 +107,10 @@ class GUI_main(QtWidgets.QMainWindow):
         self.param['SzDet.Framesize'] = 50
         self.param['fs'] = 2000
         self.param['PlotDur'] = 10
-        if self.setup == 'LNCM':
+        if self.setup == Setup.LNCM:
             self.param['SzDet.Framesize'] = 50
             self.param['fs'] = 5000
-        if self.setup == 'Pinnacle':
+        if self.setup == Setup.PINNACLE:
             self.param['Channel'] = 1
             self.param_keys_sorted = (*self.param_keys_sorted, 'Channel',
                                       'rejection_value', 'rejection_step', 'rejection_tail', 'rejection_factor')
@@ -202,7 +203,7 @@ class GUI_main(QtWidgets.QMainWindow):
         for label in self.param_keys_sorted:
             vbox.addLayout(self.make_field(label))
 
-        if self.setup == 'Pinnacle':
+        if self.setup == Setup.PINNACLE:
             # vbox.addLayout(self.make_field('Channel'))
             self.channel_name_label = QLabel('Channel Name')
             vbox.addWidget(self.channel_name_label)
@@ -257,7 +258,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         flist = os.listdir(self.wdir)
         # get prefix list
-        if self.setup == 'LNCM':
+        if self.setup == Setup.LNCM:
             suffix = '_ephys.npy'
             self.dirpaths = {}
             prefix_list = []
@@ -272,7 +273,7 @@ class GUI_main(QtWidgets.QMainWindow):
             if self.input_prefix is not None:
                 prefix_list = [prefix for prefix in self.input_prefix if prefix in self.dirpaths]
             video_list = []
-        elif self.setup == 'Pinnacle':
+        elif self.setup == Setup.PINNACLE:
             suffix = '.edf'
             prefix_list = [fn[:-len(suffix)] for fn in flist if fn.endswith(suffix)]
             if self.input_prefix is not None:
@@ -287,11 +288,11 @@ class GUI_main(QtWidgets.QMainWindow):
 
         # check if output exist
         flist = os.listdir(self.savepath)
-        if self.setup == 'Pinnacle':
+        if self.setup == Setup.PINNACLE:
             for pi, prefix in enumerate(prefix_list):
                 if prefix + self.suffix + '.json' in flist:
                     self.mark_complete(pi, color='#fcaf38')
-        elif self.setup == 'LNCM':
+        elif self.setup == Setup.LNCM:
             for pi, prefix in enumerate(prefix_list):
                 if os.path.exists(os.path.join(self.dirpaths[prefix], prefix + '.json')):
                     self.mark_complete(pi, color='#fcaf38')
@@ -434,9 +435,9 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def save_output_callback(self):
         # save settings
-        if self.setup == 'Pinnacle':
+        if self.setup == Setup.PINNACLE:
             output_fn = self.savepath + self.active_prefix + f'_Ch{self.get_field("Channel")}' + self.suffix
-        elif self.setup == 'LNCM':
+        elif self.setup == Setup.LNCM:
             output_fn = os.path.join(self.savepath, self.active_prefix, self.active_prefix + self.suffix)
         op_dict = {}
         for key in self.param_keys_sorted:
@@ -453,9 +454,9 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def refresh_data(self):
         print(self.active_prefix)
-        if self.setup == 'LNCM':
+        if self.setup == Setup.LNCM:
             r = LoadEphys.Ephys(self.savepath, self.active_prefix)
-        elif self.setup == 'Pinnacle':
+        elif self.setup == Setup.PINNACLE:
             r = ReadEDF.EDF(self.savepath, self.active_prefix, rejection_ops=self.param)
             self.edf=r
             self.param['fs'] = r.fs

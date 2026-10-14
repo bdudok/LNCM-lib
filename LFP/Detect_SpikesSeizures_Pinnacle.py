@@ -1,4 +1,5 @@
 from LFP.SzDet.AppSpikeSz.GUI_SpikeSzDet import launch_GUI
+from LFP.Setup import Setup
 
 #specify the path to start at
 path = r'D:\Shares\Data\_Processed\EEG\Tottering/'
@@ -21,4 +22,4 @@ settings = {
     'Channel': 1 #channel number (indexed from 1)
 }
 
-launch_GUI(path=path, savepath=path, setupID='Pinnacle', defaults=settings)
+launch_GUI(path=path, savepath=path, setupID=Setup.PINNACLE, defaults=settings)

@@ -20,6 +20,7 @@ from scipy import signal
 from scipy.signal import bessel, sosfilt
 from LFP.EphysFunctions import butter_bandpass_filter
 import traceback
+from LFP.Setup import Setup
 '''
 Manually review automatically detected seizures
 '''
@@ -31,13 +32,13 @@ class SzReviewData:
     Used by Sz Review GUI to access data
     '''
 
-    def __init__(self, path, prefix, ch, tag=None, setup='Pinnacle', skip_gamma=False, video_dir=None):
+    def __init__(self, path, prefix, ch, tag=None, setup=Setup.PINNACLE, skip_gamma=False, video_dir=None):
         '''video_dir: folder of the vEEG recordings (Pinnacle setup), default: the EEG folder'''
         self.path = path
         self.prefix = prefix
         self.ch = ch
         self.tag = tag
-        self.setup = setup
+        self.setup = Setup(setup)
         self.video_dir = path if video_dir is None else video_dir
         self.video_map = None
         self.load_data(skip_gamma)
@@ -54,11 +55,11 @@ class SzReviewData:
         if not skip_gamma:
             self.get_session_gamma()
             self.sos = bessel(N=3, Wn=1.0, btype='lowpass', analog=False, output='sos', fs=self.fs)
-        if self.setup == 'Pinnacle':
+        if self.setup == Setup.PINNACLE:
             self.load_video()
 
     def get_fn(self, suffix, timestamp=False):
-        if self.setup == 'Pinnacle':
+        if self.setup == Setup.PINNACLE:
             if self.tag is None:
                 tagstr = ''
             else:
@@ -80,7 +81,7 @@ class SzReviewData:
             else:
                 return -1
             return os.path.join(self.path, self.prefix + fn)
-        elif self.setup == 'LNCM':
+        elif self.setup == Setup.LNCM:
             if suffix == 'sztime':
                 fn = f'_Ch{self.ch}_seizure_times.xlsx'
             elif suffix == 'save':
@@ -103,14 +104,14 @@ class SzReviewData:
             return -1
 
     def read_ephys(self):
-        if self.setup == 'Pinnacle':
+        if self.setup == Setup.PINNACLE:
             self.ephys = ReadEDF.EDF(self.path, self.prefix, ch=int(self.ch) - 1, rejection_ops=self.settings)
             assert int(self.ephys.fs) == int(float(self.settings['fs'])), 'fs setting in config does not match the data'
             # ttls = self.ephys.get_TTL()
             startdate = self.ephys.d[-1]['startdate']
             print(startdate)
             annotations = self.ephys.d[-1]['annotations']
-        if self.setup == 'LNCM':
+        if self.setup == Setup.LNCM:
             self.ephys = LoadEphys.Ephys(self.path, self.prefix, channel=int(self.ch))
             si = SessionInfo(os.path.join(self.path, self.prefix) + '/', self.prefix)
             si.load()  # "treadmill_fn": "PVTot9_2024-02-20_lfp_181-2024-02-20-141140.txt"
@@ -163,7 +164,7 @@ class SzReviewData:
         sznames, sztimes, szdurs = [], [], []
         spkcount = []
         self.plot_margin = self.settings["PlotMargin"]
-        if self.setup in ('Pinnacle', 'LNCM'):
+        if self.setup in (Setup.PINNACLE, Setup.LNCM):
             start_key = 'Sz.Start(s)'
             stop_key = 'Sz.Stop(s)'
             spike_key = 'SpikeTimes(s)'

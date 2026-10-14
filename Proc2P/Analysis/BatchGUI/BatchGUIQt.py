@@ -32,6 +32,7 @@ from Proc2P.Analysis.CaTrace import ProcessConfig
 from Proc2P.Analysis.Ripples import Ripples, RippleConfig
 import tifffile
 import cv2
+from LFP.Setup import Setup
 
 '''
 Gui for viewing and processing 2P data.
@@ -564,10 +565,10 @@ class GUI_main(QtWidgets.QMainWindow):
         self.ripples.export_ripple_times()
 
     def run_spikeszdet_callback(self):
-        SzProcGUI(self.wdir, 'LNCM', 'hippocampus', self.active_prefix[0])
+        SzProcGUI(self.wdir, Setup.LNCM, 'hippocampus', self.active_prefix[0])
 
     def run_curate_sz_callback(self):
-        SzViewGUI('LNCM')
+        SzViewGUI(Setup.LNCM)
 
     def cprint(self, *args):
         ts = datetime.datetime.now().isoformat(timespec='seconds')
