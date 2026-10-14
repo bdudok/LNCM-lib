@@ -16,6 +16,7 @@ so they are joined into one recording and aligned together. This covers EEG file
 import datetime
 import os
 import re
+from pathlib import Path
 
 import numpy
 import pandas
@@ -78,6 +79,19 @@ class VEEGVideo(VEEGRecording):
         super().__init__([stem])
         self.stem = stem
         self.video_fn = stem + '.mkv'
+
+
+def default_video_dir(eeg_folder):
+    """Folder of the vEEG videos of an EEG: they are kept in the raw data tree, so the last _Processed folder in the
+    EEG folder's path is replaced by _RawData, keeping the levels after it
+    (D:/Shares/Data/_Processed/EEG/Exp/Mouse -> D:/Shares/Data/_RawData/EEG/Exp/Mouse).
+    Returns the EEG folder if its path has no _Processed folder."""
+    parts = list(Path(eeg_folder).parts)
+    for i in reversed(range(len(parts))):
+        if parts[i].lower() == '_processed':
+            parts[i] = '_RawData'
+            return str(Path(*parts))
+    return str(eeg_folder)
 
 
 def find_recordings(folder, start=None, stop=None, margin_s=600, camera=None):

@@ -228,7 +228,7 @@ def pull_motion(setup, path, prefix, video_dir=None, n_workers=N_WORKERS):
     """Compute and save the motion energy trace of a recording. Returns None if the recording has no video, or if
     another process is computing it.
     setup: Setup.PINNACLE (path: EDF folder) or Setup.LNCM (path: parent of the session folder)
-    video_dir: folder of the vEEG recordings (Pinnacle), default: the EDF folder"""
+    video_dir: folder of the vEEG recordings (Pinnacle), default: LoadVEEG.default_video_dir(path)"""
     setup = Setup(setup)
     if is_running(setup, path, prefix):
         lprint(None, f'Motion energy of {prefix} is being computed by another process')
@@ -238,7 +238,7 @@ def pull_motion(setup, path, prefix, video_dir=None, n_workers=N_WORKERS):
     try:
         if setup == Setup.LNCM:
             return pull_bruker_motion(path, prefix, n_workers)
-        video_dir = path if video_dir is None else video_dir
+        video_dir = LoadVEEG.default_video_dir(path) if video_dir is None else video_dir
         edf = ReadEDF.EDF(path, prefix)
         vmap = LoadVEEG.video_map_for_edf(edf, video_dir, os.path.join(path, prefix + '_video_map.csv'))
         if vmap is None:

@@ -67,7 +67,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.separator = QLabel("<hr>")
         self.viewer_on = True
         self.unsaved_changes = 0
-        self.settings['video_dir'] = None  # folder of the vEEG recordings, default: the EEG folder
+        self.settings['video_dir'] = None  # folder of the vEEG recordings, default: LoadVEEG.default_video_dir
         if self.setup == Setup.PINNACLE:
             self.settings['rec_suffix'] = '_seizure_times.xlsx'
             self.settings['pardir'] = 'D:/Shares/Data/_Processed/EEG/'

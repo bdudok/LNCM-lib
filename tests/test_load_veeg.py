@@ -133,3 +133,9 @@ def test_video_map_for_edf_in_another_folder(tmp_path):
     loaded = LoadVEEG.video_map_for_edf(edf, str(proc), fn)
     assert [f['name'] for f in loaded['files']] == [name]
     assert os.path.exists(os.path.join(proc, loaded['files'][0]['name']))
+
+
+def test_default_video_dir():
+    assert LoadVEEG.default_video_dir('/data/_Processed/EEG/Dreadd_2026/BL6-151') == \
+        os.path.join('/data', '_RawData', 'EEG', 'Dreadd_2026', 'BL6-151')
+    assert LoadVEEG.default_video_dir('/data/other/EEG') == '/data/other/EEG'

@@ -34,7 +34,7 @@ class SzReviewData:
 
     def __init__(self, path, prefix, ch, tag=None, setup=Setup.PINNACLE, skip_gamma=False, video_dir=None,
                  pull_motion=False):
-        '''video_dir: folder of the vEEG recordings (Pinnacle setup), default: the EEG folder
+        '''video_dir: folder of the vEEG recordings (Pinnacle setup), default: LoadVEEG.default_video_dir(path)
         pull_motion: if the motion energy trace is not saved yet, start computing it in the background (it is shown
             when the recording is opened next time)'''
         self.path = path
@@ -42,7 +42,7 @@ class SzReviewData:
         self.ch = ch
         self.tag = tag
         self.setup = Setup(setup)
-        self.video_dir = path if video_dir is None else video_dir
+        self.video_dir = LoadVEEG.default_video_dir(path) if video_dir is None else video_dir
         self.video_map = None
         self.pull_motion = pull_motion
         self.load_data(skip_gamma)

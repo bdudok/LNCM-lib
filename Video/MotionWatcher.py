@@ -41,7 +41,7 @@ def watch(eeg_dirs, video_dir=None, recorded_after=None, interval_min=10, settle
           n_workers=N_WORKERS):
     """
     eeg_dirs: folders of Pinnacle EDF files
-    video_dir: folder of the vEEG recordings, default: the folder of each EDF (as in the curation GUI)
+    video_dir: folder of the vEEG recordings, default: each EDF's folder in _RawData (as in the curation GUI)
     recorded_after: datetime; EDFs that start earlier are skipped. None: no limit
     interval_min: time between scans of the folders
     """
