@@ -54,7 +54,7 @@ def pull_motion_energy(vid_fn, output_fn, crop=None, keep_map=False, save_previe
     lprint(None, f'Reading {n_frames} frames of {w} * {h} video')
     assert crop[1] <= w and crop[3] <= h, str(crop) + str(frame.shape)
     while frame is not None:
-        IM = cv2.cvtColor(frame[crop[0]:crop[1], crop[2]:crop[3]], cv2.COLOR_BGR2GRAY)
+        IM = cv2.cvtColor(frame[crop[2]:crop[3], crop[0]:crop[1]], cv2.COLOR_BGR2GRAY)  # rows: y, columns: x
         # compute mm
         # downsample IM
         IM = cv2.resize(IM, (hw, hh), interpolation=cv2.INTER_AREA).astype('float')
