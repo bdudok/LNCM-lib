@@ -1,5 +1,5 @@
 """Watch the EEG folders and pull the motion energy trace of new Pinnacle EDF files, so the seizure detection and
-curation GUIs show it the first time a recording is opened. Run it with GUIs/launch_MotionEnergyWatcher.py.
+curation GUIs show it the first time a recording is opened. Run it with Video/launch_MotionEnergyWatcher.py.
 
 Each .edf in the EEG folders (searched recursively) without <prefix>_motion_energy.npy is processed once it has not
 been modified for settle_h hours: the video files rotate every hour, so by then the file covering the end of the EDF

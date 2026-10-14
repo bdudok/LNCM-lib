@@ -1,4 +1,8 @@
 import datetime
+import os
+
+# OpenCV builds without cv2.utils.logging (conda-forge 4.12) warn on every vEEG frame; set before cv2 is imported
+os.environ.setdefault('OPENCV_LOG_LEVEL', 'ERROR')
 
 from Video.MotionWatcher import watch
 
@@ -14,4 +18,4 @@ video_dir = None  # folder of the vEEG recordings; None: each EDF's folder with 
 recorded_after = datetime.datetime(2026, 10, 9)
 
 if __name__ == '__main__':
-    watch(eeg_dirs=eeg_dirs, video_dir=video_dir, recorded_after=recorded_after, interval_min=10)
+    watch(eeg_dirs=eeg_dirs, video_dir=video_dir, recorded_after=recorded_after, interval_min=60)
