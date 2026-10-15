@@ -133,6 +133,7 @@ DATA_DIR = Path(os.environ.get('LNCM_TEST_DATA', '/test_data'))
 OPTO_PREFIX = 'Sncg248_2026-10-01_CRISPR_opto_vehicle_085'
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not (DATA_DIR / '_Processed' / OPTO_PREFIX).exists(), reason='test data not found')
 def test_pull_and_fingerprint(tmp_path):
     '''pulled traces are saved with a fingerprint; loading them with another setting raises'''

@@ -82,6 +82,7 @@ def trace_tags(prefix):
                   if f.startswith(start) and f.endswith(end))
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not REAL_SESSIONS, reason=f'test data not found in {REAL_PROCPATH}')
 @pytest.mark.parametrize('prefix', REAL_SESSIONS)
 def test_real_session_loads_the_same_from_each_path_form(prefix):
@@ -94,6 +95,7 @@ def test_real_session_loads_the_same_from_each_path_form(prefix):
         numpy.testing.assert_array_equal(a.pos.speed, sessions[0].pos.speed)
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not REAL_SESSIONS, reason=f'test data not found in {REAL_PROCPATH}')
 @pytest.mark.parametrize('prefix', REAL_SESSIONS)
 def test_real_movie_files_found(prefix):

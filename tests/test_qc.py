@@ -15,6 +15,7 @@ PROCPATH = Path(os.environ.get('LNCM_TEST_DATA', DEFAULT_DATA_DIR)) / '_Processe
 PREFIX = 'BL6-47_2025-10-09_PlaceField_087'
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not (PROCPATH / PREFIX).exists(), reason=f'test data not found in {PROCPATH}')
 def test_qc_dual_channel():
     single = [ImagingSession(PROCPATH, PREFIX, tag='SLROI', ch=ch).qc() for ch in (0, 1)]

@@ -37,8 +37,9 @@ SESSIONS = {
              'traces': ['trace', 'rel', 'ntr', 'smtr']}),
 }
 
-pytestmark = pytest.mark.skipif(not all((PROCPATH / prefix).exists() for prefix, _, _ in SESSIONS.values()),
-                                reason=f'test data not found in {DATA_DIR}')
+pytestmark = [pytest.mark.slow,
+              pytest.mark.skipif(not all((PROCPATH / prefix).exists() for prefix, _, _ in SESSIONS.values()),
+                                 reason=f'test data not found in {DATA_DIR}')]
 
 
 @pytest.fixture(scope='module')

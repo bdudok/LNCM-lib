@@ -32,8 +32,9 @@ DB_ENTRY = DB_FOLDER / f'{PREFIX}_baserow_entry.pkl'
 DB_MOUSE = DB_FOLDER / f'{PREFIX}_baserow_mouse.json'
 LEAN_CONFIG = Path(__file__).resolve().parents[1] / 'NWB_converter' / 'export_config_template_2ch-lean.yaml'
 
-pytestmark = pytest.mark.skipif(not all(p.exists() for p in (PROCPATH, RAWPATH, DB_ENTRY, DB_MOUSE)),
-                                reason=f'test data not found in {DATA_DIR}')
+pytestmark = [pytest.mark.slow,
+              pytest.mark.skipif(not all(p.exists() for p in (PROCPATH, RAWPATH, DB_ENTRY, DB_MOUSE)),
+                                 reason=f'test data not found in {DATA_DIR}')]
 
 
 @pytest.fixture(scope='module')
