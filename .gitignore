@@ -254,3 +254,6 @@ fabric.properties
 .idea/inspectionProfiles/profiles_settings.xml
 .idea/vcs.xml
 .idea/
+
+# uv env (when built inside the repo)
+.venv/

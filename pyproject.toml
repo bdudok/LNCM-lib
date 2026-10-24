@@ -1,0 +1,58 @@
+# Environment definition for the lncm env (uv). Setup steps: envs/ENV_SETUP_README.txt
+# LNCM-lib is not installed as a package; scripts add the repo to the path as before.
+[project]
+name = "lncm-lib"
+version = "0"
+requires-python = "==3.11.*"
+dependencies = [
+    "numpy>=2",
+    "scipy",
+    "pandas",
+    "pyarrow",
+    "h5py",
+    "numba",
+    "scikit-image>=0.25",
+    "scikit-learn",
+    "statsmodels",
+    "pygam",
+    "opencv-python",
+    "tifffile>=2025",
+    "shapely",
+    "lsq-ellipse",
+    "pyedflib",
+    "pynwb",
+    "openpyxl",
+    "xlrd",
+    "jinja2",
+    "requests",
+    "matplotlib",
+    "PySide6",
+    "pyqtgraph",
+    "jupyter",
+    "pytest",
+    "pandas-stubs",
+    "scipy-stubs",
+]
+
+[project.optional-dependencies]
+# motion correction (Proc2P/Analysis/S2P_template); install with: uv sync --extra suite2p
+suite2p = [
+    "suite2p[gui]==1.1.0",
+    "torch",
+    "torchvision",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
+# cellpose requires opencv-python-headless, which installs the same cv2 module as opencv-python
+override-dependencies = ["opencv-python-headless; sys_platform == 'never'"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

@@ -1,5 +1,21 @@
 # Description of installation process
 
+# lncm env with uv (being tested, replaces the conda lncm and suite2p envs below)
+The env is defined in pyproject.toml and pinned in uv.lock (both in the repo root). Each user builds their own env.
+In PowerShell:
+1. Install uv (once):
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+   then open a new PowerShell window.
+2. Build the env outside the repo (uv also downloads Python 3.11). Leave out "--extra suite2p" if you don't run motion correction:
+    cd $HOME\PycharmProjects\LNCM-lib
+    $env:UV_PROJECT_ENVIRONMENT = "$HOME\envs\lncm"
+    uv sync --locked --extra suite2p
+   Run the same two lines (after cd) again to update the env after uv.lock changes.
+3. In PyCharm, add $HOME\envs\lncm\Scripts\python.exe as an existing interpreter and select it for the projects.
+   Motion correction scripts run in this env, no separate suite2p interpreter is needed.
+Qt: LNCM-lib GUIs use PySide6. suite2p's GUI (python -m suite2p) uses PyQt6, which comes with suite2p[gui].
+To change packages, edit pyproject.toml and run "uv lock", then commit both files.
+
 # To create the main env used in most analysis GUIs and scripts ("lncm"), use Python 3.11 and stick to conda-forge channel.
 
 conda create --name lncm python=3.11 -c conda-forge --strict-channel-priority
