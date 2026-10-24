@@ -2,10 +2,11 @@ import os
 import json
 
 # plotting
+import PySide6  # import before matplotlib and pyqtgraph so both use PySide6
 import matplotlib
 
 matplotlib.use('QtAgg')
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib import pyplot as plt
 
 plt.rcParams['font.size'] = 8
