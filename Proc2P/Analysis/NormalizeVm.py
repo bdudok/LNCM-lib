@@ -153,7 +153,7 @@ class Worker(Process):
 
     def run(self):
         for data in iter(self.queue.get, None):
-            if type(data[-1]) == dict:
+            if type(data[-1]) is dict:
                 path, prefix, tag, overwrite, kwargs = data
             else:
                 path, prefix, tag, overwrite = data

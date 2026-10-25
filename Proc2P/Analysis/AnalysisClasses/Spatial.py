@@ -560,10 +560,10 @@ class Spatial:
             Y = pull_session.getparam(param)
             masks = self.get_event_mask(w, overwrite=overwrite)
             ba = numpy.empty((len(masks), 2 * w + 1))
-            for i, l in enumerate(masks):
-                ind = l[:w * 2].astype(numpy.int64)
-                ba[i, -1] = l[-2]
-                c = pull_cells[int(l[-1])]
+            for i, row in enumerate(masks):
+                ind = row[:w * 2].astype(numpy.int64)
+                ba[i, -1] = row[-2]
+                c = pull_cells[int(row[-1])]
                 ba[i, :-1] = Y[c, ind]
             numpy.save(rdfn, ba)
         self.cache['events-' + save_tag] = ba

@@ -49,10 +49,10 @@ def get_raw_movies(info):
                 sz = m.sz
                 height, width = sz
                 data = numpy.empty((n_frames, height, width), dtype=m.data.dtype)
-            l = min(m.nframes, n_frames - i) # to discard spurious frames from malformed tif exports
-            # print(data.shape, i, l, m.data.shape)
-            data[i:i + l] = m.data[:l]
-            i += l
+            n_take = min(m.nframes, n_frames - i) # to discard spurious frames from malformed tif exports
+            # print(data.shape, i, n_take, m.data.shape)
+            data[i:i + n_take] = m.data[:n_take]
+            i += n_take
         movies[channel_name] = data
         sz = None
     return movies

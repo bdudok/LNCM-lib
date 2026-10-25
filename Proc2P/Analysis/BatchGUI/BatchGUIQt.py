@@ -271,7 +271,7 @@ class GUI_main(QtWidgets.QMainWindow):
         tag = self.tag_label.text()
         try:
             SessionGUI(self.wdir, self.active_prefix[0], tag)
-        except:
+        except Exception:
             traces = get_processed_tags(self.wdir, prefix)
             traces = ', '.join(set([x[0] for x in traces]))
             if tag not in traces:
@@ -344,7 +344,7 @@ class GUI_main(QtWidgets.QMainWindow):
             w = editors[fname]
             if ftype in (int, float):
                 setattr(cfg, fname, ftype(w.value()))
-            elif ftype == bool:
+            elif ftype is bool:
                 setattr(cfg, fname, w.isChecked())
             elif isinstance(ftype, type) and issubclass(ftype, Enum):
                 setattr(cfg, fname, ftype[w.currentText()])

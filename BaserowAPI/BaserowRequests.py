@@ -27,7 +27,7 @@ class GetSessions:
             item = self.get_session(prefix).iloc[0]
             # we have to do it because prefix is not always correct for mouse info
         a_tag = item['Mouse.ID']
-        if type(a_tag) != str:  # if it's a fied from a baserow web export
+        if type(a_tag) is not str:  # if it's a fied from a baserow web export
             a_tag = a_tag[0]['value']
         elif '{' in a_tag:  # if field is from baserow api-generated export
             a_tag = a_tag[2:-2].split(',')[1].split(':')[1].strip(' }]"' + "'")
@@ -156,7 +156,7 @@ class GetSessions:
                 continue
             if key in config["select_fields"]:
                 if value is not None:
-                    if t == list:
+                    if t is list:
                         out_dict[key] = [x['value'] for x in value]
                     else:
                         out_dict[key] = value[
@@ -171,7 +171,7 @@ class GetSessions:
             try:
                 json.dumps({key: value})
                 out_dict[key] = value
-            except:
+            except Exception:
                 print(f'not JSON serializable: {key}: {value}')
                 print(f'Value type is: {t}')
         return out_dict
@@ -187,7 +187,7 @@ class GetSessions:
         '''
         config_json = item["Stim.Config"]
         stim_keys = 'vnlp'
-        if config_json is not None and type(config_json) != float and len(config_json):
+        if config_json is not None and type(config_json) is not float and len(config_json):
             if all([x in config_json for x in stim_keys]):
                 config = json.loads(config_json)
                 if config["v"] == 'g':

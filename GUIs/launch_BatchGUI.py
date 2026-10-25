@@ -9,6 +9,6 @@ if __name__ == '__main__':
     freeze_support()
     try:
         set_start_method('spawn')
-    except:
+    except Exception:
         pass
     BatchGUIQt.launch_GUI(Q_manager=BatchGUI_Q())

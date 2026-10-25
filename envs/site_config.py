@@ -29,7 +29,7 @@ def _load_config(fname) -> SiteConfig:
     version_key = 'version_specific'
     config_dict = {}
     for key, value in data.items():
-        if type(value) == dict and version_key in value:
+        if type(value) is dict and version_key in value:
             config_dict[key] = value[version_key][str(v.minor)]
         else:
             config_dict[key] = value

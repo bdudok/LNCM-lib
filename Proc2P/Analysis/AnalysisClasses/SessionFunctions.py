@@ -87,7 +87,7 @@ def pull_image_with_ROI(session:ImagingSession, image, c, show=False):
     #trim to image size
     try:
         session.rois.load_image()
-    except:
+    except Exception:
         print('Failed loading default registered image, retrying GEVIReg')
         session.rois.load_image(source=Source.GEVIReg)
     poly = RoiEditor.trim_coords(numpy.array(poly), session.rois.image.info['sz'])

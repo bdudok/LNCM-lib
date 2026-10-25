@@ -2,7 +2,6 @@ import os
 import json
 
 # plotting
-import PySide6  # import before matplotlib so it uses PySide6
 import matplotlib
 
 matplotlib.use('QtAgg')
@@ -15,13 +14,11 @@ import numpy
 
 # GUI
 import sys
-from PySide6 import QtGui, QtCore, QtWidgets
+from PySide6 import QtGui, QtWidgets
 from PySide6.QtWidgets import (QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QGroupBox, QListWidget,
                                     QAbstractItemView, QLineEdit, QCheckBox)
 
 # Workflow Specific functions
-from LFP.SpikeDet import SpikesPower
-from LFP.SzDet import InstRate
 
 # Readers
 from Proc2P.Bruker import LoadEphys
@@ -36,7 +33,7 @@ class GUI_main(QtWidgets.QMainWindow):
                  defaults=None):
         super().__init__()
 
-        self.setWindowTitle(f'Detect spikes and seizures')
+        self.setWindowTitle('Detect spikes and seizures')
         self.setGeometry(30, 60, 3200, 1600)  # Left, top, width, height.
         self.movie_size = (1024, 768)
         self.app = app
@@ -311,7 +308,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         try:
             self.alignment = rsync.Rsync_aligner(vttl, ttl)
-        except:
+        except Exception:
             self.alignment = None
 
         eegdur = len(self.edf.trace) / self.edf.fs
@@ -403,9 +400,6 @@ class GUI_main(QtWidgets.QMainWindow):
         # get data
         #TODO load sz burden and sz times if available. also load opts from json
         # sz_times = sz_times_raw.astype('int32')
-        framesize = 50#int(self.get_field('SzDet.Framesize'))
-        Xrate = framesize/1000
-        X = numpy.arange(0, len(self.edf.trace) * Xrate, Xrate)
         time_xvals = numpy.arange(0, len(self.edf.trace)) / self.edf.fs
 
         #LFP
@@ -480,7 +474,7 @@ def launch_GUI(*args, **kwargs):
     app.setStyle('Fusion')
     font = QtGui.QFont()
     app.setFont(font)
-    gui_main = GUI_main(app, *args, **kwargs)
+    gui_main = GUI_main(app, *args, **kwargs)  # noqa: F841 - keeps the window referenced while the app runs
     sys.exit(app.exec())
 
 

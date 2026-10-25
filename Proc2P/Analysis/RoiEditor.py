@@ -8,7 +8,7 @@ from pathlib import Path
 import scipy
 import cv2
 import numpy
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon
 import sys
 
 if sys.version_info < (3, 7):
@@ -159,11 +159,12 @@ class RoiEditor(object):
         coords[:, 1] = numpy.minimum(coords[:, 1], image_shape[0] - 1)
         return coords
 
-    def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config={}, exclude_opto=True,
+    def autodetect(self, chunk_n=100, chunk_size=50, approach=('iPC', 'PC', 'IN'), config=None, exclude_opto=True,
                    log=None):
         if not sima_available:
             print('For using segmentation, run using 3.6 env (2pcode36)')
             raise EnvironmentError('SIMA not compatible with current Python version.')
+        config = config or {}
         approach = list(approach)
         prefix = self.prefix
         im = self.img.image
@@ -189,12 +190,12 @@ class RoiEditor(object):
             force_re = True
             try:
                 s1 = int(config['Start'])
-            except:
+            except Exception:
                 s1 = 0
                 print(prefix, 'Start defaulting to 0, got', config['Start'])
             try:
                 s2 = int(config['Stop'])
-            except:
+            except Exception:
                 s2 = im.nframes
             span = s1, s2
         else:
@@ -274,7 +275,7 @@ class RoiEditor(object):
             itemtag = item
             all_def = True
             for pname, pval in zip(pnames, pdefs):
-                if not pname in config:
+                if pname not in config:
                     config[pname] = pval
                 if not config[pname] == pval:
                     all_def = False
@@ -303,9 +304,9 @@ class RoiEditor(object):
                     lprint(self, 'CA1PC-i crashed for', prefix, logger=log)
             if 'IN' in item or 'STICA' in item:
                 # default params if not specified
-                if not 'comps' in config:
+                if 'comps' not in config:
                     config['comps'] = 75
-                if not 'mu' in config:
+                if 'mu' not in config:
                     config['mu'] = 0.1
                 stica_approach = sima.segment.STICA(channel=ch, components=int(config['comps']), mu=float(config['mu']),
                                                     verbose=False)
@@ -322,7 +323,7 @@ class RoiEditor(object):
         for fn in (dsname, idsname):
             try:
                 shutil.rmtree(fn)
-            except:
+            except Exception:
                 pass
 
     def saveauto(self, input_rois, tag, x0, y0, filter=None):

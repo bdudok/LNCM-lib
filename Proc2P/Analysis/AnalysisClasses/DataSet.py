@@ -322,7 +322,7 @@ class DataSet:
         self.df.at[index, key] = value
 
     def listify(self, prefix):
-        if not type(prefix) == list:
+        if type(prefix) is not list:
             list_prefix = [prefix, ]
         else:
             list_prefix = list(set(prefix))
@@ -359,7 +359,7 @@ class DataSet:
             self.check_key(cellfield, value=json.dumps(None))
             clist = cells
         else:
-            if cells == None:
+            if cells is None:
                 clist = cells
             else:
                 old_val = self.get_field(prefix, cellfield)
@@ -367,14 +367,14 @@ class DataSet:
                     old_list = json.loads(old_val)
                 else:
                     old_list = None
-                if old_list == None:
+                if old_list is None:
                     clist = cells
-                elif type(old_list) == list:
+                elif type(old_list) is list:
                     old_list.extend(cells)
                     clist = old_list
                 else:
                     raise ValueError(f'Not sure what to do with this cell list: {cells}, current is {old_list}')
-        if type(clist) == list:
+        if type(clist) is list:
             clist = [int(x) for x in set(clist)]
             clist.sort()
         self.set_field(prefix, cellfield, json.dumps(clist))
@@ -398,14 +398,14 @@ class DataSet:
             excl = rets['Excl']
             if incl is None:
                 return (incl, excl)  # we don't have the max n of cells, need to look up externally
-            if type(excl) == list:
+            if type(excl) is list:
                 return [c for c in incl if c not in excl]
             else:
                 return incl
 
     def get_cells(self, *args, **kwargs):
         cells = self._get_cells(*args, **kwargs)
-        if not type(cells) is list:
+        if type(cells) is not list:
             return None
         if not len(cells):
             return None

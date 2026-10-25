@@ -453,7 +453,7 @@ class PSTH:
                             try:
                                 if numpy.isnan(self.group_dict[i][key]):
                                     indices.append(i)
-                            except:
+                            except Exception:
                                 pass
                         elif self.group_dict[i][key] == value:
                             indices.append(i)
@@ -549,7 +549,7 @@ class PSTH:
         name_list = list(self.group_df[group_name].unique())
         try:
             name_list.sort()
-        except:
+        except Exception:
             pass
         return name_list
 

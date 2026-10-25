@@ -2,7 +2,7 @@ import os, pandas
 import numpy
 try:
     from ellipse import LsqEllipse
-except:
+except Exception:
     print('Ellipse fitting not available, use: conda install lsq-ellipse before processing pupil data')
 
 from Video.LoadAvi import LoadAvi

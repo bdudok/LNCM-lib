@@ -71,7 +71,7 @@ def compute_sensitivity(movie: np.array, count_weight_gamma=0.2) -> dict:
     bins = slice(max(bins.stop * 3 // 100, bins.start), bins.stop)
     assert (
             bins.stop - bins.start > 100
-    ), f"The image does not have a sufficient range of intensities to compute the noise transfer function."
+    ), "The image does not have a sufficient range of intensities to compute the noise transfer function."
 
     counts = counts[bins]
     idx = (intensity >= bins.start) & (intensity < bins.stop)
@@ -214,7 +214,7 @@ class ExportPhotonTransfer:
             _ = ax.imshow(im, vmin=0, vmax=mx, cmap='magma')  # cmap=cc.cm.CET_D13)
             plt.colorbar(_, ax=ax)
             ax.axis(False)
-            ax.set_title('Quantum flux\nphotons / pixel / frame');
+            ax.set_title('Quantum flux\nphotons / pixel / frame')
             label = "D"
             ax.text(-0.1, 1.15, label, transform=ax.transAxes,
                     fontsize=14, fontweight='bold', va='top', ha='right')

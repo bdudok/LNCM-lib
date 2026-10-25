@@ -194,8 +194,8 @@ class SzReviewData:
                                           index=[sznames])
         # load previous exclusions
         fn = self.get_fn('save')
-        truthy_values = {1, True, 'TRUE'}
-        falsey_values = {0, False, 'FALSE'}
+        truthy_values = {True, 'TRUE'}
+        falsey_values = {False, 'FALSE'}
         self.output_sz["Included"] = pandas.Series(
             pandas.NA, index=self.output_sz.index, dtype="boolean")
         if os.path.exists(fn):

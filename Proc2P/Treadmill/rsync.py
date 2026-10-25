@@ -147,7 +147,7 @@ class Rsync_aligner():
 
 # --------------------------------------------------------------------------
 
-def simulate_pulses(n_pulse=1000,interval=[100,1900], noise_SD=3, missing_pulses=False):
+def simulate_pulses(n_pulse=1000,interval=(100, 1900), noise_SD=3, missing_pulses=False):
     ''' Simulate a pair of pulse trains timestamps with drift between their timings.'''
     pulse_times_A = np.cumsum(np.random.randint(*interval, size=n_pulse)).astype(float)
     pulse_times_B = pulse_times_A + np.cumsum(np.random.normal(scale=noise_SD, size=n_pulse))

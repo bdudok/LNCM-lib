@@ -103,7 +103,7 @@ class GUI_main(QtWidgets.QMainWindow):
             else:
                 try:
                     f2 = ps.find(f'_{use_tag}_')
-                except:
+                except Exception:
                     raise ValueError(f'Tag "{use_tag}" not in the filename')
                 return ps[:f2], ps[f1 + len(s1):][0], use_tag
 
@@ -572,7 +572,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.flag_unsaved()
         sz = self.szdat.get_sz(self.active_sz, full=True)
         is_sz = self.check_true(sz["Included"], False)  # value can be missing
-        if is_sz and not (sz["Included"] is True):  # set to reviewed
+        if is_sz and sz["Included"] is not True:  # set to reviewed
             self.szdat.set_sz(self.active_sz, value=True)
         is_iis =  self.check_true(sz["Interictal"])
         if is_sz and not is_iis:  # toggle ii

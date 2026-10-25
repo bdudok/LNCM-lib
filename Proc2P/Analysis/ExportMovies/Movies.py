@@ -418,9 +418,9 @@ class Sliding_LFP(Panel):
         nsamples = len(trace)
         trace -= trace.mean()
         trace /= numpy.percentile(numpy.absolute(trace), 99) * 1.5
-        l = self.p[2]
+        width = self.p[2]
         session_duration = len(trace) / self.samplerate
-        session_pixels = round((session_duration / (2 * self.length)) * l * self.nyquistrate)
+        session_pixels = round((session_duration / (2 * self.length)) * width * self.nyquistrate)
         factor = len(trace) / session_pixels
         while factor > 10:
             trace = decimate(trace, 10)
@@ -436,12 +436,12 @@ class Sliding_LFP(Panel):
         t1 = int(min(sample + self.halfscreen, len(self.plot_y)))
 
         h = int(self.p[3] / 2)
-        l = self.p[2]
-        xmin = l / 2 - (sample - t0) / self.nyquistrate
-        xmax = l / 2 + (t1 - sample) / self.nyquistrate
+        width = self.p[2]
+        xmin = width / 2 - (sample - t0) / self.nyquistrate
+        xmax = width / 2 + (t1 - sample) / self.nyquistrate
         x = numpy.linspace(xmin, xmax, t1 - t0)
-        self.im = numpy.ones((2 * h, l, 3), dtype=numpy.uint8) * 255
-        self.im[:, l // 2, :] = 0
+        self.im = numpy.ones((2 * h, width, 3), dtype=numpy.uint8) * 255
+        self.im[:, width // 2, :] = 0
         y = self.plot_y[t0:t1] * h + h
         self.pts = numpy.vstack((x, y)).astype('int32').T
         cv2.polylines(self.im, [self.pts], isClosed=False, color=self.color, lineType=8)

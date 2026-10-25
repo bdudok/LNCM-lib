@@ -187,7 +187,7 @@ if __name__ == '__main__':
     freeze_support()
     try:
         set_start_method('spawn')
-    except:
+    except Exception:
         pass
     Q = BatchGUI_Q()
     for i in range(5):

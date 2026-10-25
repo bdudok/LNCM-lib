@@ -1,7 +1,6 @@
 from pathlib import Path
 import numpy
-import multiprocessing
-from multiprocessing import Process, Queue
+from multiprocessing import Process
 import os
 import json
 import pandas
@@ -11,9 +10,6 @@ from Proc2P.utils import lprint, gapless, outlier_indices, logger
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
-import warnings
-from Proc2P.Bruker.ConfigVars import CF
-from matplotlib import pyplot as plt
 from Proc2P.Bruker.PreProc import SessionInfo
 from dataclasses import dataclass
 
@@ -66,7 +62,7 @@ class CaTrace(object):
             self.is_dual = True
         else:
             lprint(self, 'Channel not parsed: ' + ch)
-            assert False
+            raise ValueError('Channel not parsed: ' + ch)
         self.ch = ch
         self.tag = tag
         self.pf = self.opPath / f'{prefix}_trace_{tag}-ch{ch}'  # folder name
@@ -138,7 +134,7 @@ class CaTrace(object):
         self.computed_cells = 0
         try:
             self.movement = gapless(self.sync.load('speed'))
-        except:
+        except Exception:
             lprint(self, 'movement not found', logger=self.log)
             self.movement = numpy.zeros(self.frames, dtype=numpy.bool)
         # save outlier data points to exclude from analysis:
@@ -168,7 +164,6 @@ class CaTrace(object):
                 self.ignore_saturation, self.find_immobile_baseline)
 
     def unpack_data(self, data):
-        channel = 0
         c, data = data
         if self.verbose:
             print('Saving cell ' + str(c))
@@ -225,7 +220,7 @@ class CaTrace(object):
         if not os.path.exists(self.pf):
             self.pf = self.opPath / f'{self.prefix}_trace_{self.tag}'
         if not os.path.exists(self.pf):
-            if self.tag == None:
+            if self.tag is None:
                 self.tag = ''
             pf_try = [self.tag + '.np', self.tag + '-ch0.np', '1' + '.np', '1' + '-ch0.np', self.tag + 'dual.np',
                       '1-dual.np']

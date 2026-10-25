@@ -2,7 +2,6 @@ import numpy, scipy, os, pandas
 from matplotlib import pyplot as plt
 # from LFP.EphysFunctions import butter_bandpass_filter
 from scipy.signal import bessel, hilbert, decimate, sosfiltfilt
-from scipy.io import savemat
 from datetime import datetime
 from matplotlib.widgets import RectangleSelector
 from PlotTools.Formatting import strip_ax
@@ -401,7 +400,7 @@ class Ripples(object):
         try:  # to avoid displaying error message when figure closed by clicking the x
             fig.waitforbuttonpress()
             return self.cursor.pressed
-        except:
+        except Exception:
             self.exit = True
 
     def line_select_callback(self, eclick, erelease):
@@ -450,7 +449,7 @@ class Ripples(object):
             self.redraw = False
             try:  # to avoid displaying error message when figure closed by clicking the x
                 fig.waitforbuttonpress()
-            except:
+            except Exception:
                 self.exit = True
             bp = self.cursor.pressed
             if bp == 'q':
@@ -498,20 +497,20 @@ class Ripples(object):
             bp = self.show_event(i, j)
             if bp == 'q':
                 self.exit = True
-                for l in lines0:
-                    l.remove()
-                for l in lines1:
-                    l.remove()
+                for line in lines0:
+                    line.remove()
+                for line in lines1:
+                    line.remove()
             elif bp == 'left':
                 i = max(0, i - d)
                 j = max(0, j - d)
             elif bp == 'right':
                 i = min(len(self.trace), i + d)
                 j = min(len(self.trace), j + d)
-            for l in lines0:
-                l.set_xdata(converter(i))
-            for l in lines1:
-                l.set_xdata(converter(j))
+            for line in lines0:
+                line.set_xdata(converter(i))
+            for line in lines1:
+                line.set_xdata(converter(j))
             self.cursor.pressed = None
 
     def enum_ripples(self, order='power', no_save=False):

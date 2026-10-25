@@ -1,6 +1,6 @@
 import numpy
 from Proc2P.Analysis.LoadPolys import LoadImage, load_roi_file
-from Proc2P.Bruker.LoadMovie import LoadMovie, get_raw_movies
+from Proc2P.Bruker.LoadMovie import get_raw_movies
 from Proc2P.Bruker.LoadRegistered import Source, gevireg_version
 from Proc2P.Bruker.PreProc import SessionInfo
 import matplotlib.path as mplpath
@@ -8,7 +8,6 @@ from statsmodels.stats.weightstats import DescrStatsW
 import os
 import json
 from multiprocessing import Process
-from time import time
 import datetime
 from Proc2P.utils import logger, lprint
 from dataclasses import dataclass
@@ -42,7 +41,7 @@ class Worker(Process):
                         try:
                             if f[-6:-4] != '-1':
                                 exs.append(int(f[:-4].split('_')[-1]))
-                        except:
+                        except Exception:
                             pass
                 tag = str(max(exs))
             else:

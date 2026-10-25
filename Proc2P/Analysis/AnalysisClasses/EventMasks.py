@@ -66,7 +66,7 @@ def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_secon
                 mask[ri, w + k] = numpy.nan
                 k += 1
     elif mask_stim is not None:
-        if not type(mask_stim) == tuple:
+        if type(mask_stim) is not tuple:
             mask_stim = (0, mask_stim)
         mask[:, w+int(mask_stim[0]):w+int(mask_stim[1])+1] = numpy.nan
     return event, mask
@@ -106,7 +106,6 @@ def Seizures(a, w, ch=1, eps=1, min_dur=5, off=False):
     spiketag = a.kwargs.get('spiketag', None)
     tag_str = '' if spiketag in (None, 'None') else f'_{spiketag}'
     df = read_excel(a.get_file_with_suffix(f'{tag_str}_Ch{ch}_seizure_times.xlsx'))
-    st = df['Sz.Start(s)'].values
     event_frames = []
     for i, sz in df.iterrows():
         t0 = sz['Sz.Start(s)']
@@ -292,9 +291,9 @@ def all_ripples_immobility(a, w, cluster_eps = 1):
         i1 = min(last_frame, a.ca.frames - trim)
         try:
             m = a.pos.movement[i0:i1]
-        except:
+        except Exception:
             print(ri, current_frame, w, event_number)
-            assert False
+            raise
         # check if mouse was still all the time during the pre period and find last movement if not.
         if numpy.any(m[:im - gap]):
             w0 = gap + numpy.argmax(m[:im - gap][::-1])
@@ -310,9 +309,9 @@ def all_ripples_immobility(a, w, cluster_eps = 1):
             continue
         try:
             mask[ri, w - w0:w + w1] = numpy.arange(current_frame - w0, current_frame + w1)
-        except:
+        except Exception:
             print(ri, current_frame, w, w0, w1, mask.shape)
-            assert False
+            raise
         events[ri] = current_frame
 
     return events, mask

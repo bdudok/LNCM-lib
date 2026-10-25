@@ -65,7 +65,7 @@ reg['do_bidiphase'] = True  # whether or not to compute and correct bidirectiona
 reg['two_step_registration'] = True  # run registration twice
 
 # sensor specific settings
-if preset == None:
+if preset is None:
     pass
 elif preset == 'Calcium':
     reg['nonrigid'] = True

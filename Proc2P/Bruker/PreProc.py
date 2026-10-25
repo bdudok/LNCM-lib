@@ -173,7 +173,6 @@ class PreProc:
         else:
             self.opto_name = None
             self.opto_config = None
-        df = pandas.DataFrame()
         keys = ('relativeTime', 'absoluteTime')
         dfs = []
         for frame in sequence.findall('Frame'):
@@ -318,7 +317,7 @@ class PreProc:
                 ch_n = int(x)
                 if not ch_n < self.reserved_channels:
                     self.lfp_channels.append(x)
-            except:
+            except Exception:
                 pass
 
         if len(self.lfp_channels):
@@ -368,7 +367,7 @@ class PreProc:
         try:
             self.align = align = rsync.Rsync_aligner(tm_rsync, sc_rsync)
             skip = False
-        except:
+        except Exception:
             self.log('Treadmill pulse times:', tm_rsync)
             self.log('Scope pulse times:', sc_rsync)
             self.lprint(self, 'RSync align error')
@@ -380,7 +379,7 @@ class PreProc:
                 lim_sync = tm_rsync[numpy.where(tm_rsync < sc_rsync.max()+10000)]
                 self.align = align = rsync.Rsync_aligner(lim_sync, sc_rsync)
                 skip = False
-            except:
+            except Exception:
                 self.lprint(self, 'RSync align still failed')
         if not skip:
             self.frame_at_treadmill = align.B_to_A(self.frametimes * 1000)
@@ -456,7 +455,7 @@ class PreProc:
                 continue
             if key == "Stim.Config":
                 config_json = v
-                if config_json is not None and type(config_json) != float and len(config_json):
+                if config_json is not None and type(config_json) is not float and len(config_json):
                     config = json.loads(config_json)
                     for subkey, subtag in zip (('l', 'p'), ('Duration', 'Power')):
                         if subkey in config:

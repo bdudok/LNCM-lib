@@ -429,7 +429,7 @@ class GUI_main(QtWidgets.QMainWindow):
                 for i, roi in enumerate(self.polys):
                     if self.incl[self.current_key][i]:
                         if p.contains_point(mplpath.Path(roi).vertices.mean(axis=0)):
-                            if not i in rois:
+                            if i not in rois:
                                 rois.append(i)
             self.incl[self.current_key][:] = False
             self.incl[self.current_key][rois] = True
@@ -467,7 +467,7 @@ class GUI_main(QtWidgets.QMainWindow):
                 p = self.polys[i]
                 if dil:
                     p = Polygon(p).buffer(3).exterior.coords
-                if (not p in self.saved_rois) or self.addmode == AddModes.PRESERVE:
+                if (p not in self.saved_rois) or self.addmode == AddModes.PRESERVE:
                     # check if roi is inside existing roi
                     tp = mplpath.Path(p)
                     cm = tp.vertices.mean(axis=0)
@@ -558,8 +558,8 @@ class GUI_main(QtWidgets.QMainWindow):
         for slider in sliders:
             slider.setMinimum(self.size_lims[0])
             slider.setMaximum(self.size_lims[1])
-        for l, s in zip(self.size_lims, sliders):
-            s.setValue(l)
+        for lim, s in zip(self.size_lims, sliders):
+            s.setValue(lim)
 
 
 class FreehandPolygonWidget(QtWidgets.QDialog):

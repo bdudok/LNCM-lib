@@ -52,8 +52,8 @@ class Pos:
         if len(wh_notna[0]) > 10:
             pos = self.pos[wh_notna]
             laps = self.laps[wh_notna].astype('int64')
-            for l in numpy.unique(laps):
-                curr_lap = pos[laps == l]
+            for lap_n in numpy.unique(laps):
+                curr_lap = pos[laps == lap_n]
                 tdt += numpy.nan_to_num(numpy.nanmax(curr_lap) - numpy.nanmin(curr_lap))
         if numpy.isnan(tdt):
             tdt = 0
@@ -291,7 +291,7 @@ class ImagingSession(object):
     def getparam(self, param, mask_stim=None):
         opn = param
         self.disc_param = False
-        if type(param) == str:
+        if type(param) is str:
             # if param == 'spikes':
             #     param = numpy.nan_to_num(self.ca.spikes * numpy.array(self.ca.event, dtype='bool'))
             #     self.disc_param = True
@@ -342,7 +342,7 @@ class ImagingSession(object):
                 param=numpy.copy(self.ca.rel)
             else:
                 raise ValueError(f'Unknown param: {param}')
-        elif type(param) == int:
+        elif type(param) is int:
             param = self.ewma_smooth(param)
 
         pm = numpy.nanmax(param)
@@ -644,7 +644,7 @@ class ImagingSession(object):
                     self.mi[c] = mis / numpy.mean(shuff_mis)
                     self.mi_z[c] = (mis - numpy.mean(shuff_mis)) / numpy.std(shuff_mis)
                     self.statistical_is_placecell[c] = mis > numpy.nanpercentile(shuff_mis, 95)
-                except:
+                except Exception:
                     self.mi[c] = numpy.nan
                     self.mi_z[c] = numpy.nan
                     print('MI exception', self.prefix, c)
@@ -729,11 +729,11 @@ class ImagingSession(object):
                 self.bin[i] = (self.pos.relpos > i * binsize) * (self.pos.relpos < (i + 1) * binsize)
                 self.bin[i] *= self.pos.movement  ##Specify here if selective for movement
             self.perlap_fields = numpy.zeros((bins, self.ca.cells, nl))
-            for l in range(nl):
-                lap = numpy.where(self.pos.laps == l)[0]
+            for lap_n in range(nl):
+                lap = numpy.where(self.pos.laps == lap_n)[0]
                 if len(lap) > 1:
                     self.pull_means(param, (lap[0], lap[-1]))
-                    self.perlap_fields[:, :, l] = self.rates[self.pltnum]
+                    self.perlap_fields[:, :, lap_n] = self.rates[self.pltnum]
         if not silent:
             fig = plt.figure(self.pltnum)
             self.pltnum += 1
@@ -834,9 +834,9 @@ class ImagingSession(object):
         try:
             licks = licks[numpy.where(numpy.nan_to_num(licks) > 0)]
             licks = licks[numpy.where(licks < self.ca.frames)]
-        except:
+        except Exception:
             print(licks)
-            assert False
+            raise
         if len(licks):
             axl.scatter(licks / self.fps / 60, numpy.zeros(len(licks)), marker="|", c=has_rewards[licks], s=50,
                         cmap='bwr_r', label='licks')

@@ -49,8 +49,9 @@ target-version = "py311"
 extend-exclude = ["_Dependencies"]
 
 [tool.ruff.lint]
-# bugs only (pyflakes, syntax errors), no style rules; meant for changed files, not the whole repo
-select = ["F", "E9"]
+# bugs only (pyflakes, syntax errors, statement checks, a few bugbear rules), no style rules;
+# meant for changed files, not the whole repo
+select = ["F", "E9", "E7", "B006", "B033", "B011"]
 
 [tool.ruff.lint.per-file-ignores]
 # package __init__ files import names for re-export
