@@ -2,17 +2,15 @@
 
 # lncm env with uv (being tested, replaces the conda lncm and suite2p envs below)
 The env is defined in pyproject.toml and pinned in uv.lock (both in the repo root). Each user builds their own env.
-In PowerShell:
-1. Install uv (once):
+1. Install uv (once), in PowerShell:
     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-   then open a new PowerShell window.
-2. Build the env outside the repo (uv also downloads Python 3.11). Leave out "--extra suite2p" if you don't run motion correction:
-    cd $HOME\PycharmProjects\LNCM-lib
-    $env:UV_PROJECT_ENVIRONMENT = "$HOME\envs\lncm"
-    uv sync --locked --extra suite2p
-   Run the same two lines (after cd) again to update the env after uv.lock changes.
-3. In PyCharm, add $HOME\envs\lncm\Scripts\python.exe as an existing interpreter and select it for the projects.
+2. Build the env by running envs\update_env.bat (double-click, or from a new cmd/PowerShell window).
+   For motion correction (suite2p), run it once as: envs\update_env.bat suite2p
+   The env goes to N:\envs\<username>\lncm. uv's Python 3.11 goes to N:\envs\<username>\uv\python (the env needs it, don't delete it)
+   and the download cache to N:\envs\<username>\uv\cache (can be deleted).
+3. In PyCharm, add N:\envs\<username>\lncm\Scripts\python.exe as an existing interpreter and select it for the projects.
    Motion correction scripts run in this env, no separate suite2p interpreter is needed.
+4. After pulling changes to uv.lock, run envs\update_env.bat again. It keeps suite2p if the env has it, and does nothing if the env is up to date.
 Qt: LNCM-lib GUIs use PySide6. suite2p's GUI (python -m suite2p) uses PyQt6, which comes with suite2p[gui].
 To change packages, edit pyproject.toml and run "uv lock", then commit both files.
 
