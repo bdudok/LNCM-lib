@@ -1,13 +1,12 @@
 import json
 import os
-import copy
 from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy
 import pandas
 from sklearn.metrics import mutual_info_score
 # from BehaviorSession import BehaviorSession
-from Proc2P.Analysis.LoadPolys import FrameDisplay, LoadPolys
+from Proc2P.Analysis.LoadPolys import FrameDisplay
 from Proc2P.Analysis.CaTrace import CaTrace
 from Proc2P.Analysis.FitEye import FitEye
 from Proc2P.Bruker.ConfigVars import CF
@@ -16,11 +15,9 @@ from Proc2P.Bruker.LoadEphys import Ephys
 from Proc2P.Bruker.LoadRegistered import GEVIRegStatus, GEVIREG_FIXED_VERSION
 from Proc2P.Analysis.PullSignals import logged_pull_source
 from LFP import Filter
-from Proc2P.utils import outlier_indices, gapless, startstop, lprint, read_excel, strip_ax, ewma
+from Proc2P.utils import gapless, startstop, lprint, read_excel, ewma
+from PlotTools import strip_ax
 from Proc2P.Analysis.Ripples import Ripples
-import time
-from scipy import stats
-from Proc2P.Bruker.FaceVideo import CropVideo
 from Video import MotionEnergy
 from LFP.Setup import Setup
 from sklearn.neighbors import KernelDensity
