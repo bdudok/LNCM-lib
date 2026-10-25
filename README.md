@@ -1,6 +1,10 @@
 # LNCM-lib
 Resources for data analysis in LNCM / Dudok lab
 
+# Installation
+See [installation.md](installation.md).
+`envs/site_config.json` holds lab-specific settings (backup paths, scratch disk, SIMA env, uv env location). Edit it for your lab.
+
 # The following resources are included:
 
 ## Ephys

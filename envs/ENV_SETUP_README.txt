@@ -1,28 +1,7 @@
 # Description of installation process
 
-# lncm env with uv (being tested, replaces the conda lncm and suite2p envs below)
-The env is defined in pyproject.toml and pinned in uv.lock (both in the repo root). Each user builds their own env.
-1. Install uv (once), in PowerShell:
-    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-2. Build the env by running envs\update_env.bat (double-click, or from a new cmd/PowerShell window).
-   For motion correction (suite2p), run it once as: envs\update_env.bat suite2p
-   The env goes to N:\envs\<username>\lncm. uv's Python 3.11 goes to N:\envs\<username>\uv\python (the env needs it, don't delete it)
-   and the download cache to N:\envs\<username>\uv\cache (can be deleted).
-3. In PyCharm, add N:\envs\<username>\lncm\Scripts\python.exe as an existing interpreter and select it for the projects.
-   Motion correction scripts run in this env, no separate suite2p interpreter is needed.
-4. After pulling changes to uv.lock, run envs\update_env.bat again. It keeps suite2p if the env has it, and does nothing if the env is up to date.
-Qt: PySide6 is the only Qt binding in the env. Don't add another one (e.g. PyQt6 via suite2p[gui]): bindings ship Qt DLLs with the same names,
-and when one binding's DLLs are loaded first, importing the other fails with 'DLL load failed ... The specified procedure could not be found'.
-To change packages, edit pyproject.toml and run "uv lock", then commit both files.
-
-# To create the main env used in most analysis GUIs and scripts ("lncm"), use Python 3.11 and stick to conda-forge channel.
-
-conda create --name lncm python=3.11 -c conda-forge --strict-channel-priority
-conda activate lncm
-conda install -c conda-forge -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph pyedflib lsq-ellipse pandas-stubs pyarrow qt6-multimedia
-
-# See pycharm-workspace.md for how to set up Pycharm in a clean way
-# see Pycharm console starting script.py for setting up console in PyCharm (required for run configs with Python console)
+# The main env (lncm, including suite2p for motion correction) is built with uv: see installation.md in the repo root.
+# This file describes envs for other tools.
 
 # To use SIMA for ROI detection in 2P movies, we need a Python 3.6 env ("lncm36"), 
 # Note that calls to the functions that use this are made from the main env, and the path to the python 3.6 executable needs to be specified in envs/site_config.json
@@ -32,24 +11,7 @@ conda create --name lncm36 python=3.6 -c conda-forge --strict-channel-priority
 conda activate lncm36
 conda install -c conda-forge -y scipy pyqt matplotlib opencv scikit-learn openpyxl shapely pandas jinja2 tifffile h5py scikit-image xlrd statsmodels numba requests pyqtgraph
 pip install sima
-
-# To use Suite2P for motion correction, we need a Python 3.11 env ("suite2p") with suite2p 1.x (tested with 1.1.0):
-if you have a previous suite2p env (0.x), delete it (conda env remove --name suite2p),
-and delete the remaining empty folder in envs called suite2p
-note: suite2p 0.x envs don't work with the current pipeline.
-in conda powershell prompt:
-    conda create --name suite2p python=3.11 -c conda-forge --strict-channel-priority
-    conda activate suite2p
-    python -m pip install suite2p
-    python -m pip install pandas requests openpyxl pyarrow
-our analysis server has no GPU, suite2p runs on CPU with the default torch install (it logs that cuda is not working and uses cpu).
-
-open the job script in your project (no need to have a separate S2P project)
-for example, Proc2P/Analysis/S2P_template/20261007_BatchRun_MotionCorrect_Template.py (in LNCM-lib)
-In settings/Python/interpreter, add the suite2p env as system python (but don't select it for the project)
-Select run/edit configurations for your job script
-    select the suite2p interpreter to run this script with
-run the script with this specific configuration.
+# envs/2pcode36.yml is an export of a working env of this kind.
 
 # For deeplabcut, we need a separate env (on GPU system with NVIDIA CUDA installed):
 -clone DLC repo
