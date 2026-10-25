@@ -4,7 +4,8 @@ import matplotlib
 mpl_backend = 'TkAgg'
 # TkAgg can't load without a display (e.g. in a container or CI); keep matplotlib's default there
 has_display = sys.platform in ('win32', 'darwin') or bool(os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'))
-if has_display and not matplotlib.get_backend() == mpl_backend:
+# don't call matplotlib.get_backend() first: it selects a backend if none is set, which can import a Qt binding
+if has_display:
     matplotlib.use(mpl_backend)
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)

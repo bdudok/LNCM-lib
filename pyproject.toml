@@ -36,8 +36,9 @@ dependencies = [
 
 [project.optional-dependencies]
 # motion correction (Proc2P/Analysis/S2P_template); install with: uv sync --extra suite2p
+# without suite2p[gui]: its PyQt6 ships Qt DLLs with the same names as PySide6's, and only one set can load per process
 suite2p = [
-    "suite2p[gui]==1.1.0",
+    "suite2p==1.1.0",
     "torch",
     "torchvision",
 ]

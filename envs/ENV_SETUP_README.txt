@@ -11,7 +11,8 @@ The env is defined in pyproject.toml and pinned in uv.lock (both in the repo roo
 3. In PyCharm, add N:\envs\<username>\lncm\Scripts\python.exe as an existing interpreter and select it for the projects.
    Motion correction scripts run in this env, no separate suite2p interpreter is needed.
 4. After pulling changes to uv.lock, run envs\update_env.bat again. It keeps suite2p if the env has it, and does nothing if the env is up to date.
-Qt: LNCM-lib GUIs use PySide6. suite2p's GUI (python -m suite2p) uses PyQt6, which comes with suite2p[gui].
+Qt: PySide6 is the only Qt binding in the env. Don't add another one (e.g. PyQt6 via suite2p[gui]): bindings ship Qt DLLs with the same names,
+and when one binding's DLLs are loaded first, importing the other fails with 'DLL load failed ... The specified procedure could not be found'.
 To change packages, edit pyproject.toml and run "uv lock", then commit both files.
 
 # To create the main env used in most analysis GUIs and scripts ("lncm"), use Python 3.11 and stick to conda-forge channel.
