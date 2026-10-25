@@ -1,19 +1,12 @@
 import cv2
-from tkinter import *
 import time
 import numpy
-from multiprocessing import Pipe, Process
-import os
 from collections import namedtuple
 # for specific panels:
-import h5py
 from scipy.signal import decimate, resample
 from Proc2P.Analysis.ImagingSession import ImagingSession
-from Proc2P.Analysis.LoadPolys import LoadImage, LoadPolys
+from Proc2P.Analysis.LoadPolys import LoadImage
 from Proc2P.Analysis.LoadPolys import Source as imgSource
-from matplotlib.patches import Circle
-from Proc2P.Analysis.CaTrace import CaTrace
-import json
 from Video.LoadAvi import LoadAvi
 
 '''This class is used to export videos of multimodal recordings.

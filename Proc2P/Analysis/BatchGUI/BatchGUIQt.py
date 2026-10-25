@@ -14,7 +14,8 @@ import typing
 from dataclasses import dataclass, fields, asdict
 from enum import Enum
 
-from Proc2P.Analysis.BatchGUI.Config import *
+import os
+from Proc2P.Analysis.BatchGUI.Config import GuiConfig, State
 from Proc2P.Analysis.AssetFinder import AssetFinder, get_processed_tags
 # from Proc2P.Analysis.BatchGUI.RoiEditorQt import GUI_main as RoiEditorGUI
 from Proc2P.Analysis.BatchGUI.RoiEditorQt import launch_in_subprocess as RoiEditorGUI
@@ -702,7 +703,7 @@ def launch_GUI(*args, **kwargs):
     app.setStyle('Fusion')
     font = QtGui.QFont()
     app.setFont(font)
-    gui_main = GUI_main(app, *args, **kwargs)
+    gui_main = GUI_main(app, *args, **kwargs)  # noqa: F841 - keeps the window referenced while the app runs
     sys.exit(app.exec())
     print('GUI opened.')
 

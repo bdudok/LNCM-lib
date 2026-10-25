@@ -16,9 +16,17 @@ Qt: PySide6 is the only Qt binding in the env. Don't add another one (e.g. PyQt6
 ## Linting with ruff
 ruff is installed in the env (`dev` group in `pyproject.toml`) as `<uv_env_dir>\<username>\lncm\Scripts\ruff.exe`. The config in `pyproject.toml` only reports likely bugs (unused or undefined names, syntax errors), not style. Run it on the files you changed, not on the whole repo.
 
+Star imports (`from x import *`) are not allowed in LNCM-lib: they hide undefined names from ruff, and they make every name a module imports part of what scripts depend on. Analysis scripts may use them: 2p_code's `ruff.toml` extends this config and allows them, so scripts can keep `from _LNCM_Analysis import *`. Another repo can do the same with its own `ruff.toml`:
+```
+extend = "../LNCM-lib/pyproject.toml"
+
+[lint]
+ignore = ["F403", "F405"]
+```
+
 To run it from PyCharm on the open file, add an external tool in Settings > Tools > External Tools:
 - Program: `$PyInterpreterDirectory$\ruff.exe`
-- Arguments: `check --config <path to LNCM-lib>\pyproject.toml "$FilePath$"`. The explicit config path makes the same rules apply to files in other repos (e.g. 2p_code) that have no ruff config.
+- Arguments: `check "$FilePath$"`. ruff uses the config of the repo the file is in. A repo without a ruff config gets ruff's default rules, so give it a `ruff.toml` like the one above.
 - Working directory: `$FileDir$`
 
 Then use Tools > External Tools > ruff (or assign a shortcut in Keymap). `--fix` removes unused imports and similar automatically; check the diff afterwards.

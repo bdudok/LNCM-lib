@@ -1,4 +1,4 @@
-from Proc2P.Analysis.BatchGUI import *
+from Proc2P.Analysis.BatchGUI import BatchGUIQt, BatchGUI_Q
 from multiprocessing import freeze_support, set_start_method
 
 '''

@@ -1,4 +1,5 @@
-from Proc2P.Analysis.BatchGUI.Config import *
+import os
+from enum import Enum
 from dataclasses import dataclass
 from collections.abc import Callable
 from multiprocessing import Queue, Process, freeze_support, set_start_method

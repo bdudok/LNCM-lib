@@ -4,19 +4,18 @@ from PySide6 import QtGui, QtCore, QtWidgets
 import matplotlib
 
 matplotlib.use('QtAgg')
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib import pyplot as plt
 
 plt.rcParams['font.size'] = 8
 plt.rcParams['font.sans-serif'] = 'Arial'
 import numpy
 import os
-import json
 import sys
 from enum import Enum
 from Proc2P.utils import logger, lprint
-from Proc2P.Analysis.BatchGUI.Config import *
-from Proc2P.Analysis.BatchGUI.utils import *
+from pathlib import Path
+from Proc2P.Analysis.BatchGUI.Config import GuiConfig, State
+from Proc2P.Analysis.BatchGUI.utils import apply_layout
 from Proc2P.Analysis.RoiEditor import RoiEditor
 import tifffile
 from shapely.geometry import Polygon, Point

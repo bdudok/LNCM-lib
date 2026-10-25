@@ -1,8 +1,12 @@
 import numpy
 from pathlib import Path
 
-import Proc2P
-from Proc2P import *
+import os
+from matplotlib import pyplot as plt
+from scipy import stats
+from Proc2P.utils import norm, ewma
+from PlotTools import strip_ax
+from PlotTools.MyColorLib import get_color
 from matplotlib.patches import Polygon
 from Proc2P.Analysis.ImagingSession import ImagingSession
 import scipy

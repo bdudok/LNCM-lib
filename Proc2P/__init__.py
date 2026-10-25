@@ -21,7 +21,7 @@ from scipy import stats
 from BaserowAPI.BaserowRequests import GetSessions
 from Proc2P.utils import read_excel, lprint, norm, ewma, completed_list, ts
 from PlotTools.MyColorLib import get_color
-from PlotTools import *
+from PlotTools import prep_ax_psth, prep_ax_graph, strip_ax, jitter
 
 
 plt.rcParams['font.sans-serif'] = 'Arial'

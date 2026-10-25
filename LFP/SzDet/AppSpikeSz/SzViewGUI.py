@@ -18,7 +18,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (QApplication, QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
                              QGroupBox, QListWidget,QAbstractItemView, QLineEdit)
 
-from Proc2P.utils import *
+import numpy
 from LFP.Setup import Setup
 
 '''
@@ -30,7 +30,7 @@ class GUI_main(QtWidgets.QMainWindow):
     def __init__(self, app, setupID=Setup.PINNACLE, defaults=None):
         super().__init__()
 
-        self.setWindowTitle(f'Curate seizures')
+        self.setWindowTitle('Curate seizures')
         self.setGeometry(30, 60, 3200, 1600)  # Left, top, width, height.
         self.app = app
         self.user_defaults = defaults
@@ -163,12 +163,12 @@ class GUI_main(QtWidgets.QMainWindow):
         button.clicked.connect(self.previous_callback)
 
         # toggle button
-        button = QPushButton(f'Toggle [t]', )
+        button = QPushButton('Toggle [t]', )
         horizontal_layout.addWidget(button)
         button.clicked.connect(self.toggle_callback)
 
         # interictal button
-        button = QPushButton(f'Interictal [i]', )
+        button = QPushButton('Interictal [i]', )
         horizontal_layout.addWidget(button)
         button.clicked.connect(self.interictal_callback)
 
@@ -179,7 +179,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.next_button.clicked.connect(self.next_callback)
 
         # save button
-        self.save_button = QPushButton(f'Save', )
+        self.save_button = QPushButton('Save', )
         horizontal_layout.addWidget(self.save_button)
         self.save_button.clicked.connect(self.save_callback)
 
@@ -684,7 +684,7 @@ def main(*args, **kwargs):
     app.setStyleSheet("QPushButton{font-size: 12pt;};QLabel{font-size: 12pt;};QListWidget{font-size: 14pt;}")
     app.setStyle('Fusion')
     setup_ID,  = sys.argv[1:]
-    gui_main = GUI_main(app, setupID=setup_ID)
+    gui_main = GUI_main(app, setupID=setup_ID)  # noqa: F841 - keeps the window referenced while the app runs
     sys.exit(app.exec())
 
 def launch_in_subprocess(*args, **kwargs):
@@ -698,7 +698,7 @@ def launch_GUI(*args, **kwargs):
     app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling)
     app.setStyleSheet("QPushButton{font-size: 12pt;};QLabel{font-size: 12pt;};QListWidget{font-size: 14pt;}")
     app.setStyle('Fusion')
-    gui_main = GUI_main(app, *args, **kwargs)
+    gui_main = GUI_main(app, *args, **kwargs)  # noqa: F841 - keeps the window referenced while the app runs
     sys.exit(app.exec())
 
 if __name__ == '__main__':

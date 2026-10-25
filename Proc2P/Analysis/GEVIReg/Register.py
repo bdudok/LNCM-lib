@@ -4,7 +4,8 @@ import numpy
 import json
 from dataclasses import dataclass, asdict
 from Proc2P.Analysis.ImagingSession import ImagingSession
-from Proc2P.utils import *
+from Proc2P.utils import lprint, gapless, touch_path
+from PlotTools import strip_ax
 from Proc2P.Bruker.LoadMovie import get_raw_movies
 from Proc2P.Bruker import Bidiphase
 from skimage.registration import phase_cross_correlation

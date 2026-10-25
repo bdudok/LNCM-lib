@@ -1,12 +1,12 @@
 import os.path
 
-import matplotlib.pyplot as plt
 
-from Proc2P.utils import *
+from Proc2P.utils import read_excel
 import json
 import numpy
+import pandas
 import datetime
-from PlotTools import *
+from PlotTools import strip_ax
 
 # readers
 from LFP.Pinnacle import ReadEDF
