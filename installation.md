@@ -25,6 +25,16 @@ Qt: PySide6 is the only Qt binding in the env. Don't add another one (e.g. PyQt6
 
 To change packages, edit `pyproject.toml` and run `uv lock`, then commit both files.
 
+## Linting with ruff
+ruff is installed in the env (`dev` group in `pyproject.toml`) as `<uv_env_dir>\<username>\lncm\Scripts\ruff.exe`. The config in `pyproject.toml` only reports likely bugs (unused or undefined names, syntax errors), not style. Run it on the files you changed, not on the whole repo.
+
+To run it from PyCharm on the open file, add an external tool in Settings > Tools > External Tools:
+- Program: `$PyInterpreterDirectory$\ruff.exe`
+- Arguments: `check --config <path to LNCM-lib>\pyproject.toml "$FilePath$"`. The explicit config path makes the same rules apply to files in other repos (e.g. 2p_code) that have no ruff config.
+- Working directory: `$FileDir$`
+
+Then use Tools > External Tools > ruff (or assign a shortcut in Keymap). `--fix` removes unused imports and similar automatically; check the diff afterwards.
+
 ## Envs for other tools
 SIMA (Python 3.6), DeepLabCut and PyControl need separate envs: see `envs/ENV_SETUP_README.txt`.
 
