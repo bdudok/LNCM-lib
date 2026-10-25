@@ -197,7 +197,7 @@ def read_excel(*args, keep_index=False, **kwargs):
     # 0..n-1) is dropped; other unnamed indexes (e.g. labels) are kept as a column named 'index'.
     # The unnamed index is read with name None or 'Unnamed: 0', depending on the pandas version.
     unnamed = df.index.name is None or str(df.index.name).startswith('Unnamed')
-    drop_index = unnamed and pandas.api.types.is_integer_dtype(df.index) and (df.index == range(len(df))).all()
+    drop_index = unnamed and pandas.api.types.is_integer_dtype(df.index) and (df.index == numpy.arange(len(df))).all()
     if unnamed:
         df.index.name = 'index'
     # reset_index will change the index column into a regular (named) column (unless dropped).
