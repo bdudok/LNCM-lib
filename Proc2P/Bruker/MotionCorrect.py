@@ -1,12 +1,17 @@
 import copy
 import numpy
 import os, shutil
+import warnings
 import suite2p
 # run using suite2p conda env but s2p package, not source
 
 from Proc2P.Bruker import Bidiphase, PreProc
 from tifffile import imwrite
 from Proc2P.utils import lprint
+
+# with keep_movie_raw, suite2p registers from the read-only data_raw.bin memmap and torch warns about it.
+# suite2p doesn't write to that tensor, so the warning is harmless.
+warnings.filterwarnings('ignore', message='The given NumPy array is not writable')
 
 '''This function runs the pre processing and motion correction, should be called by script in suite2p repo.
 Should be called from suite2p env (suite2p 1.x).
