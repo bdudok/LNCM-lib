@@ -9,6 +9,7 @@
   "alt_processed_paths": [
     "E:/ExtDrives/LNCM1/_Processed/",
     "E:/ExtDrives/LNCM7/_Processed/",
+    "K:/_Processed/",
     "E:/ExtDrives/LNCM11/_Processed/",
     "\\\\smb-main.ad.bcm.edu\\bcm-neuro-dudok\\_Processed/"
   ],
@@ -18,5 +19,6 @@
   ],
   "ledcal": 230,
   "scratch_disk": "E:/tmp/",
+  "uv_env_dir": "N:/envs",
   "lab_identifier": "BCM_LNCM_Dudoklab"
 }

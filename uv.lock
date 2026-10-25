@@ -1050,15 +1050,11 @@ dependencies = [
     { name = "scipy-stubs", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "shapely", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "statsmodels", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "tifffile", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "xlrd", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-]
-
-[package.optional-dependencies]
-suite2p = [
     { name = "suite2p", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "tifffile", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "torch", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "torchvision", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "xlrd", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [package.metadata]
@@ -1087,13 +1083,12 @@ requires-dist = [
     { name = "scipy-stubs" },
     { name = "shapely" },
     { name = "statsmodels" },
-    { name = "suite2p", marker = "extra == 'suite2p'", specifier = "==1.1.0" },
+    { name = "suite2p", specifier = "==1.1.0" },
     { name = "tifffile", specifier = ">=2025" },
-    { name = "torch", marker = "extra == 'suite2p'", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torchvision", marker = "extra == 'suite2p'", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchvision", index = "https://download.pytorch.org/whl/cpu" },
     { name = "xlrd" },
 ]
-provides-extras = ["suite2p"]
 
 [[package]]
 name = "lsq-ellipse"

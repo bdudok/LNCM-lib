@@ -20,6 +20,7 @@ class SiteConfig:
     ledcal: float #100 % led power in mW, for calibrating photostimulation intensity
     scratch_disk: str #saving temporary files
     lab_identifier: str #name of the lab, for generating dataset identifiers
+    uv_env_dir: str #envs/update_env.bat builds each user's lncm env in <uv_env_dir>/<username>/lncm
 
 def _load_config(fname) -> SiteConfig:
     this_package = Path(__file__).resolve().parent

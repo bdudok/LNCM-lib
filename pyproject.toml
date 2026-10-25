@@ -1,4 +1,4 @@
-# Environment definition for the lncm env (uv). Setup steps: envs/ENV_SETUP_README.txt
+# Environment definition for the lncm env (uv). Setup steps: installation.md
 # LNCM-lib is not installed as a package; scripts add the repo to the path as before.
 [project]
 name = "lncm-lib"
@@ -31,12 +31,8 @@ dependencies = [
     "pytest",
     "pandas-stubs",
     "scipy-stubs",
-]
-
-[project.optional-dependencies]
-# motion correction (Proc2P/Analysis/S2P_template); install with: uv sync --extra suite2p
-# without suite2p[gui]: its PyQt6 ships Qt DLLs with the same names as PySide6's, and only one set can load per process
-suite2p = [
+    # motion correction (Proc2P/Analysis/S2P_template)
+    # without suite2p[gui]: its PyQt6 ships Qt DLLs with the same names as PySide6's, and only one set can load per process
     "suite2p==1.1.0",
     "torch",
     "torchvision",

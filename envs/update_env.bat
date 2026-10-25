@@ -1,12 +1,16 @@
 @echo off
-rem Builds or updates the lncm env in N:\envs\%USERNAME%\lncm from uv.lock.
+rem Builds or updates the lncm env in <uv_env_dir>\%USERNAME%\lncm from uv.lock (uv_env_dir is set in site_config.json).
 rem Run it (double-click) after pulling changes to uv.lock. It does nothing if the env is up to date.
-rem First build with motion correction: update_env.bat suite2p
-rem Later runs keep suite2p if the env already has it.
 setlocal
-set "BASE=N:\envs\%USERNAME%"
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "(Get-Content -Raw '%~dp0site_config.json' | ConvertFrom-Json).uv_env_dir -replace '/', '\'"`) do set "ENV_DIR=%%i"
+if not defined ENV_DIR (
+    echo uv_env_dir is missing from envs\site_config.json.
+    pause
+    exit /b 1
+)
+set "BASE=%ENV_DIR%\%USERNAME%"
 
-rem uv's Python installs and download cache go to N: too (stored for future sessions)
+rem uv's Python installs and download cache go there too (stored for future sessions)
 if not defined UV_PYTHON_INSTALL_DIR (
     set "UV_PYTHON_INSTALL_DIR=%BASE%\uv\python"
     setx UV_PYTHON_INSTALL_DIR "%BASE%\uv\python" >nul
@@ -20,13 +24,9 @@ set "UV_LINK_MODE=copy"
 rem not stored with setx: every uv project would use this env
 set "UV_PROJECT_ENVIRONMENT=%BASE%\lncm"
 
-set "EXTRA="
-if /i "%~1"=="suite2p" set "EXTRA=--extra suite2p"
-if exist "%UV_PROJECT_ENVIRONMENT%\Lib\site-packages\suite2p" set "EXTRA=--extra suite2p"
-
 cd /d "%~dp0.."
-echo Syncing %UV_PROJECT_ENVIRONMENT% %EXTRA%
-uv sync --locked %EXTRA%
+echo Syncing %UV_PROJECT_ENVIRONMENT%
+uv sync --locked
 if errorlevel 1 (
     echo uv sync failed, see the messages above.
 ) else (
