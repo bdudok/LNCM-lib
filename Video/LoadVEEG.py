@@ -1,4 +1,4 @@
-"""Loader for vEEG recorder output (Recorder repo, VideoEEG package).
+"""Loader for vEEG recorder output (Pinnacle-vEEG repo, VideoEEG package; it was in the Recorder repo until 2026-10-25).
 
 Each hourly video file comes with two CSV files sharing its name stem:
     <stem>.mkv          video
