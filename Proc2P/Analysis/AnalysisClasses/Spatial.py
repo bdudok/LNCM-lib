@@ -132,10 +132,7 @@ class Spatial:
         self.prefix = session.prefix
         self.tag = session.tag
         self.session = session
-        if hasattr(session, 'fps'):
-            self.fps = session.fps
-        else:
-            self.fps = fps #for hard coded fps import with scanbox
+        self.fps = session.fps
         self.getdir()
         if not os.path.exists(self.dir):
             os.mkdir(self.dir)
