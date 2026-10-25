@@ -2,7 +2,7 @@ import os
 import json
 
 # plotting
-import PySide6  # import before matplotlib and pyqtgraph so both use PySide6
+import PySide6  # import before matplotlib so it uses PySide6
 import matplotlib
 
 matplotlib.use('QtAgg')
@@ -15,9 +15,8 @@ import numpy
 
 # GUI
 import sys
-from pyqtgraph import Qt
-from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
-from pyqtgraph.Qt.QtWidgets import (QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QGroupBox, QListWidget,
+from PySide6 import QtGui, QtCore, QtWidgets
+from PySide6.QtWidgets import (QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QGroupBox, QListWidget,
                                     QAbstractItemView, QLineEdit, QCheckBox)
 
 # Workflow Specific functions

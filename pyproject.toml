@@ -27,7 +27,6 @@ dependencies = [
     "requests",
     "matplotlib",
     "PySide6",
-    "pyqtgraph",
     "jupyter",
     "pytest",
     "pandas-stubs",
