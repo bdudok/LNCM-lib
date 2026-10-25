@@ -26,7 +26,7 @@ dependencies = [
     "jinja2",
     "requests",
     "matplotlib",
-    "PySide6",
+    "PySide6<6.12",  # 6.12.0 kills the process when a slot raises while another slot is in processEvents()
     "jupyter",
     "pytest",
     "pandas-stubs",
