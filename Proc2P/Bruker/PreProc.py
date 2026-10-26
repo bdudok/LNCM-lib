@@ -495,13 +495,23 @@ class SessionInfo:
         self.filehandle = os.path.join(self.procpath,  self.prefix + '_SessionInfo.json')
         self.info = {}
 
-    def load(self):
+    def load(self, must_exist=False):
+        '''
+        :param must_exist: raise FileNotFoundError if the file is missing, instead of returning None
+            (None is how PreProc finds sessions that are not processed yet)
+        :return: the info dict, or None if the file is missing
+        '''
         if os.path.exists(self.filehandle):
             with open(self.filehandle, 'r') as f:
                 self.info = json.load(f)
             return self.info
-        else:
+        elif not must_exist:
             return None
+        elif not os.path.isdir(self.procpath):
+            raise FileNotFoundError(f'Session folder of {self.prefix} not found: {self.procpath}')
+        else:
+            raise FileNotFoundError(f'{self.prefix}: no SessionInfo file in the session folder, '
+                                    f'the session may not be preprocessed: {self.filehandle}')
 
     def save(self):
         with open(self.filehandle, 'w') as f:

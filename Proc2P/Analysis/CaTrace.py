@@ -148,7 +148,7 @@ class CaTrace(object):
             # remove outliers
             self.ol_index.extend(outlier_indices(numpy.nanmean(self.trace, axis=0), thresh=12))
         self.session_info = SessionInfo(self.opPath, self.prefix)
-        self.fps = self.session_info.load()['framerate']
+        self.fps = self.session_info.load(must_exist=True)['framerate']
 
     def pack_data(self, c):
         if self.last_bg is not None:

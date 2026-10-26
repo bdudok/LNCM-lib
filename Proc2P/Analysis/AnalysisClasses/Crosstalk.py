@@ -49,7 +49,7 @@ class Crosstalk:
             ca.load()
             if ca.trace.ndim != 2:
                 raise ValueError(f'{ca.pf} holds more than one channel; Crosstalk needs single-channel trace folders')
-        self.fps = SessionInfo(self.target.opPath, prefix).load()['framerate']
+        self.fps = SessionInfo(self.target.opPath, prefix).load(must_exist=True)['framerate']
         self.k = None
 
     def fit(self):

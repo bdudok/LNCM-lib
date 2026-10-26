@@ -74,7 +74,7 @@ class ImagingSession(object):
 
         # load info from json file
         self.si = SessionInfo(self.path, prefix)
-        self.si.load()
+        self.si.load(must_exist=True)
         self.fps = self.si['framerate']
         self.CF = CF()
         self.CF.fps = self.si['framerate']
