@@ -179,6 +179,11 @@ def register(proc_path, prefix, config=None, bidiphase=None):
 
     # refine reference
     snr = numpy.nan_to_num(numpy.average(d, axis=(1, 2)) / numpy.std(d, axis=(1, 2)))
+    # frames are weighted by snr in the rolling averages. Bad (opto) frames and blank frames are left out: the PMT is
+    # off during opto bursts, and the opto frames from sync can miss the edge frames of a burst.
+    weights = snr.copy()
+    weights[bad_frames] = 0
+    weights[snr < 0.1 * numpy.median(snr)] = 0
     snr_lim = min(1, numpy.nanpercentile(snr[ref_frames], 25))
     ref_frames = [x for x in ref_frames if snr[x] > snr_lim]
     if debug:
@@ -190,8 +195,8 @@ def register(proc_path, prefix, config=None, bidiphase=None):
     for i, f in enumerate(ref_frames):
         i0 = max(0, f - n_roll)
         i1 = min(f + n_roll, n_frames)
-        weighted_sample = d[i0:i1] * snr[i0:i1, None, None]
-        avg_sample = numpy.sum(weighted_sample, axis=0) / numpy.sum(snr[i0:i1])
+        weighted_sample = d[i0:i1] * weights[i0:i1, None, None]
+        avg_sample = numpy.sum(weighted_sample, axis=0) / numpy.sum(weights[i0:i1])
         displacements = phase_cross_correlation(avg_sample, r, upsample_factor=10)  # fit ref to target,
         disps[i] = displacements[0]
         if numpy.abs(displacements[0] - ref_offset).max() < config.ref_displacement_limit:
@@ -227,8 +232,12 @@ def register(proc_path, prefix, config=None, bidiphase=None):
         for i in range(len(d)):
             i0 = max(0, i - n_roll)
             i1 = min(i + n_roll, n_frames)
-            weighted_sample = d[i0:i1] * snr[i0:i1, None, None]
-            avg_sample = numpy.sum(weighted_sample, axis=0) / numpy.sum(snr[i0:i1])
+            if not weights[i0:i1].sum():
+                # no usable frame in the window (e.g. during a long burst): interpolated below
+                disps[i] = numpy.nan
+                continue
+            weighted_sample = d[i0:i1] * weights[i0:i1, None, None]
+            avg_sample = numpy.sum(weighted_sample, axis=0) / numpy.sum(weights[i0:i1])
             displacements = phase_cross_correlation(avg_sample, r,
                                                     upsample_factor=config.subpixel_precision)  # fit ref to target,
             disps[i, :2] = displacements[0]
@@ -236,6 +245,13 @@ def register(proc_path, prefix, config=None, bidiphase=None):
 
     else:
         disps = numpy.load(disps_fn)
+
+    # fill skipped frames from their neighbors so they can be filtered and applied
+    skipped = numpy.isnan(disps[:, 0])
+    if skipped.any():
+        lprint(None, f'{skipped.sum()} frames without usable data, displacements interpolated')
+        for j in range(2):
+            disps[skipped, j] = numpy.interp(numpy.where(skipped)[0], numpy.where(~skipped)[0], disps[~skipped, j])
 
     # Low pass filter displacement
     nyq = 0.5 * fps
