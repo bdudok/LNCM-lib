@@ -17,6 +17,7 @@ from pathlib import Path
 from Proc2P.Analysis.BatchGUI.Config import GuiConfig, State
 from Proc2P.Analysis.BatchGUI.utils import apply_layout, SubplotsCanvas
 from Proc2P.Analysis.ImagingSession import ImagingSession
+from Proc2P.Analysis.CaTrace import STARTUP_S
 from Proc2P.Bruker.LoadRegistered import LoadRegistered, Source
 from Proc2P.Bruker.LoadMovie import find_raw_files, get_lazy_raw_movies
 from Video.LoadAvi import LoadAvi
@@ -337,6 +338,11 @@ class GUI_main(QtWidgets.QMainWindow):
             return 0
         param_key = self.trace_selector.currentData()
         Y = self.session.getparam(param_key.name)[self.c]
+        if param_key != TraceCodes.trace:
+            # hide the acquisition start transient, also in traces processed before CaTrace masked it (as CaTrace:
+            # smtr 1 s longer, until the smoothing settles)
+            Y = Y.astype('float')  # copy, the session data is not changed
+            Y[self.X < STARTUP_S + (param_key == TraceCodes.smtr)] = numpy.nan
         ca = self.TraceCanvas.ax[0]
         for line in self.lines:
             line.remove()
