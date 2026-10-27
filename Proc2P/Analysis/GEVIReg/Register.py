@@ -34,7 +34,7 @@ class RegConfig:
     subpixel_precision: float = 10  # fraction of pixel
     ref_margin: float = 5  # sec
     displacement_lowpass: float = 60  # Hz
-    ref_channel: str = 'Ch2' #name of referecne channel (multichannel registration is not implemented)
+    ref_channel: str = 'Ch2' #name of reference channel. displacements estimated on it are applied to all channels
     disps_suffix: str = '_disps.npy'
     filt_disps_suffix: str = '_disps_filt.npy'
     setting_suffix: str = '_regconfig.json'
@@ -103,18 +103,16 @@ def register(proc_path, prefix, config=None, bidiphase=None):
         json.dump(asdict(config), f, indent=2)
 
     if config.scratch_path is not None:
-        memmap_fn = os.path.join(config.scratch_path, prefix + '_raw.npy')
-        if not os.path.exists(memmap_fn):
+        memmap_fns = {ch: os.path.join(config.scratch_path, f'{prefix}_raw_{ch}.npy') for ch in info['channelnames']}
+        if not all(os.path.exists(fn) for fn in memmap_fns.values()):
             if verbose:
                 lprint(None, 'Reading and cacheing raw movie')
             movies = get_raw_movies(info)
-            if config.scratch_path is not None:
-                numpy.save(memmap_fn, movies[ref_channel])
-
-        data = numpy.load(memmap_fn, mmap_mode='r')
+            for ch, fn in memmap_fns.items():
+                numpy.save(fn, movies[ch])
+        movies = {ch: numpy.load(fn, mmap_mode='r') for ch, fn in memmap_fns.items()}
     else:
         movies = get_raw_movies(info)
-        data = movies[ref_channel]
 
     if bidiphase is None:
         db_path = os.path.join(proc_path, prefix, 'suite2p/plane0/db.npy')
@@ -122,9 +120,11 @@ def register(proc_path, prefix, config=None, bidiphase=None):
     bidiphase = int(bidiphase)
     if bidiphase:
         lprint(None, f'Correcting bidiphase offset: {bidiphase}')
-        data = numpy.array(data)  # writable copy, the cached raw movie is opened read-only
-        for i in range(len(data)):
-            data[i] = Bidiphase.shift(data[i], bidiphase)
+        for ch in movies:
+            movies[ch] = numpy.array(movies[ch])  # writable copy, the cached raw movie is opened read-only
+            for i in range(len(movies[ch])):
+                movies[ch][i] = Bidiphase.shift(movies[ch][i], bidiphase)
+    data = movies[ref_channel]
     disps_fn = os.path.join(oPath, prefix + config.disps_suffix)
 
     n_frames = info["n_frames"]
@@ -266,12 +266,14 @@ def register(proc_path, prefix, config=None, bidiphase=None):
         lprint(None, 'Applying displacements')
     numpy.save(disps_fn.replace(config.disps_suffix, config.filt_disps_suffix), f_disp)
 
-    reg_movie = open_memmap(registered_output_handle, mode='w+',
-                            shape=data.shape, dtype=numpy.uint16, )
-    for i, frame in enumerate(data):
-        tforms = transform.SimilarityTransform(translation=f_disp[i][::-1])
-        reg_movie[i] = numpy.rint(transform.warp(frame, tforms, order=1, mode='symmetric', preserve_range=True))
-    reg_movie.flush()
+    # the reference channel is written last, so its output only exists if the other channels are complete
+    for ch in sorted(movies, key=lambda x: x == ref_channel):
+        reg_movie = open_memmap(os.path.join(oPath, f'{prefix}_registered_{ch}.npy'), mode='w+',
+                                shape=data.shape, dtype=numpy.uint16, )
+        for i, frame in enumerate(movies[ch]):
+            tforms = transform.SimilarityTransform(translation=f_disp[i][::-1])
+            reg_movie[i] = numpy.rint(transform.warp(frame, tforms, order=1, mode='symmetric', preserve_range=True))
+        reg_movie.flush()
 
     if verbose:
         lprint(None, 'Saving previews')
