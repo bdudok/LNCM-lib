@@ -11,6 +11,7 @@ import json
 import sys
 import datetime
 import typing
+import traceback
 from dataclasses import dataclass, fields, asdict
 from enum import Enum
 
@@ -24,7 +25,7 @@ from Proc2P.Analysis.BatchGUI.SessionGUIQt import launch_in_subprocess as Sessio
 from LFP.SzDet.AppSpikeSz.GUI_SpikeSzDet import launch_in_subprocess as SzProcGUI
 from LFP.SzDet.AppSpikeSz.SzViewGUI import launch_in_subprocess as SzViewGUI
 
-from Proc2P.Analysis.BatchGUI.QueueManager import Job, JobType
+from Proc2P.Analysis.BatchGUI.QueueManager import Job, JobType, WorkerError
 from Proc2P.Analysis.GEVIReg.Register import RegConfig
 from Proc2P.Analysis.NormalizeVm import PullVmConfig
 from Proc2P.Analysis.RoiEditor import SIMAConfig
@@ -171,6 +172,12 @@ class GUI_main(QtWidgets.QMainWindow):
         self.cprint('~')
         self.redirector = StdRedirector(self.console_widget)
         sys.stdout = self.redirector
+        sys.excepthook = self.excepthook
+
+    def excepthook(self, exc_type, exc, tb):
+        '''Shows errors raised in the GUI (e.g. in button callbacks) in the console, and on stderr as before'''
+        sys.__excepthook__(exc_type, exc, tb)
+        self.cprint('Error:\n' + ''.join(traceback.format_exception(exc_type, exc, tb)).rstrip())
 
     def make_filelist_widget(self):
         self.filelist_widget.setFixedWidth(self.config.PrefixFieldWidth)
@@ -676,7 +683,10 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def _handle_item_from_worker(self, item):
         worker_name, prefix = item
-        self.cprint(worker_name + ':', prefix, 'done.')
+        if isinstance(prefix, WorkerError):
+            self.cprint(worker_name + ': job failed\n' + prefix.traceback.rstrip())
+        else:
+            self.cprint(worker_name + ':', prefix, 'done.')
 
 
 class ModeSelector:

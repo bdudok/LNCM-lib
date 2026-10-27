@@ -1,4 +1,5 @@
 import os
+import traceback
 from enum import Enum
 from dataclasses import dataclass
 from collections.abc import Callable
@@ -31,6 +32,34 @@ class Job:
 class Worker:
     task: Callable
     max_n: int
+
+@dataclass
+class WorkerError:
+    '''Put in the result queue instead of a result when a job raises'''
+    traceback: str
+
+class ReportingWorker(Process):
+    '''
+    Runs a worker in this process. If a job raises, the traceback is printed and sent to the result queue as a
+    WorkerError, and the worker continues with the next job (instead of the process exiting).
+    '''
+
+    def __init__(self, task, queue, res_queue, n=0):
+        super(ReportingWorker, self).__init__()
+        self.task = task
+        self.queue = queue
+        self.res_queue = res_queue
+        self.n = n
+
+    def run(self):
+        worker = self.task(self.queue, self.res_queue, n=self.n)
+        while True:
+            try:
+                worker.run()  # returns when the queue sends None
+                break
+            except Exception:
+                traceback.print_exc()
+                self.res_queue.put((worker.__name__ + str(self.n), WorkerError(traceback.format_exc())))
 
 class testworker(Process):
     __name__ = 'Test-Worker'
@@ -158,8 +187,8 @@ class QManager:
         if job.type not in self.n_worker:
             self._lazy_register_worker(job.type)
         if self.n_worker[job.type]:
-            self.worker_config[job.type].task(self.Q_job[job.type], self.Q_result,
-                                              n=self.n_worker[job.type]-self.worker_config[job.type].max_n).start()
+            ReportingWorker(self.worker_config[job.type].task, self.Q_job[job.type], self.Q_result,
+                            n=self.n_worker[job.type]-self.worker_config[job.type].max_n).start()
             self.n_worker[job.type] -= 1
         self.Q_job[job.type].put(job.data)
 
