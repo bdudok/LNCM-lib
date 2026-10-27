@@ -15,6 +15,7 @@ from dataclasses import dataclass, fields, asdict
 from enum import Enum
 
 import os
+import shutil
 from Proc2P.Analysis.BatchGUI.Config import GuiConfig, State
 from Proc2P.Analysis.AssetFinder import AssetFinder, get_processed_tags
 # from Proc2P.Analysis.BatchGUI.RoiEditorQt import GUI_main as RoiEditorGUI
@@ -259,12 +260,41 @@ class GUI_main(QtWidgets.QMainWindow):
         open_button.clicked.connect(self.update_editor_callback)
         self.EditorTab.layout.addWidget(open_button)
 
+        self.EditorTab.layout.addWidget(QtWidgets.QLabel('Copy a ROI set in the selected sessions'))
+        copy_form = QtWidgets.QFormLayout()
+        self.copy_roi_input = QtWidgets.QLineEdit()
+        self.copy_roi_output = QtWidgets.QLineEdit()
+        copy_form.addRow('Input tag', self.copy_roi_input)
+        copy_form.addRow('Output tag', self.copy_roi_output)
+        self.EditorTab.layout.addLayout(copy_form)
+        copy_button = QtWidgets.QPushButton('Copy')
+        copy_button.clicked.connect(self.copy_roi_callback)
+        self.EditorTab.layout.addWidget(copy_button)
+        self.EditorTab.layout.addStretch()
+
         apply_layout(self.EditorTab)
         self.tabs.addTab(self.EditorTab, Tabs.ROI.value)
         self.n_tabs += 1
 
     def update_editor_callback(self):
         RoiEditorGUI(self.wdir, self.active_prefix[0], self.tag_label.text())
+
+    def copy_roi_callback(self):
+        in_tag = self.copy_roi_input.text().strip()
+        out_tag = self.copy_roi_output.text().strip()
+        if not in_tag or not out_tag or in_tag == out_tag:
+            self.cprint('Enter two different tags to copy a ROI set.')
+            return
+        for prefix in self.active_prefix:
+            src = os.path.join(self.wdir, prefix, f'{prefix}_saved_roi_{in_tag}.npy')
+            dst = os.path.join(self.wdir, prefix, f'{prefix}_saved_roi_{out_tag}.npy')
+            if not os.path.exists(src):
+                self.cprint(f'{prefix}: no ROI set "{in_tag}"')
+            elif os.path.exists(dst):
+                self.cprint(f'{prefix}: ROI set "{out_tag}" exists, not overwritten')
+            else:
+                shutil.copyfile(src, dst)
+                self.cprint(f'{prefix}: ROI set "{in_tag}" copied to "{out_tag}"')
 
     def open_viewer_callback(self):
         prefix = self.active_prefix[0]
