@@ -11,11 +11,13 @@ plt.rcParams['font.size'] = 8
 plt.rcParams['font.sans-serif'] = 'Arial'
 import numpy
 import sys
+import time
 from enum import Enum
 from pathlib import Path
 from Proc2P.Analysis.BatchGUI.Config import GuiConfig, State
 from Proc2P.Analysis.BatchGUI.utils import apply_layout, SubplotsCanvas
 from Proc2P.Analysis.ImagingSession import ImagingSession
+from Proc2P.Bruker.LoadRegistered import LoadRegistered, Source
 from PlotTools.Formatting import strip_ax
 import matplotlib.path as mplpath
 import cv2
@@ -52,6 +54,7 @@ class GUI_main(QtWidgets.QMainWindow):
     def open_session(self, procpath, prefix, tag='1'):
         self.state = State.SETUP
         self.session = ImagingSession(procpath, prefix, tag, ch='Both')
+        self.player = None  # made when Play is first clicked, so the movie is not opened on load
 
         self.make_control_widget()
         self.make_traces_widget()
@@ -90,6 +93,14 @@ class GUI_main(QtWidgets.QMainWindow):
 
         self.TraceCanvas.ax[-1].set_xlabel('Time (s)')
         self.TraceCanvas.fig.tight_layout()
+        self.marker_lines = [ca.axvline(0, color='black', lw=1, animated=True, visible=False)
+                             for ca in self.TraceCanvas.ax]
+        self.marker_background = None
+        self.dragging = False
+        self.TraceCanvas.mpl_connect('draw_event', self.on_draw)
+        self.TraceCanvas.mpl_connect('button_press_event', self.marker_press)
+        self.TraceCanvas.mpl_connect('motion_notify_event', self.marker_motion)
+        self.TraceCanvas.mpl_connect('button_release_event', self.marker_release)
 
         apply_layout(self.central_widget)
         self.setCentralWidget(self.central_widget)
@@ -125,25 +136,14 @@ class GUI_main(QtWidgets.QMainWindow):
             label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
         self.preview_w = self.config.SessionPreviewWidth
         self.preview_h = self.config.SessionControlsHeight - 5
-        img = self.session.get_preview()
-        lut = numpy.array([((i / 255.0) ** 0.6) * 255 for i in numpy.arange(0, 256)]).astype('uint8')
-        img = cv2.LUT(img.squeeze(), lut)
-        if len(img.shape) == 2:
-            h, w = img.shape
-            ch = 1
-        else:
-            h, w, ch = img.shape
-        qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
+        self.preview_img = self.session.get_preview().squeeze()
+        h, w = self.preview_img.shape[:2]
 
         # Resize while preserving aspect ratio to fit QLabel width
         aspect_ratio = h / w
         self.rescale_factor = min((self.preview_w - 5) / w, (self.preview_h - 5) / h)
         self.preview_w = int(w * self.rescale_factor)
         self.preview_h = int(self.preview_w * aspect_ratio)
-
-        self.img_resized = qimg.scaled(self.preview_w, self.preview_h,
-                                   QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
-        self.preview_label.setPixmap(QtGui.QPixmap.fromImage(self.img_resized))
         self.preview_label.installEventFilter(self)
         self.control_window.layout.addWidget(self.preview_label)
         # self.control_window.layout.addWidget(self.zoom_label)
@@ -186,6 +186,20 @@ class GUI_main(QtWidgets.QMainWindow):
         apply_layout(widget)
         self.control_window.layout.addWidget(widget)
 
+        #movie
+        widget = QtWidgets.QWidget()
+        widget.layout = QtWidgets.QVBoxLayout()
+        widget.setFixedWidth(self.config.ButtonLabelWidth * 2)
+        widget.setFixedHeight(self.config.TextWidgetHeight * 2)
+        label = QtWidgets.QLabel('Movie:')
+        label.setFixedHeight(self.config.TextWidgetHeight)
+        widget.layout.addWidget(label)
+        self.play_button = QtWidgets.QPushButton('Play')
+        self.play_button.clicked.connect(self.play_callback)
+        widget.layout.addWidget(self.play_button)
+        apply_layout(widget)
+        self.control_window.layout.addWidget(widget)
+
         #cell slider
         widget = QtWidgets.QWidget()
         widget.layout = QtWidgets.QHBoxLayout()
@@ -202,10 +216,38 @@ class GUI_main(QtWidgets.QMainWindow):
         self.cell_selector.setMaximum(self.session.ca.cells-1)
         self.cell_selector.setValue(0)
         self.cell_selector.setTickPosition(QtWidgets.QSlider.TicksBelow)
+        self.cell_selector.setMinimumWidth(self.config.ButtonLabelWidth * 2)
         self.cell_selector.valueChanged.connect(self.cell_update)
         widget.layout.addWidget(self.cell_selector)
         apply_layout(widget)
-        self.control_window.layout.addWidget(widget)
+        column = QtWidgets.QWidget()
+        column.layout = QtWidgets.QVBoxLayout()
+        column.layout.addWidget(widget)
+
+        #gamma slider, for the preview and the movie
+        widget = QtWidgets.QWidget()
+        widget.layout = QtWidgets.QHBoxLayout()
+        label = QtWidgets.QLabel('Gamma:')
+        label.setFixedHeight(self.config.TextWidgetHeight)
+        label.setFixedWidth(self.config.ButtonLabelWidth)
+        widget.layout.addWidget(label)
+        self.gamma_label = QtWidgets.QLabel('')
+        self.gamma_label.setFixedHeight(self.config.TextWidgetHeight)
+        self.gamma_label.setFixedWidth(self.config.ButtonLabelWidth)
+        widget.layout.addWidget(self.gamma_label)
+        self.gamma = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.gamma.setMinimum(1)
+        self.gamma.setMaximum(30)
+        self.gamma.setValue(24)  # gamma 0.6
+        self.gamma.setTickPosition(QtWidgets.QSlider.TicksBelow)
+        self.gamma.setMinimumWidth(self.config.ButtonLabelWidth * 2)
+        self.gamma.valueChanged.connect(self.gamma_update)
+        widget.layout.addWidget(self.gamma)
+        apply_layout(widget)
+        column.layout.addWidget(widget)
+        apply_layout(column)
+        self.control_window.layout.addWidget(column)
+        self.gamma_update()
 
 
         apply_layout(self.control_window)
@@ -222,18 +264,42 @@ class GUI_main(QtWidgets.QMainWindow):
         self.TraceCanvas = SubplotsCanvas(nrows=2+self.session.has_ephys, sharex=True, figsize=figsize)
         for ca in self.TraceCanvas.ax:
             strip_ax(ca, False)
-        toolbar = NavigationToolbar2QT(self.TraceCanvas, self)
-        self.traces_window.layout.addWidget(toolbar)
+        self.toolbar = NavigationToolbar2QT(self.TraceCanvas, self)
+        self.traces_window.layout.addWidget(self.toolbar)
         self.traces_window.layout.addWidget(self.TraceCanvas)
 
         apply_layout(self.traces_window)
         self.central_widget.layout.addWidget(self.traces_window)
+
+    def gamma_update(self):
+        # same scale as the BatchGUI preview tab
+        gamma = 15.0 / (self.gamma.value() + 1)
+        self.gamma_label.setText(f'{gamma:.2f}')
+        self.lut = numpy.array([((i / 255.0) ** gamma) * 255 for i in numpy.arange(0, 256)]).astype('uint8')
+        img = cv2.LUT(self.preview_img, self.lut)
+        if len(img.shape) == 2:
+            h, w = img.shape
+            ch = 1
+        else:
+            h, w, ch = img.shape
+        qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
+        self.img_resized = qimg.scaled(self.preview_w, self.preview_h,
+                                       QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        if self.state == State.LIVE:
+            self.paint_preview()
+        if self.player is not None:
+            self.player.lut = self.lut
+            self.player.show_frame(self.player.frame)
 
     def cell_update(self):
         if self.state != State.LIVE:
             return 0
         self.c = int(self.cell_selector.value())
         self.cell_label.setText(str(self.c))
+        self.paint_preview()
+        self.trace_update()
+
+    def paint_preview(self):
         self.polys = self.session.rois.polys
         self.paths = [mplpath.Path(poly) for poly in self.polys]
 
@@ -246,8 +312,6 @@ class GUI_main(QtWidgets.QMainWindow):
             self.paint_poly(poly, painter)
         painter.end()
         self.preview_label.setPixmap(QtGui.QPixmap.fromImage(img))
-
-        self.trace_update()
 
     def trace_update(self):
         if self.state != State.LIVE:
@@ -268,6 +332,61 @@ class GUI_main(QtWidgets.QMainWindow):
                 if self.ch_boxes[chi].isChecked():
                     lines = ca.plot(self.X, Y[:, chi], color=color)
                     self.lines.extend(lines)
+
+    def play_callback(self):
+        if self.player is None:
+            movie = LoadRegistered(self.session.procpath, self.session.prefix, Source.S2P)
+            if movie.data is None:
+                movie.find_alt_path()
+            if movie.data is None:
+                QtWidgets.QMessageBox.warning(self, 'Movie', f'No registered movie found for {self.session.prefix}')
+                return
+            self.player = MoviePlayer(movie, self.X, self.lut)
+            self.player.frame_changed.connect(self.move_marker)
+            self.player.playing_changed.connect(lambda playing: self.play_button.setText(('Play', 'Pause')[playing]))
+            dock = QtWidgets.QDockWidget('Movie', self)
+            dock.setWidget(self.player)
+            dock.visibilityChanged.connect(lambda visible: visible or self.player.pause())
+            self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
+            self.player.seek(self.TraceCanvas.ax[0].get_xlim()[0])  # start at the left edge of the plot
+        self.player.parent().show()
+        self.player.toggle_play()
+
+    def on_draw(self, event):
+        # the figure was redrawn: store it without the marker, then draw the marker on top
+        canvas = self.TraceCanvas
+        self.marker_background = canvas.copy_from_bbox(canvas.fig.bbox)
+        if self.player is not None:
+            self.draw_marker()
+
+    def draw_marker(self):
+        t = self.X[self.player.frame]
+        for line in self.marker_lines:
+            line.set_xdata([t, t])
+            line.set_visible(True)
+            line.axes.draw_artist(line)
+
+    def move_marker(self):
+        canvas = self.TraceCanvas
+        if self.marker_background is None:
+            return
+        canvas.restore_region(self.marker_background)
+        self.draw_marker()
+        canvas.blit(canvas.fig.bbox)
+
+    def marker_press(self, event):
+        # click on the plot to seek, drag to scrub. Not while zooming or panning
+        if self.player is None or event.inaxes is None or event.button != 1 or self.toolbar.mode:
+            return
+        self.dragging = True
+        self.player.seek(event.xdata)
+
+    def marker_motion(self, event):
+        if self.dragging and event.inaxes is not None:
+            self.player.seek(event.xdata)
+
+    def marker_release(self, event):
+        self.dragging = False
 
     def rescale_callback(self):
         ca = self.TraceCanvas.ax[0]
@@ -302,6 +421,105 @@ class GUI_main(QtWidgets.QMainWindow):
                 return 0
             dists.append(numpy.linalg.norm(poly.mean(axis=0) - point))
         self.cell_selector.setValue(numpy.argmin(dists))
+
+
+class MoviePlayer(QtWidgets.QWidget):
+    '''
+    Plays the registered movie at real speed: the frame on display is the one recorded at the elapsed time since
+    play started, frames in between are skipped if display is slower than the frame rate.
+    '''
+    frame_changed = QtCore.Signal()
+    playing_changed = QtCore.Signal(bool)
+    poll_interval = 15  # ms
+
+    rgb_index = {'Ch1': [0], 'Ch2': [1], None: [0, 1, 2]}  # Ch1 red, Ch2 green, untagged movie gray
+
+    def __init__(self, movie, frame_times, lut):
+        super().__init__()
+        self.movie = movie
+        self.X = frame_times
+        self.lut = lut  # gamma, applied to the 8-bit image
+        self.channels = [movie.get_channel(chi) for chi in range(movie.n_channels)]
+        self.rgb = [self.rgb_index[key] for key in movie.channel_keys]
+        self.levels = [self.get_levels(data) for data in self.channels]
+        self.frame = 0
+        self.t_play_start, self.frame_play_start = None, None
+
+        layout = QtWidgets.QVBoxLayout()
+        self.image_label = QtWidgets.QLabel()
+        self.image_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.image_label.setMinimumSize(256, 256)
+        # Ignored: the label follows the layout instead of growing to the size of the frame
+        self.image_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
+        layout.addWidget(self.image_label, stretch=1)
+        self.info_label = QtWidgets.QLabel('')
+        layout.addWidget(self.info_label)
+        self.setLayout(layout)
+        self.image = None
+
+        self.timer = QtCore.QTimer(self)
+        self.timer.setInterval(self.poll_interval)
+        self.timer.timeout.connect(self.next_frame)
+
+    def get_levels(self, data, n=20):
+        # display range of a channel from frames spread over the movie
+        sample = data[numpy.linspace(0, len(data) - 1, n).astype('int')]
+        return numpy.percentile(sample, (1, 99.9))
+
+    def show_frame(self, frame):
+        self.frame = frame
+        h, w = self.channels[0].shape[1:]
+        img = numpy.zeros((h, w, 3), dtype='uint8')
+        for data, levels, rgb in zip(self.channels, self.levels, self.rgb):
+            img[..., rgb] = self.scale(data[frame], levels)[..., None]
+        img = cv2.LUT(img, self.lut)
+        self.image = QtGui.QImage(img.data, w, h, 3 * w, QtGui.QImage.Format_RGB888).copy()
+        self.update_pixmap()
+        self.info_label.setText(f'{self.X[frame]:.2f} s, frame {frame}')
+        self.frame_changed.emit()
+
+    @staticmethod
+    def scale(frame, levels):
+        lo, hi = levels
+        return (numpy.clip((frame - lo) / (hi - lo), 0, 1) * 255).astype('uint8')
+
+    def update_pixmap(self):
+        if self.image is not None:
+            self.image_label.setPixmap(QtGui.QPixmap.fromImage(self.image).scaled(
+                self.image_label.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.FastTransformation))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_pixmap()
+
+    def seek(self, t):
+        frame = int(numpy.clip(numpy.searchsorted(self.X, t), 0, len(self.X) - 1))
+        if self.timer.isActive():  # keep playing from the new time
+            self.t_play_start, self.frame_play_start = time.perf_counter(), frame
+        self.show_frame(frame)
+
+    def toggle_play(self):
+        if self.timer.isActive():
+            self.pause()
+            return
+        if self.frame >= len(self.X) - 1:
+            self.frame = 0
+        self.t_play_start, self.frame_play_start = time.perf_counter(), self.frame
+        self.timer.start()
+        self.playing_changed.emit(True)
+
+    def pause(self):
+        self.timer.stop()
+        self.playing_changed.emit(False)
+
+    def next_frame(self):
+        t = self.X[self.frame_play_start] + time.perf_counter() - self.t_play_start
+        frame = numpy.searchsorted(self.X, t, side='right') - 1
+        if frame >= len(self.X) - 1:
+            self.pause()
+            frame = len(self.X) - 1
+        if frame != self.frame:
+            self.show_frame(int(frame))
 
 
 def main():
