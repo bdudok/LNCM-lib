@@ -5,33 +5,45 @@ from Proc2P.utils import lprint, path_to_list
 from envs import CONFIG
 
 
+def alt_raw_locations(path):
+    '''
+    :param path: a file or folder in _RawData
+    :return: the same path in each alternative raw data path (backup locations, CONFIG.alt_raw_paths). Empty if the
+        path is not in _RawData.
+    '''
+    path1 = str(path)
+    key = '_RawData'
+    if key not in path1:
+        return []
+    parent_folders = path_to_list(path1[path1.find(key) + len(key):])
+    return [os.path.join(os.path.realpath(alt_path), *parent_folders) for alt_path in CONFIG.alt_raw_paths]
+
+
+def find_raw_files(info):
+    '''
+    :param info: the dict of a SessionInfo
+    :return: the folder of the raw movie (the backup location if it was moved there) and its sorted .ome.tif files.
+        No files if the movie is not found.
+    '''
+    prefix = info.prefix
+    # the raw data folder may have been moved to a backup location
+    for dpath in (info['dpath'], *alt_raw_locations(info['dpath'])):
+        if os.path.isdir(dpath):
+            filelist = [fn for fn in os.listdir(dpath) if ((prefix in fn) and ('.ome.tif' in fn))]
+            if len(filelist):
+                if dpath != info['dpath']:
+                    print(f'Image data loaded from {dpath}')
+                return dpath, sorted(filelist)
+    return info['dpath'], []
+
+
 def get_raw_movies(info):
     '''
     :param info: the dict of a SessionInfo
     :return: a dict of the concatenated arrays for each channel
     '''
-    dpath = info['dpath']
+    dpath, filelist = find_raw_files(info)
     prefix = info.prefix
-    # the raw data folder may have been moved to a backup location
-    filelist = [fn for fn in os.listdir(dpath) if ((prefix in fn) and ('.ome.tif' in fn))] if os.path.isdir(dpath) else []
-    if not len(filelist):
-        # look in alternative paths
-        path1 = str(dpath)
-        key = '_RawData'
-        if key not in path1:
-            raise FileNotFoundError(f'No raw movie in {dpath}. Alternative paths are only searched for folders in {key}')
-        rpath = path1[path1.find(key) + len(key):]
-        parent_folders = path_to_list(rpath)
-        # check in each alt path and stop if found em
-        for alt_path in CONFIG.alt_raw_paths:
-            path2 = os.path.join(os.path.realpath(alt_path), *parent_folders)
-            if not os.path.exists(path2):
-                continue
-            filelist = [fn for fn in os.listdir(path2) if ((prefix in fn) and ('.ome.tif' in fn))]
-            if len(filelist):
-                print(f'Image data loaded from {path2}')
-                dpath = path2
-                break
     movies = {}
     n_frames = info['n_frames']
     for channel_name in info['channelnames']:
@@ -56,6 +68,61 @@ def get_raw_movies(info):
         movies[channel_name] = data
         sz = None
     return movies
+
+
+def get_lazy_raw_movies(info):
+    '''
+    Like get_raw_movies, without loading the movies: frames are read from the files when indexed.
+    :param info: the dict of a SessionInfo
+    :return: a dict of a LazyRawMovie for each channel. Empty if the raw movie is not found.
+    '''
+    dpath, filelist = find_raw_files(info)
+    movies = {}
+    for channel_name in info['channelnames']:
+        input_tiffs = [os.path.join(dpath, fn) for fn in filelist if f'_{channel_name}_' in fn]
+        if len(input_tiffs):
+            movies[channel_name] = LazyRawMovie(input_tiffs, info['n_frames'])
+    return movies
+
+
+class LazyRawMovie:
+    '''
+    One channel of a raw Bruker movie, split into ome.tif files. Indexing reads frames from the files, so the movie
+    is not loaded into memory. Each file is opened when a frame in it is first read.
+    Bruker writes the same number of frames into each file except the last, so only the first file's pages are counted.
+    '''
+
+    def __init__(self, files, n_frames):
+        self.files = files
+        self.tiffs = {}  # opened files by index
+        first = self.open(0)
+        self.frames_per_file = len(first.pages)
+        assert (len(files) - 1) * self.frames_per_file < n_frames <= len(files) * self.frames_per_file, \
+            f'{n_frames} frames do not fit {len(files)} files of {self.frames_per_file} frames: {files[0]}'
+        page = first.pages[0]
+        self.shape = (n_frames, *page.shape)
+        self.dtype = page.dtype
+
+    def open(self, file_index):
+        if file_index not in self.tiffs:
+            tif = TiffFile(self.files[file_index], is_ome=False)  # is_ome=False: don't parse the OME-XML
+            tif.pages.useframes = True  # light page objects, only offsets
+            self.tiffs[file_index] = tif
+        return self.tiffs[file_index]
+
+    def __len__(self):
+        return self.shape[0]
+
+    def __getitem__(self, item):
+        if numpy.ndim(item):
+            return numpy.stack([self[i] for i in item])
+        file_index, page = divmod(int(item), self.frames_per_file)
+        return self.open(file_index).pages[page].asarray()
+
+    def close(self):
+        for tif in self.tiffs.values():
+            tif.close()
+        self.tiffs = {}
 
 
 class LoadMovie():

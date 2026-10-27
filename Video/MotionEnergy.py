@@ -29,6 +29,7 @@ import numpy
 
 from LFP.Pinnacle import ReadEDF
 from LFP.Setup import Setup
+from Proc2P.Bruker.LoadMovie import alt_raw_locations
 from Proc2P.Bruker.PreProc import SessionInfo
 from Proc2P.utils import lprint
 from Video import LoadVEEG
@@ -167,9 +168,13 @@ def bruker_frame_times(procpath, prefix):
     session = Path(procpath) / prefix
     si = SessionInfo(session, prefix)
     si.load()
-    if si['cam_file'] is None or not os.path.exists(si['cam_file']):
+    if si['cam_file'] is None:
         return None
-    cam_file = Path(si['cam_file'])
+    # the raw data folder may have been moved to a backup location
+    found = [fn for fn in (si['cam_file'], *alt_raw_locations(si['cam_file'])) if os.path.exists(fn)]
+    if not found:
+        return None
+    cam_file = Path(found[0])
     timers_fn = cam_file.with_name(cam_file.stem + '_CamTimers.npy')
     sync_fn = session / (prefix + '_cam_sync_frames.npy')
     if timers_fn.exists():
