@@ -197,8 +197,10 @@ class GUI_main(QtWidgets.QMainWindow):
         label = QtWidgets.QLabel('Movie:')
         label.setFixedHeight(self.config.TextWidgetHeight)
         widget.layout.addWidget(label)
-        self.source_selector = QtWidgets.QComboBox(self)  # filled when the movie is first opened
-        self.source_selector.setEnabled(False)
+        self.source_selector = QtWidgets.QComboBox(self)  # all sources until the movie is first opened, then the available ones
+        for source in Source:
+            self.source_selector.addItem(source.name, source)
+        self.source_selector.setCurrentText(Source.S2P.name)
         self.source_selector.currentIndexChanged.connect(self.source_update)
         widget.layout.addWidget(self.source_selector)
         boxes = QtWidgets.QHBoxLayout()
@@ -239,27 +241,31 @@ class GUI_main(QtWidgets.QMainWindow):
         column.layout = QtWidgets.QVBoxLayout()
         column.layout.addWidget(widget)
 
-        #gamma slider, for the preview and the 2P movie
-        widget = QtWidgets.QWidget()
-        widget.layout = QtWidgets.QHBoxLayout()
-        label = QtWidgets.QLabel('Gamma:')
-        label.setFixedHeight(self.config.TextWidgetHeight)
-        label.setFixedWidth(self.config.ButtonLabelWidth)
-        widget.layout.addWidget(label)
-        self.gamma_label = QtWidgets.QLabel('')
-        self.gamma_label.setFixedHeight(self.config.TextWidgetHeight)
-        self.gamma_label.setFixedWidth(self.config.ButtonLabelWidth)
-        widget.layout.addWidget(self.gamma_label)
-        self.gamma = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-        self.gamma.setMinimum(1)
-        self.gamma.setMaximum(30)
-        self.gamma.setValue(24)  # gamma 0.6
-        self.gamma.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        self.gamma.setMinimumWidth(self.config.ButtonLabelWidth * 2)
-        self.gamma.valueChanged.connect(self.gamma_update)
-        widget.layout.addWidget(self.gamma)
-        apply_layout(widget)
-        column.layout.addWidget(widget)
+        #gamma sliders of the red (Ch1) and green (Ch2) channel, for the preview and the 2P movie
+        self.gamma_sliders, self.gamma_labels = [], []
+        for name in ('Red', 'Green'):
+            widget = QtWidgets.QWidget()
+            widget.layout = QtWidgets.QHBoxLayout()
+            label = QtWidgets.QLabel(f'{name} γ:')
+            label.setFixedHeight(self.config.TextWidgetHeight)
+            label.setFixedWidth(self.config.ButtonLabelWidth)
+            widget.layout.addWidget(label)
+            label = QtWidgets.QLabel('')
+            label.setFixedHeight(self.config.TextWidgetHeight)
+            label.setFixedWidth(self.config.ButtonLabelWidth)
+            widget.layout.addWidget(label)
+            self.gamma_labels.append(label)
+            slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            slider.setMinimum(1)
+            slider.setMaximum(30)
+            slider.setValue(24)  # gamma 0.6
+            slider.setTickPosition(QtWidgets.QSlider.TicksBelow)
+            slider.setMinimumWidth(self.config.ButtonLabelWidth * 2)
+            slider.valueChanged.connect(self.gamma_update)
+            widget.layout.addWidget(slider)
+            self.gamma_sliders.append(slider)
+            apply_layout(widget)
+            column.layout.addWidget(widget)
         apply_layout(column)
         self.control_window.layout.addWidget(column)
         self.gamma_update()
@@ -287,23 +293,22 @@ class GUI_main(QtWidgets.QMainWindow):
         self.central_widget.layout.addWidget(self.traces_window)
 
     def gamma_update(self):
-        # same scale as the BatchGUI preview tab
-        gamma = 15.0 / (self.gamma.value() + 1)
-        self.gamma_label.setText(f'{gamma:.2f}')
-        self.lut = numpy.array([((i / 255.0) ** gamma) * 255 for i in numpy.arange(0, 256)]).astype('uint8')
-        img = cv2.LUT(self.preview_img, self.lut)
-        if len(img.shape) == 2:
-            h, w = img.shape
-            ch = 1
-        else:
-            h, w, ch = img.shape
-        qimg = QtGui.QImage(img, w, h, ch * w, QtGui.QImage.Format_RGB888)
+        # same scale as the BatchGUI preview tab. luts: red, green
+        self.luts = []
+        for slider, label in zip(self.gamma_sliders, self.gamma_labels):
+            gamma = 15.0 / (slider.value() + 1)
+            label.setText(f'{gamma:.2f}')
+            self.luts.append(numpy.array([((i / 255.0) ** gamma) * 255 for i in numpy.arange(0, 256)]).astype('uint8'))
+        # the preview is RGB with Ch1 in red and Ch2 in green
+        img = cv2.LUT(self.preview_img, numpy.dstack([*self.luts, self.luts[1]]))
+        h, w = img.shape[:2]
+        qimg = QtGui.QImage(img, w, h, 3 * w, QtGui.QImage.Format_RGB888)
         self.img_resized = qimg.scaled(self.preview_w, self.preview_h,
                                        QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
         if self.state == State.LIVE:
             self.paint_preview()
         if self.player is not None:
-            self.player.set_lut(self.lut)
+            self.player.set_luts(self.luts)
 
     def cell_update(self):
         if self.state != State.LIVE:
@@ -371,6 +376,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
     def source_update(self):
         if self.player is not None:
+            self.player.scope_label.show_message('Switching source...')  # opening a raw movie takes a few seconds
             self.player.set_scope(self.get_movie(self.source_selector.currentData()))
 
     def panels_update(self):
@@ -383,9 +389,16 @@ class GUI_main(QtWidgets.QMainWindow):
             if not self.movies and self.video is None:
                 QtWidgets.QMessageBox.warning(self, 'Movie', f'No movie or video found for {self.session.prefix}')
                 return
+            # list the available sources; keep the selected one if available, otherwise S2P or the first available
+            selected = self.source_selector.currentData()
+            if selected not in self.movies:
+                selected = Source.S2P if Source.S2P in self.movies else next(iter(self.movies), None)
             self.source_selector.blockSignals(True)
+            self.source_selector.clear()
             for source in self.movies:
                 self.source_selector.addItem(source.name, source)
+            if selected is not None:
+                self.source_selector.setCurrentText(selected.name)
             self.source_selector.blockSignals(False)
             self.source_selector.setEnabled(len(self.movies) > 0)
             for box, available in ((self.scope_box, len(self.movies)), (self.video_box, self.video is not None)):
@@ -393,9 +406,7 @@ class GUI_main(QtWidgets.QMainWindow):
                 box.setChecked(box.isChecked() and available)
                 box.setEnabled(available)
                 box.blockSignals(False)
-            self.player = MoviePlayer(self.X, self.lut)
-            if self.movies:
-                self.player.set_scope(self.get_movie(self.source_selector.currentData()))
+            self.player = MoviePlayer(self.X, self.luts)
             if self.video is not None:
                 cam_file, cam_times = self.video
                 self.player.set_video(LoadAvi(str(cam_file)), cam_times)
@@ -405,10 +416,20 @@ class GUI_main(QtWidgets.QMainWindow):
             dock.setWidget(self.player)
             dock.visibilityChanged.connect(lambda visible: visible or self.player.pause())
             self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
+            QtCore.QTimer.singleShot(0, lambda: self.widen_dock(dock, 1.5))  # after the dock is laid out
             self.panels_update()
+            if self.movies:
+                self.app.processEvents()  # show the dock, so the message is visible while a raw movie opens
+                self.source_update()
             self.player.seek(self.TraceCanvas.ax[0].get_xlim()[0])  # start at the left edge of the plot
         self.player.parent().show()
         self.player.toggle_play()
+
+    def widen_dock(self, dock, factor):
+        # the window grows by the extra width, the plots keep theirs
+        extra = int((factor - 1) * dock.width())
+        self.resize(self.width() + extra, self.height())
+        self.resizeDocks([dock], [dock.width() + extra], QtCore.Qt.Horizontal)
 
     def on_draw(self, event):
         # the figure was redrawn: store it without the marker, then draw the marker on top
@@ -493,10 +514,10 @@ class MoviePlayer(QtWidgets.QWidget):
 
     rgb_index = {'Ch1': [0], 'Ch2': [1], None: [0, 1, 2]}  # Ch1 red, Ch2 green, untagged movie gray
 
-    def __init__(self, frame_times, lut):
+    def __init__(self, frame_times, luts):
         super().__init__()
         self.X = frame_times
-        self.lut = lut  # gamma, applied to the 8-bit 2P images
+        self.luts = luts  # gamma of the red and green channel, applied to the 8-bit 2P images
         self.t = self.X[0]
         self.t_play_start, self.t_at_play_start = None, None
         self.channels = None
@@ -537,15 +558,15 @@ class MoviePlayer(QtWidgets.QWidget):
         self.redraw()
 
     def show_panels(self, scope, video):
-        self.show_scope = scope and self.channels is not None
+        self.show_scope = scope
         self.show_video = video and self.video is not None
         self.scope_label.setVisible(self.show_scope)
         self.video_label.setVisible(self.show_video)
         self.redraw()
 
-    def set_lut(self, lut):
-        self.lut = lut
-        if self.show_scope:
+    def set_luts(self, luts):
+        self.luts = luts
+        if self.show_scope and self.channels is not None:
             self.show_scope_frame(self.scope_frame)
 
     def redraw(self):
@@ -565,7 +586,7 @@ class MoviePlayer(QtWidgets.QWidget):
         self.t = t
         changed = False
         info = [f'{t:.2f} s']
-        if self.show_scope:
+        if self.show_scope and self.channels is not None:
             frame = int(max(numpy.searchsorted(self.X, t, side='right') - 1, 0))
             if frame != self.scope_frame:
                 self.show_scope_frame(frame)
@@ -587,8 +608,9 @@ class MoviePlayer(QtWidgets.QWidget):
         h, w = self.channels[0].shape[1:]
         img = numpy.zeros((h, w, 3), dtype='uint8')
         for data, levels, rgb in zip(self.channels, self.levels, self.rgb):
-            img[..., rgb] = self.scale(data[frame], levels)[..., None]
-        self.scope_label.set_image(cv2.LUT(img, self.lut))
+            lut = self.luts[0] if rgb == [0] else self.luts[1]  # untagged gray movie: green
+            img[..., rgb] = lut[self.scale(data[frame], levels)][..., None]
+        self.scope_label.set_image(img)
 
     @staticmethod
     def scale(frame, levels):
@@ -644,6 +666,11 @@ class FrameLabel(QtWidgets.QLabel):
         else:
             self.image = QtGui.QImage(img.data, w, h, 3 * w, QtGui.QImage.Format_RGB888).copy()
         self.update_pixmap()
+
+    def show_message(self, text):
+        self.image = None
+        self.setText(text)
+        self.repaint()  # now: the caller blocks the event loop
 
     def update_pixmap(self):
         if self.image is not None:
