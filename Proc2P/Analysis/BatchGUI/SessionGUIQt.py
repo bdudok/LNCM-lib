@@ -194,6 +194,10 @@ class GUI_main(QtWidgets.QMainWindow):
         label = QtWidgets.QLabel('Movie:')
         label.setFixedHeight(self.config.TextWidgetHeight)
         widget.layout.addWidget(label)
+        self.source_selector = QtWidgets.QComboBox(self)  # filled when the movie is first opened
+        self.source_selector.setEnabled(False)
+        self.source_selector.currentIndexChanged.connect(self.source_update)
+        widget.layout.addWidget(self.source_selector)
         self.play_button = QtWidgets.QPushButton('Play')
         self.play_button.clicked.connect(self.play_callback)
         widget.layout.addWidget(self.play_button)
@@ -333,15 +337,35 @@ class GUI_main(QtWidgets.QMainWindow):
                     lines = ca.plot(self.X, Y[:, chi], color=color)
                     self.lines.extend(lines)
 
-    def play_callback(self):
-        if self.player is None:
-            movie = LoadRegistered(self.session.procpath, self.session.prefix, Source.S2P)
+    def open_movies(self):
+        # registered movies of the session, by source. Raw is not listed: get_raw_movies loads the whole movie
+        self.movies = {}
+        for source in (Source.S2P, Source.GEVIReg):
+            try:
+                movie = LoadRegistered(self.session.procpath, self.session.prefix, source)
+            except FileNotFoundError:  # S2P: no suite2p ops
+                continue
             if movie.data is None:
                 movie.find_alt_path()
-            if movie.data is None:
+            if movie.data is not None:
+                self.movies[source] = movie
+
+    def source_update(self):
+        if self.player is not None:
+            self.player.set_movie(self.movies[self.source_selector.currentData()])
+
+    def play_callback(self):
+        if self.player is None:
+            self.open_movies()
+            if not self.movies:
                 QtWidgets.QMessageBox.warning(self, 'Movie', f'No registered movie found for {self.session.prefix}')
                 return
-            self.player = MoviePlayer(movie, self.X, self.lut)
+            self.source_selector.blockSignals(True)
+            for source in self.movies:
+                self.source_selector.addItem(source.name, source)
+            self.source_selector.blockSignals(False)
+            self.source_selector.setEnabled(True)
+            self.player = MoviePlayer(self.movies[self.source_selector.currentData()], self.X, self.lut)
             self.player.frame_changed.connect(self.move_marker)
             self.player.playing_changed.connect(lambda playing: self.play_button.setText(('Play', 'Pause')[playing]))
             dock = QtWidgets.QDockWidget('Movie', self)
@@ -436,12 +460,9 @@ class MoviePlayer(QtWidgets.QWidget):
 
     def __init__(self, movie, frame_times, lut):
         super().__init__()
-        self.movie = movie
         self.X = frame_times
         self.lut = lut  # gamma, applied to the 8-bit image
-        self.channels = [movie.get_channel(chi) for chi in range(movie.n_channels)]
-        self.rgb = [self.rgb_index[key] for key in movie.channel_keys]
-        self.levels = [self.get_levels(data) for data in self.channels]
+        self.set_movie(movie, show=False)
         self.frame = 0
         self.t_play_start, self.frame_play_start = None, None
 
@@ -460,6 +481,14 @@ class MoviePlayer(QtWidgets.QWidget):
         self.timer = QtCore.QTimer(self)
         self.timer.setInterval(self.poll_interval)
         self.timer.timeout.connect(self.next_frame)
+
+    def set_movie(self, movie, show=True):
+        self.movie = movie
+        self.channels = [movie.get_channel(chi) for chi in range(movie.n_channels)]
+        self.rgb = [self.rgb_index[key] for key in movie.channel_keys]
+        self.levels = [self.get_levels(data) for data in self.channels]
+        if show:
+            self.show_frame(self.frame)
 
     def get_levels(self, data, n=20):
         # display range of a channel from frames spread over the movie
