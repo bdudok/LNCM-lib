@@ -18,6 +18,9 @@ from Proc2P.Analysis.BatchGUI.Config import GuiConfig, State
 from Proc2P.Analysis.BatchGUI.utils import apply_layout, SubplotsCanvas
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.Bruker.LoadRegistered import LoadRegistered, Source
+from Proc2P.Bruker.LoadMovie import find_raw_files, get_lazy_raw_movies
+from Video.LoadAvi import LoadAvi
+from Video.MotionEnergy import bruker_frame_times
 from PlotTools.Formatting import strip_ax
 import matplotlib.path as mplpath
 import cv2
@@ -190,7 +193,7 @@ class GUI_main(QtWidgets.QMainWindow):
         widget = QtWidgets.QWidget()
         widget.layout = QtWidgets.QVBoxLayout()
         widget.setFixedWidth(self.config.ButtonLabelWidth * 2)
-        widget.setFixedHeight(self.config.TextWidgetHeight * 2)
+        widget.setFixedHeight(self.config.TextWidgetHeight * 3)
         label = QtWidgets.QLabel('Movie:')
         label.setFixedHeight(self.config.TextWidgetHeight)
         widget.layout.addWidget(label)
@@ -198,6 +201,14 @@ class GUI_main(QtWidgets.QMainWindow):
         self.source_selector.setEnabled(False)
         self.source_selector.currentIndexChanged.connect(self.source_update)
         widget.layout.addWidget(self.source_selector)
+        boxes = QtWidgets.QHBoxLayout()
+        self.scope_box = QtWidgets.QCheckBox('2P')
+        self.video_box = QtWidgets.QCheckBox('Video')
+        for box in (self.scope_box, self.video_box):
+            box.setChecked(True)
+            box.stateChanged.connect(self.panels_update)
+            boxes.addWidget(box)
+        widget.layout.addLayout(boxes)
         self.play_button = QtWidgets.QPushButton('Play')
         self.play_button.clicked.connect(self.play_callback)
         widget.layout.addWidget(self.play_button)
@@ -228,7 +239,7 @@ class GUI_main(QtWidgets.QMainWindow):
         column.layout = QtWidgets.QVBoxLayout()
         column.layout.addWidget(widget)
 
-        #gamma slider, for the preview and the movie
+        #gamma slider, for the preview and the 2P movie
         widget = QtWidgets.QWidget()
         widget.layout = QtWidgets.QHBoxLayout()
         label = QtWidgets.QLabel('Gamma:')
@@ -292,8 +303,7 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.state == State.LIVE:
             self.paint_preview()
         if self.player is not None:
-            self.player.lut = self.lut
-            self.player.show_frame(self.player.frame)
+            self.player.set_lut(self.lut)
 
     def cell_update(self):
         if self.state != State.LIVE:
@@ -338,7 +348,7 @@ class GUI_main(QtWidgets.QMainWindow):
                     self.lines.extend(lines)
 
     def open_movies(self):
-        # registered movies of the session, by source. Raw is not listed: get_raw_movies loads the whole movie
+        # 2P movies of the session by source, as frames by channel. Raw is None until selected: opening reads its files
         self.movies = {}
         for source in (Source.S2P, Source.GEVIReg):
             try:
@@ -348,30 +358,54 @@ class GUI_main(QtWidgets.QMainWindow):
             if movie.data is None:
                 movie.find_alt_path()
             if movie.data is not None:
-                self.movies[source] = movie
+                self.movies[source] = {key: movie.get_channel(chi) for chi, key in enumerate(movie.channel_keys)}
+        if len(find_raw_files(self.session.si)[1]):
+            self.movies[Source.Raw] = None
+        # camera video and the time of its frames
+        self.video = bruker_frame_times(self.session.procpath, self.session.prefix)
+
+    def get_movie(self, source):
+        if self.movies[source] is None:
+            self.movies[source] = get_lazy_raw_movies(self.session.si)
+        return self.movies[source]
 
     def source_update(self):
         if self.player is not None:
-            self.player.set_movie(self.movies[self.source_selector.currentData()])
+            self.player.set_scope(self.get_movie(self.source_selector.currentData()))
+
+    def panels_update(self):
+        if self.player is not None:
+            self.player.show_panels(self.scope_box.isChecked(), self.video_box.isChecked())
 
     def play_callback(self):
         if self.player is None:
             self.open_movies()
-            if not self.movies:
-                QtWidgets.QMessageBox.warning(self, 'Movie', f'No registered movie found for {self.session.prefix}')
+            if not self.movies and self.video is None:
+                QtWidgets.QMessageBox.warning(self, 'Movie', f'No movie or video found for {self.session.prefix}')
                 return
             self.source_selector.blockSignals(True)
             for source in self.movies:
                 self.source_selector.addItem(source.name, source)
             self.source_selector.blockSignals(False)
-            self.source_selector.setEnabled(True)
-            self.player = MoviePlayer(self.movies[self.source_selector.currentData()], self.X, self.lut)
-            self.player.frame_changed.connect(self.move_marker)
+            self.source_selector.setEnabled(len(self.movies) > 0)
+            for box, available in ((self.scope_box, len(self.movies)), (self.video_box, self.video is not None)):
+                box.blockSignals(True)
+                box.setChecked(box.isChecked() and available)
+                box.setEnabled(available)
+                box.blockSignals(False)
+            self.player = MoviePlayer(self.X, self.lut)
+            if self.movies:
+                self.player.set_scope(self.get_movie(self.source_selector.currentData()))
+            if self.video is not None:
+                cam_file, cam_times = self.video
+                self.player.set_video(LoadAvi(str(cam_file)), cam_times)
+            self.player.time_changed.connect(self.move_marker)
             self.player.playing_changed.connect(lambda playing: self.play_button.setText(('Play', 'Pause')[playing]))
             dock = QtWidgets.QDockWidget('Movie', self)
             dock.setWidget(self.player)
             dock.visibilityChanged.connect(lambda visible: visible or self.player.pause())
             self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
+            self.panels_update()
             self.player.seek(self.TraceCanvas.ax[0].get_xlim()[0])  # start at the left edge of the plot
         self.player.parent().show()
         self.player.toggle_play()
@@ -384,7 +418,7 @@ class GUI_main(QtWidgets.QMainWindow):
             self.draw_marker()
 
     def draw_marker(self):
-        t = self.X[self.player.frame]
+        t = self.player.t
         for line in self.marker_lines:
             line.set_xdata([t, t])
             line.set_visible(True)
@@ -449,91 +483,132 @@ class GUI_main(QtWidgets.QMainWindow):
 
 class MoviePlayer(QtWidgets.QWidget):
     '''
-    Plays the registered movie at real speed: the frame on display is the one recorded at the elapsed time since
-    play started, frames in between are skipped if display is slower than the frame rate.
+    Plays the 2P movie and the camera video at real speed, one above the other. The time on display (s, on the time
+    axis of the 2P frames) is the elapsed time since play started; each panel shows its frame recorded at that time,
+    frames in between are skipped if display is slower than the frame rate.
     '''
-    frame_changed = QtCore.Signal()
+    time_changed = QtCore.Signal()
     playing_changed = QtCore.Signal(bool)
     poll_interval = 15  # ms
 
     rgb_index = {'Ch1': [0], 'Ch2': [1], None: [0, 1, 2]}  # Ch1 red, Ch2 green, untagged movie gray
 
-    def __init__(self, movie, frame_times, lut):
+    def __init__(self, frame_times, lut):
         super().__init__()
         self.X = frame_times
-        self.lut = lut  # gamma, applied to the 8-bit image
-        self.set_movie(movie, show=False)
-        self.frame = 0
-        self.t_play_start, self.frame_play_start = None, None
+        self.lut = lut  # gamma, applied to the 8-bit 2P images
+        self.t = self.X[0]
+        self.t_play_start, self.t_at_play_start = None, None
+        self.channels = None
+        self.video = None
+        self.scope_frame, self.video_frame = None, None  # frames on display
+        self.show_scope, self.show_video = False, False  # set by show_panels
 
         layout = QtWidgets.QVBoxLayout()
-        self.image_label = QtWidgets.QLabel()
-        self.image_label.setAlignment(QtCore.Qt.AlignCenter)
-        self.image_label.setMinimumSize(256, 256)
-        # Ignored: the label follows the layout instead of growing to the size of the frame
-        self.image_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
-        layout.addWidget(self.image_label, stretch=1)
+        self.scope_label = FrameLabel()
+        layout.addWidget(self.scope_label, stretch=1)
+        self.video_label = FrameLabel()
+        layout.addWidget(self.video_label, stretch=1)
         self.info_label = QtWidgets.QLabel('')
         layout.addWidget(self.info_label)
         self.setLayout(layout)
-        self.image = None
 
         self.timer = QtCore.QTimer(self)
         self.timer.setInterval(self.poll_interval)
         self.timer.timeout.connect(self.next_frame)
 
-    def set_movie(self, movie, show=True):
-        self.movie = movie
-        self.channels = [movie.get_channel(chi) for chi in range(movie.n_channels)]
-        self.rgb = [self.rgb_index[key] for key in movie.channel_keys]
+    def set_scope(self, channels):
+        '''
+        :param channels: dict of the frames of each channel, by channel key (Ch1, Ch2, or None for an untagged movie)
+        '''
+        self.channels = list(channels.values())
+        self.rgb = [self.rgb_index[key] for key in channels]
         self.levels = [self.get_levels(data) for data in self.channels]
-        if show:
-            self.show_frame(self.frame)
+        self.redraw()
 
-    def get_levels(self, data, n=20):
-        # display range of a channel from frames spread over the movie
-        sample = data[numpy.linspace(0, len(data) - 1, n).astype('int')]
+    def set_video(self, video, frame_times):
+        '''
+        :param video: LoadAvi of the camera
+        :param frame_times: time of each camera frame on the time axis of the 2P frames, nan if not known
+        '''
+        self.video = video
+        self.video_frames = numpy.where(numpy.logical_not(numpy.isnan(frame_times)))[0]
+        self.video_times = frame_times[self.video_frames]
+        self.redraw()
+
+    def show_panels(self, scope, video):
+        self.show_scope = scope and self.channels is not None
+        self.show_video = video and self.video is not None
+        self.scope_label.setVisible(self.show_scope)
+        self.video_label.setVisible(self.show_video)
+        self.redraw()
+
+    def set_lut(self, lut):
+        self.lut = lut
+        if self.show_scope:
+            self.show_scope_frame(self.scope_frame)
+
+    def redraw(self):
+        self.scope_frame, self.video_frame = None, None
+        self.show_time(self.t)
+
+    def get_levels(self, data, n=100):
+        # display range of a channel from frames in the middle of the first raw file (already open; bleaching is
+        # strongest at the start), or of the registered movie
+        center = getattr(data, 'frames_per_file', len(data)) // 2
+        start = max(0, min(center - n // 2, len(data) - n))
+        sample = data[numpy.arange(start, min(start + n, len(data)))]
         return numpy.percentile(sample, (1, 99.9))
 
-    def show_frame(self, frame):
-        self.frame = frame
+    def show_time(self, t):
+        '''Display the frames recorded at time t. Returns whether a frame changed.'''
+        self.t = t
+        changed = False
+        info = [f'{t:.2f} s']
+        if self.show_scope:
+            frame = int(max(numpy.searchsorted(self.X, t, side='right') - 1, 0))
+            if frame != self.scope_frame:
+                self.show_scope_frame(frame)
+                changed = True
+            info.append(f'2P frame {frame}')
+        if self.show_video:
+            i = max(numpy.searchsorted(self.video_times, t, side='right') - 1, 0)
+            frame = int(self.video_frames[i])
+            if frame != self.video_frame:
+                self.video_frame = frame
+                self.video_label.set_image(self.video[frame])
+                changed = True
+            info.append(f'video frame {frame}')
+        self.info_label.setText(', '.join(info))
+        return changed
+
+    def show_scope_frame(self, frame):
+        self.scope_frame = frame
         h, w = self.channels[0].shape[1:]
         img = numpy.zeros((h, w, 3), dtype='uint8')
         for data, levels, rgb in zip(self.channels, self.levels, self.rgb):
             img[..., rgb] = self.scale(data[frame], levels)[..., None]
-        img = cv2.LUT(img, self.lut)
-        self.image = QtGui.QImage(img.data, w, h, 3 * w, QtGui.QImage.Format_RGB888).copy()
-        self.update_pixmap()
-        self.info_label.setText(f'{self.X[frame]:.2f} s, frame {frame}')
-        self.frame_changed.emit()
+        self.scope_label.set_image(cv2.LUT(img, self.lut))
 
     @staticmethod
     def scale(frame, levels):
         lo, hi = levels
         return (numpy.clip((frame - lo) / (hi - lo), 0, 1) * 255).astype('uint8')
 
-    def update_pixmap(self):
-        if self.image is not None:
-            self.image_label.setPixmap(QtGui.QPixmap.fromImage(self.image).scaled(
-                self.image_label.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.FastTransformation))
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.update_pixmap()
-
     def seek(self, t):
-        frame = int(numpy.clip(numpy.searchsorted(self.X, t), 0, len(self.X) - 1))
+        t = min(max(t, self.X[0]), self.X[-1])
         if self.timer.isActive():  # keep playing from the new time
-            self.t_play_start, self.frame_play_start = time.perf_counter(), frame
-        self.show_frame(frame)
+            self.t_play_start, self.t_at_play_start = time.perf_counter(), t
+        self.show_time(t)
+        self.time_changed.emit()
 
     def toggle_play(self):
         if self.timer.isActive():
             self.pause()
             return
-        if self.frame >= len(self.X) - 1:
-            self.frame = 0
-        self.t_play_start, self.frame_play_start = time.perf_counter(), self.frame
+        if self.t >= self.X[-1]:
+            self.t = self.X[0]
+        self.t_play_start, self.t_at_play_start = time.perf_counter(), self.t
         self.timer.start()
         self.playing_changed.emit(True)
 
@@ -542,13 +617,42 @@ class MoviePlayer(QtWidgets.QWidget):
         self.playing_changed.emit(False)
 
     def next_frame(self):
-        t = self.X[self.frame_play_start] + time.perf_counter() - self.t_play_start
-        frame = numpy.searchsorted(self.X, t, side='right') - 1
-        if frame >= len(self.X) - 1:
+        t = self.t_at_play_start + time.perf_counter() - self.t_play_start
+        if t >= self.X[-1]:
+            t = self.X[-1]
             self.pause()
-            frame = len(self.X) - 1
-        if frame != self.frame:
-            self.show_frame(int(frame))
+        if self.show_time(t):  # the marker moves with the frames, no need to redraw it on every tick
+            self.time_changed.emit()
+
+
+class FrameLabel(QtWidgets.QLabel):
+    '''Shows an 8-bit image (gray or RGB) scaled to the label, keeping the aspect ratio.'''
+
+    def __init__(self):
+        super().__init__()
+        self.setAlignment(QtCore.Qt.AlignCenter)
+        self.setMinimumSize(256, 192)
+        # Ignored: the label follows the layout instead of growing to the size of the frame
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
+        self.image = None
+
+    def set_image(self, img):
+        img = numpy.ascontiguousarray(img)
+        h, w = img.shape[:2]
+        if img.ndim == 2:
+            self.image = QtGui.QImage(img.data, w, h, w, QtGui.QImage.Format_Grayscale8).copy()
+        else:
+            self.image = QtGui.QImage(img.data, w, h, 3 * w, QtGui.QImage.Format_RGB888).copy()
+        self.update_pixmap()
+
+    def update_pixmap(self):
+        if self.image is not None:
+            self.setPixmap(QtGui.QPixmap.fromImage(self.image).scaled(
+                self.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.FastTransformation))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_pixmap()
 
 
 def main():
