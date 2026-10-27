@@ -13,6 +13,10 @@ from sklearn.mixture import GaussianMixture
 from Proc2P.Bruker.PreProc import SessionInfo
 from dataclasses import dataclass
 
+# start of the recording masked (nan) in rel and ntr (smtr: 1 s more), and excluded from the baseline. Fast small-FOV sessions
+# start up to ~10% dim and settle within ~2 s (acquisition start transient, in the whole frame and both channels).
+STARTUP_S = 2
+
 @dataclass
 class ProcessConfig:
     # fields to be configurable from GUI
@@ -190,7 +194,8 @@ class CaTrace(object):
         os.mkdir(self.pf)
         for key in self.keys:
             numpy.save(self.pf / f'{key}.npy', self.__getattribute__(key))
-        self.version_info = {'v': '13', 'bsltype': self.bsltype, 'sz_mode': str(self.ignore_saturation),
+        self.version_info = {'v': '14', 'startup_masked_s': str(STARTUP_S),
+                             'bsltype': self.bsltype, 'sz_mode': str(self.ignore_saturation),
                              'channel': str(self.ch),
                              'fps': f'{round(self.fps, 1)}',
                              'bg_corr': str(self.last_bg),
@@ -342,11 +347,12 @@ class Worker(Process):
             if this_is_nancell and not ignore_saturation:
                 ntr[:] = numpy.nan
             else:
+                startup = min(int(STARTUP_S * fps), frames // 10)
                 if bsltype == 'poly':
                     # instead of original sliding window minimum, use a polynom fit for baseline
                     # fit polynom (for periods outside movement
                     x = []
-                    for t in numpy.arange(trim, frames - trim):
+                    for t in numpy.arange(max(trim, startup), frames - trim):
                         if not movement[t]:
                             # exclude excluded part
                             if not exclude[0] < t <= exclude[1]:
@@ -378,15 +384,15 @@ class Worker(Process):
                         bsltype = 'original'
                 if bsltype in ['original', 'both']:  # both not implemented
                     # the F0 method described in Jia Nat Prot 2011 paper
-                    for t in range(1, frames):
-                        ti0, ti1 = max(0, t - t2), min(t, frames)
+                    for t in range(startup + 1, frames):
+                        ti0, ti1 = max(startup, t - t2), min(t, frames)
                         minv = numpy.nanmin(smw[ti0:ti1])
                         bsl[t] = minv
-                    bsl[0] = bsl[1]
+                    bsl[:startup + 1] = bsl[startup + 1]
                 elif bsltype == 'MonotonicMin':
                     # baseline is the minimum past value of the smoothed raw trace
                     minv = numpy.nan
-                    t = 1
+                    t = max(1, startup)
                     while not minv > 0:
                         if not exclude[0] < t <= exclude[1]:
                             if smw[t] > 0:
@@ -401,11 +407,13 @@ class Worker(Process):
                         t += 1
                 rel = (data - bsl) / bsl
                 rel[nan_samples] = numpy.nan
+                rel[:startup] = numpy.nan
                 ntr = rel / numpy.nanstd(rel)
                 # additional iteration for more accurate noise levels
                 ntr = numpy.nan_to_num(rel / numpy.nanstd(rel[numpy.where(ntr < 2)]))
-                # ewma
-                smtr = numpy.array(pandas.DataFrame(ntr).ewm(int(fps)).mean()[0])
+                ntr[:startup] = numpy.nan
+                # ewma. starts 1 s after the masked start, so its first values are not unsmoothed noise
+                smtr = numpy.array(pandas.DataFrame(ntr).ewm(int(fps), min_periods=int(fps)).mean()[0])
                 ntr[nan_samples] = numpy.nan
 
             result = {'trace': data, 'bsl': bsl, 'rel': rel, 'ntr': ntr, 'smtr': smtr}
