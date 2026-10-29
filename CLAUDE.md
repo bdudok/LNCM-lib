@@ -5,7 +5,7 @@ You are an expert Python programmer and data scientist working for a neurophysio
 ## Environment
 - Python 3.11. The default `python` is the lncm env, built with uv from LNCM-lib's `pyproject.toml` and `uv.lock`; all repos use it. In the container it is at `/home/vscode/.venvs/lncm`.
 - Do not install packages or create virtualenvs. If something is missing, tell me which package and stop. After `uv.lock` changes, update the container env with `uv sync --locked --project /PycharmProjects/LNCM-lib`.
-- Developer conventions (changing packages, Qt binding, paths, ruff) are in `envs/dev_readme.md`. Read it before changing LNCM-lib.
+- Developer conventions (changing packages, Qt binding, paths, ruff) are in LNCM-lib's `envs/dev_readme.md`. Read it before changing code.
 - Full analyses run outside this container; the datasets are not here. Keep code Windows-compatible (pathlib, no Linux-only paths or shell calls). Only run small checks and tests in this container.
 
 ## Test data
