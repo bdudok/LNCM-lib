@@ -6,11 +6,16 @@ from BaserowAPI.config import config
 
 
 class GetSessions:
-    def __init__(self, token=None):
+    def __init__(self, token=None, timeout=None):
+        '''
+        :param token: API token, the one in the config is used if None
+        :param timeout: seconds to wait for the server in get_session and put_new, None to wait indefinitely
+        '''
         if token is None:
             self.auth_string = f"Token {config['api_token']}"
         else:
             self.auth_string = f"Token {token}"
+        self.timeout = timeout
         self.sex_cache = {}  # for memoizing fetching animal metadata
 
     def get_field(self, key):
@@ -95,7 +100,8 @@ class GetSessions:
         params = {f"filter__field_{self.get_field('Image.ID')}__{match}": prefix}
         resp = requests.get(config['session_url'],
                             headers={"Authorization": self.auth_string},
-                            params=params
+                            params=params,
+                            timeout=self.timeout,
                             )
         self.results = pandas.DataFrame(resp.json()['results'])
         if not len(self.results):
@@ -139,7 +145,8 @@ class GetSessions:
                 "Authorization": self.auth_string,
                 "Content-Type": "application/json"
             },
-            json=self.sanitize_put(data_dict)
+            json=self.sanitize_put(data_dict),
+            timeout=self.timeout,
         )
         if not resp.status_code == 200:
             print(resp.json())
