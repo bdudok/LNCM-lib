@@ -96,8 +96,11 @@ class PreProc:
         simple_keys = ('activeMode', 'bitDepth', 'opticalZoom', 'objectiveLensMag', 'objectiveLensNA', 'samplesPerPixel')
         indexed_keys = {'laserWavelength': ('0',), 'twophotonLaserPower': ('0',),
                     'micronsPerPixel': ('XAxis', 'YAxis'), 'pmtGain': ('0', '1')}
+        top_scan = {}  # session-level scan settings, used for the frame capture time
         for child in list(root.find('PVStateShard')):
             key = child.attrib['key']
+            if key in ('linesPerFrame', 'scanLinePeriod'):
+                top_scan[key] = float(child.attrib['value'])
             if key in simple_keys:
                 self.md_keys.append(key)
                 self.__setattr__(key, child.attrib['value'])
@@ -124,9 +127,12 @@ class PreProc:
         if 'scanLinePeriod' in sdict:
             self.linetime = float(sdict['scanLinePeriod'])  # not always there, not sure why.
         else:
-            self.linetime = numpy.nan
-            # self.skip_analysis = True
-            # print(self.prefix, 'XML parse error.')
+            self.linetime = top_scan.get('scanLinePeriod', numpy.nan)
+        # time from frame start to the end of the last line (s). LED pulses outside this don't hit the frame.
+        # The full frame period if the line count or period is missing.
+        self.capture_time = self.linetime * top_scan.get('linesPerFrame', numpy.nan)
+        if not numpy.isfinite(self.capture_time):
+            self.capture_time = 1 / self.framerate
 
     #     '''
     #     In Frame, there's a File for each Ch
@@ -187,7 +193,7 @@ class PreProc:
 
         # append metadata attribs
         self.md_keys.extend(['n_frames', 'voltage_name', 'has_opto', 'opto_name',
-                             'framerate', 'linetime', 'channelnames'])
+                             'framerate', 'linetime', 'capture_time', 'channelnames'])
 
     def parse_cam(self):
         vfn = self.dpath / f'{self.prefix}.avi'
@@ -239,16 +245,10 @@ class PreProc:
             pos = numpy.where(numpy.convolve(bintrace, [1, -1]) == 1)[0] #rising edges
             stimframes = None
             if len(pos):
-                # get bad frames: any which has high LED signal
-                badframes = []
-                fd = int(self.fs/self.framerate)+1
-                for fi, ft in enumerate(self.frametimes):
-                    t0 = int(ft * self.fs)
-                    if numpy.any(bintrace[t0:t0+fd]):
-                        badframes.append(fi)
+                badframes = led_frames(bintrace, self.frametimes, self.capture_time, self.fs)
                 if self.has_opto:
                     #case: using analog modulation with MarkPoints, find rising edges as stim starts
-                    stimframes = numpy.searchsorted(self.frametimes * self.fs, pos) - 1  # convert to 0 indexing
+                    stimframes = first_affected_frame(pos / self.fs, self.frametimes, self.capture_time)
                     led_op = pandas.DataFrame({'Intensity': trace[pos] / vmax, 'ImgFrame': stimframes}, index=[pos])
                 else:
                     #case: using PWM modulation with external device. cluster within-frame signals and compute duty
@@ -264,8 +264,7 @@ class PreProc:
                         x = pos[numpy.where(labels == cid)[0]]  # this is expected to be in order
                         pwmfreq = numpy.diff(x).mean()
                         posindex[cid] = x[0]
-                        stimframes[cid] = numpy.searchsorted(self.frametimes,
-                                                           x[0] / self.fs) - 1  # convert to 0 indexing
+                        stimframes[cid] = first_affected_frame(x[0] / self.fs, self.frametimes, self.capture_time)
                         '''#with gating and voltage imaging, there are stims with 0 duration. this should be fixed.'''
                         if len(x) == 1:  # if this is PWM but 100%, it will be a single plateau.
                             pulse_dur = numpy.argmax(trace[x[0]:] < (0.5*vmax)) #voltage is ~4.8 during pulse
@@ -484,6 +483,40 @@ class PreProc:
     def load_metadata(self):
         for key, value in self.si.info.items():
             self.__setattr__(key, value)
+
+
+GATE_MARGIN = 0.001  # s, the stimulator keeps the PMT gated this long after the LED turns off
+
+
+def led_frames(bintrace, frametimes, capture_time, fs):
+    '''
+    Frames hit by the LED: the LED is on during the frame's capture (frame start to frame start + capture_time), or
+    up to GATE_MARGIN before the frame starts. LED pulses between captures don't mark a frame.
+    :param bintrace: bool array of the LED signal in the voltage recording
+    :param frametimes: frame start times (s), on the voltage recording clock
+    :param capture_time: time to capture one frame (s)
+    :param fs: sampling rate of the voltage recording
+    :return: int array of frame indices
+    '''
+    frames = []
+    for fi, ft in enumerate(frametimes):
+        t0 = max(0, int((ft - GATE_MARGIN) * fs))
+        t1 = int((ft + capture_time) * fs) + 1
+        if numpy.any(bintrace[t0:t1]):
+            frames.append(fi)
+    return numpy.array(frames, dtype='int')
+
+
+def first_affected_frame(onset, frametimes, capture_time):
+    '''
+    Frame of each stim onset: the frame being captured at the onset, or the next frame if the onset is after the
+    capture ended (stim between frames).
+    :param onset: onset time(s) (s), on the voltage recording clock
+    :return: frame index (int or int array, like onset)
+    '''
+    frame = numpy.searchsorted(frametimes, onset) - 1  # the last frame that started before the onset
+    after_capture = (onset - frametimes[numpy.maximum(frame, 0)]) > capture_time
+    return frame + after_capture.astype(int)
 
 
 class SessionInfo:
