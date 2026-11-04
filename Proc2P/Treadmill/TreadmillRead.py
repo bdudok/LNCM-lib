@@ -30,7 +30,8 @@ class Treadmill:
         long_prefix = prefix
         for ext in exts:
             for fn in self.flist:
-                if prefix in fn and fn.endswith(ext) and '.log.' not in fn:
+                # Bruker file lists (e.g. _VoltageRecording_001_VRFilelist.txt) can be left in the folder
+                if prefix in fn and fn.endswith(ext) and '.log.' not in fn and not fn.endswith('Filelist.txt'):
                     if longest < len(fn):
                         long_prefix = fn[:-len(ext)]
                         longest = len(fn)
