@@ -90,8 +90,10 @@ class GUI_main(QtWidgets.QMainWindow):
             ca.set_ylabel('LFP (mV)')
 
         if self.session.opto is not None:
+            # line: masked frames; vertical lines: start and end of each train (also when stim is between frames)
             self.TraceCanvas.ax[1].plot(self.X, self.session.opto, color=self.config.OptoColor)
-            for e in numpy.where(numpy.diff(self.session.opto > 0.5))[0] + 1:
+            stim = self.session.opto | self.session.stim_frames
+            for e in numpy.where(numpy.diff(stim))[0] + 1:
                 for ai in (0, 1):
                     self.TraceCanvas.ax[ai].axvline(self.X[e], color=self.config.OptoColor, alpha=0.4)
 
