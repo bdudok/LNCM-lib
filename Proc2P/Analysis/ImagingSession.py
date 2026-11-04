@@ -136,6 +136,12 @@ class ImagingSession(object):
         return self.path / (self.prefix + suffix)
 
     def map_opto(self):
+        '''
+        opto: bool array, frames hit by the LED (masked in the traces). With stim between frames, there are none.
+        stim_frames: bool array, the first frame affected by each pulse (_StimFrames.xlsx). Use this for stim events.
+        opto_ints: the pulse intensities (0-1) in the stim_frames.
+        '''
+        self.stim_frames = None
         if self.si['has_opto']:
             opto_frames = self.ca.sync.load('opto')
             if opto_frames is None:
@@ -143,10 +149,15 @@ class ImagingSession(object):
                 return -1
             self.opto = numpy.zeros(self.ca.frames, dtype='bool')
             self.opto[opto_frames] = 1
-            if len(opto_frames) > 3:
-                self.opto_ints = numpy.zeros(self.ca.frames)
-                intdat = read_excel(self.get_file_with_suffix('_StimFrames.xlsx'))
-                self.opto_ints[intdat['ImgFrame'].values] = intdat['Intensity'].values
+            self.stim_frames = numpy.zeros(self.ca.frames, dtype='bool')
+            self.opto_ints = numpy.zeros(self.ca.frames)
+            sfn = self.get_file_with_suffix('_StimFrames.xlsx')
+            if os.path.exists(sfn):
+                intdat = read_excel(sfn)
+                frames = intdat['ImgFrame'].values
+                incl = (frames >= 0) & (frames < self.ca.frames)  # pulses before the first or after the last frame
+                self.stim_frames[frames[incl]] = True
+                self.opto_ints[frames[incl]] = intdat['Intensity'].values[incl]
         else:
             self.opto = None
 

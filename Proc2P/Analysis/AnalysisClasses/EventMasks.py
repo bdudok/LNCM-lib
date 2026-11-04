@@ -29,7 +29,8 @@ def PhotoStimPulse(a, w, exclude_move=True, only_move=False, exclude_start_secon
     if a.opto is None:
         event_frames = []
     else:
-        stims = numpy.where(a.opto)[0]
+        # pulses on consecutive frames are one train, the event is its first frame
+        stims = numpy.where(a.stim_frames)[0]
         clustering = dbscan(stims.reshape(-1, 1), eps=1, min_samples=1)
         n_trains = clustering[1].max() + 1
         event_frames = numpy.ones(n_trains, dtype='int32') * -1  # start frame
