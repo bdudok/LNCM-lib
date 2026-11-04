@@ -8,6 +8,7 @@ import zlib
 from pathlib import Path
 
 import numpy
+import pandas
 import pytest
 
 from Proc2P.Analysis.AnalysisClasses.PSTH import PSTH
@@ -127,6 +128,33 @@ def test_fingerprint_check(tmp_path):
         e.check_fingerprint(fn, e.get_fingerprint(cell_data, 3, None, None, False))
     with pytest.raises(ValueError, match='the cells differ'):
         e.check_fingerprint(fn, e.get_fingerprint(dict(list(cell_data.items())[:1]), None, None, None, False))
+
+
+def test_stim_fingerprint(tmp_path):
+    e = make_psth(tmp_path)
+    e.save_items()
+    e.set_triggers(lambda a, w: None, 'Test')
+    session_data, cell_data = next(iter(e.pull_dict.items()))
+    prefix = 'mouse1_opto_001'
+    (tmp_path / prefix).mkdir()
+    assert PSTH.stim_fingerprint(tmp_path, prefix) == {'bad_frames': None, 'stim_frames': None}
+    numpy.save(tmp_path / prefix / f'{prefix}_bad_frames.npy', numpy.array([75, 76]))
+    pandas.DataFrame({'Intensity': [1.0], 'ImgFrame': [75]}).to_excel(tmp_path / prefix / f'{prefix}_StimFrames.xlsx')
+    fingerprint = e.get_fingerprint(cell_data, None, None, None, False)
+    fn = tmp_path / 'traces.npy'
+    # traces saved before the stim frames were in the fingerprint are used as before
+    with open(e.fingerprint_name(fn), 'w') as f:
+        json.dump(fingerprint, f)
+    fingerprint['stim'] = PSTH.stim_fingerprint(tmp_path, prefix)
+    e.check_fingerprint(fn, fingerprint)
+    # saved with stim frames: raises when PreProc changed them
+    with open(e.fingerprint_name(fn), 'w') as f:
+        json.dump(fingerprint, f)
+    e.check_fingerprint(fn, fingerprint)
+    pandas.DataFrame({'Intensity': [1.0], 'ImgFrame': [76]}).to_excel(tmp_path / prefix / f'{prefix}_StimFrames.xlsx')
+    fingerprint['stim'] = PSTH.stim_fingerprint(tmp_path, prefix)
+    with pytest.raises(ValueError, match='stim: saved'):
+        e.check_fingerprint(fn, fingerprint)
 
 
 DATA_DIR = Path(os.environ.get('LNCM_TEST_DATA', '/test_data'))

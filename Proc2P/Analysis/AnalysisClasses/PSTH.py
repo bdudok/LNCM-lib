@@ -6,7 +6,7 @@ from statsmodels.stats.weightstats import DescrStatsW
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.Analysis.AnalysisClasses.Spatial import match_cells
 from Proc2P.Analysis.NormalizeVm import arima_filtfilt
-from Proc2P.utils import lprint, outlier_indices
+from Proc2P.utils import lprint, outlier_indices, read_excel
 from datetime import datetime
 import pandas
 import numpy
@@ -181,6 +181,7 @@ class PSTH:
             path, prefix, tag, ch = session_data
             fn = self.get_numpy_name(prefix, tag, ch)
             fingerprint = self.get_fingerprint(cell_data, mask_stim, other_tag, other_ch, other_match)
+            fingerprint['stim'] = self.stim_fingerprint(path, prefix)
             if os.path.exists(fn):
                 self.check_fingerprint(fn, fingerprint)
                 print('Loading', prefix)
@@ -375,6 +376,23 @@ class PSTH:
         return json.loads(json.dumps(fingerprint, default=str))
 
     @staticmethod
+    def stim_fingerprint(path, prefix):
+        '''
+        Checksums of the session's masked frames (_bad_frames.npy) and stim frames (_StimFrames.xlsx), None for a
+        missing file. They change when PreProc is rerun with another stim frame rule.
+        '''
+        stim = {}
+        session_path = Path(path) / prefix
+        fn = session_path / f'{prefix}_bad_frames.npy'
+        stim['bad_frames'] = zlib.crc32(numpy.load(fn).astype('int64').tobytes()) if fn.exists() else None
+        fn = session_path / f'{prefix}_StimFrames.xlsx'
+        if fn.exists():
+            stim['stim_frames'] = zlib.crc32(read_excel(fn)['ImgFrame'].values.astype('int64').tobytes())
+        else:
+            stim['stim_frames'] = None
+        return stim
+
+    @staticmethod
     def fingerprint_name(fn):
         return fn.with_name(fn.name[:-len('.npy')] + '_fingerprint.json')
 
@@ -386,7 +404,10 @@ class PSTH:
             return
         with open(fp_name, 'r') as f:
             saved = json.load(f)
-        differences = [key for key in set(saved) | set(fingerprint) if saved.get(key) != fingerprint.get(key)]
+        # keys added to the fingerprint later are only compared if the saved one has them
+        later_keys = ('stim',)
+        differences = [key for key in set(saved) | set(fingerprint) if saved.get(key) != fingerprint.get(key)
+                       and not (key in later_keys and key not in saved)]
         if differences:
             details = '; '.join(f'{key}: saved {saved.get(key)}, now {fingerprint.get(key)}'
                                 for key in sorted(differences) if key != 'cells')
