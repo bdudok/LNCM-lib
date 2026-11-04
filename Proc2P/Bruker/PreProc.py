@@ -270,7 +270,7 @@ class PreProc:
                         if len(x) == 1:  # if this is PWM but 100%, it will be a single plateau.
                             pulse_dur = numpy.argmax(trace[x[0]:] < (0.5*vmax)) #voltage is ~4.8 during pulse
                             durations[cid] = pulse_dur / self.fs * 1000
-                            intensities[cid] = trace[x[0]:x[0] + pulse_dur].mean()
+                            intensities[cid] = 1.0  # duty cycle (0-1), as for the PWM pulses below
                         else:
                             intensities[cid] = bintrace[x[0]:int(x[-1]+pwmfreq)].mean()
                             durations[cid] = (int(x[-1]+pwmfreq) - x[0]) / self.fs * 1000
