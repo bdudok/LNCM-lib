@@ -45,14 +45,14 @@ LOCK_MAX_AGE_S = 3 * 3600  # an older lock file is left over from a process that
 
 
 def _chunk_trace(fn, start, stop, decoder_threads, crop=None):
-    """Motion energy of frames start..stop-1 (stop=None: to the end of the file)"""
+    """Motion energy and timestamp (ms) of frames start..stop-1 (stop=None: to the end of the file)"""
     cap = cv2.VideoCapture(str(fn), cv2.CAP_FFMPEG, [cv2.CAP_PROP_N_THREADS, decoder_threads])
     # without conversion, yuv420p frames come as the luma plane (h, w)
     cap.set(cv2.CAP_PROP_CONVERT_RGB, 0)
     first = max(0, start - WARMUP)
     if first > 0:
         cap.set(cv2.CAP_PROP_POS_FRAMES, first)
-    values = []
+    values, times = [], []
     bg, mm, dsize = None, None, None
     i = first
     while stop is None or i < stop:
@@ -74,15 +74,17 @@ def _chunk_trace(fn, start, stop, decoder_threads, crop=None):
         cv2.accumulateWeighted(cv2.absdiff(im, bg), mm, BETA)
         if i >= start:
             values.append(cv2.mean(mm)[0])
+            times.append(cap.get(cv2.CAP_PROP_POS_MSEC))
         i += 1
     cap.release()
-    return numpy.array(values, dtype=numpy.float32)
+    return numpy.array(values, dtype=numpy.float32), numpy.array(times)
 
 
-def motion_energy(fn, start=0, stop=None, n_workers=N_WORKERS, crop=None):
+def motion_energy(fn, start=0, stop=None, n_workers=N_WORKERS, crop=None, return_times=False):
     """Motion energy of each frame of a video from start to stop (frame indices; stop=None: to the end).
     crop: [x0, x1, y0, y1] in pixels, None: full frame.
-    Returns a float32 array; it is shorter than stop - start if the file ends earlier."""
+    Returns a float32 array; it is shorter than stop - start if the file ends earlier.
+    return_times: also return the timestamp of each frame in the file (s), as (trace, times)."""
     if stop is None:
         cap = cv2.VideoCapture(str(fn))
         n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # an estimate for some containers: the last chunk reads to the end
@@ -91,7 +93,7 @@ def motion_energy(fn, start=0, stop=None, n_workers=N_WORKERS, crop=None):
         n = stop
     bounds = list(range(start, n, CHUNK)) or [start]
     jobs = [(b, bounds[i + 1] if i + 1 < len(bounds) else stop) for i, b in enumerate(bounds)]
-    decoder_threads = 1 if n_workers > 1 else 0  # 0: decoder picks
+    decoder_threads = 1 if n_workers > 1 and len(jobs) > 1 else 0  # 0: decoder picks
     # 'unsupported format yuv420p' on every frame; cv2.utils.logging is missing in some builds (conda-forge 4.12)
     logging = getattr(cv2.utils, 'logging', None)
     if logging is not None:
@@ -103,9 +105,11 @@ def motion_energy(fn, start=0, stop=None, n_workers=N_WORKERS, crop=None):
     finally:
         if logging is not None:
             logging.setLogLevel(log_level)
-    trace = numpy.concatenate(parts)
+    trace = numpy.concatenate([p[0] for p in parts])
     if start == 0 and len(trace) > 1:
         trace[0] = trace[1]  # no background yet in the first frame
+    if return_times:
+        return trace, numpy.concatenate([p[1] for p in parts]) / 1000
     return trace
 
 
