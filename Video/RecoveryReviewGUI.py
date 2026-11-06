@@ -498,13 +498,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.canvas.draw_idle()
 
     def next_peak(self):
-        """Go to the next peak of the low-pass trace above the threshold"""
+        """Go to the next peak of the low-pass trace above the threshold and play from there"""
         if self.peaks is None or not self.seekable:
             return
         peaks = self.peaks[(self.peaks > self.frame) & (self.lowpass[self.peaks] >= self.threshold())]
         if len(peaks):
-            self.pause()
             self.show_frame(int(peaks[0]))
+            if not self.play_timer.isActive():
+                self.play_callback()
 
     def on_draw(self, event):
         # store the plot without the marker on every draw, then draw the marker on top
