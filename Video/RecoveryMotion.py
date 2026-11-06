@@ -9,7 +9,8 @@ The files of a video <_RawData>/MonitorCam/<subfolders>/<stem>.mkv are in the sa
     <stem>_motion_energy.lock        exists while the trace is queued or being computed
     <stem>_motion_energy.error.txt   traceback of a failed computation
     <stem>_racine.jsonl              seizures marked in the GUI, one per line, saved on every change
-    <stem>_racine.xlsx               the marks exported with the GUI's Save button, escalating marks merged
+    <stem>_racine.xlsx               the marks exported with the GUI's Save button, escalating marks merged,
+                                     with a Length(s) column
 
 queue_motion starts a background process (python -m Video.RecoveryMotion <video>) that keeps running when the GUI is
 closed. The processes of a PC compute one video at a time: each waits for the queue lock in the temp folder.
@@ -99,23 +100,11 @@ def load_trace(video):
 
 
 def load_events(video):
-    """Marked seizures: dicts with EVENT_COLUMNS keys, Racine as text. From the Excel file if there is no jsonl."""
+    """Marked seizures: dicts with EVENT_COLUMNS keys, Racine as text"""
     fn = events_fn(video)
-    if fn.exists():
-        return [json.loads(line) for line in fn.read_text().splitlines() if line.strip()]
-    if not excel_fn(video).exists():
+    if not fn.exists():
         return []
-    import pandas
-    df = pandas.read_excel(excel_fn(video))
-    events = []
-    for _, row in df.iterrows():
-        e = {k: (None if pandas.isna(row[k]) else row[k]) for k in EVENT_COLUMNS}
-        e['Start(s)'] = float(e['Start(s)'])
-        e['End(s)'] = None if e['End(s)'] is None else float(e['End(s)'])
-        e['Racine'] = str(e['Racine'])
-        e['Start time'] = None if e['Start time'] is None else str(e['Start time'])
-        events.append(e)
-    return events
+    return [json.loads(line) for line in fn.read_text().splitlines() if line.strip()]
 
 
 def save_events(video, events):
@@ -132,6 +121,7 @@ def export_excel(video, events):
     import pandas
     df = pandas.DataFrame(events, columns=EVENT_COLUMNS)
     df['Racine'] = [int(s) if s.isdigit() else s for s in df['Racine']]  # numbers stay numbers in Excel
+    df.insert(2, 'Length(s)', (df['End(s)'] - df['Start(s)']).round(3))  # empty without an end
     df.to_excel(excel_fn(video), index=False)
 
 

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import cv2
 import numpy
+import pandas
 
 from Video import RecoveryMotion
 
@@ -80,6 +81,9 @@ def test_events_files(tmp_path):
     events = [{'Start(s)': 1.5, 'End(s)': None, 'Racine': '5+', 'Start time': '2026-11-05 13:57:00-06:00'},
               {'Start(s)': 9.0, 'End(s)': 20.0, 'Racine': '3', 'Start time': None}]
     RecoveryMotion.export_excel(video, events)
-    assert RecoveryMotion.load_events(video) == events  # no jsonl yet: from the Excel file
-    RecoveryMotion.save_events(video, events[:1])
-    assert RecoveryMotion.load_events(video) == events[:1]
+    df = pandas.read_excel(RecoveryMotion.excel_fn(video))
+    assert list(df.columns) == ['Start(s)', 'End(s)', 'Length(s)', 'Racine', 'Start time']
+    assert pandas.isna(df['Length(s)'][0]) and df['Length(s)'][1] == 11
+    assert RecoveryMotion.load_events(video) == []  # the Excel file is not read
+    RecoveryMotion.save_events(video, events)
+    assert RecoveryMotion.load_events(video) == events

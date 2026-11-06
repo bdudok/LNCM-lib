@@ -232,7 +232,8 @@ class MainWindow(QtWidgets.QMainWindow):
         delete_button = QtWidgets.QPushButton('Delete selected')
         delete_button.clicked.connect(self.delete_callback)
         side.addWidget(delete_button)
-        save_button = QtWidgets.QPushButton('[Ctrl+S] Save: merge escalating marks, write Excel')
+        save_button = QtWidgets.QPushButton('[Ctrl+S] Save to Excel')
+        save_button.setToolTip('Merge the marks of escalating seizures and write the Excel file')
         save_button.clicked.connect(self.save_callback)
         side.addWidget(save_button)
         side_box = QtWidgets.QWidget()
@@ -366,6 +367,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def zoom_toggled(self, zoom_out):
         self.video_label.zoom = not zoom_out
+        self.zoom_button.setText('Zoom' if zoom_out else 'Zoom out')
         self.video_label.update_pixmap()
 
     def roi_drawn(self, roi):
