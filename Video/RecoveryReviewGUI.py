@@ -1,6 +1,7 @@
 """Review post-surgery recovery videos (MonitorCam) and mark seizures on the Racine scale.
 
-The window shows the video, the motion energy trace in the analysis ROI, and the marked seizures. The 1 Hz
+The window shows the video, the motion energy trace in the analysis ROI, and the marked seizures. The video is
+zoomed to the ROI (no further than 1 video pixel per screen pixel); Zoom out shows the whole frame. The
 low-pass filtered trace (orange) is scaled to the range of the raw trace; Next peak jumps to the next peak of it
 above the threshold, which is set in % of its range. A video without a
 saved ROI asks for one; saving the ROI queues the motion energy computation in the background
@@ -27,22 +28,23 @@ RAW_DIR = 'D:/Shares/Data/_RawData/MonitorCam'
 RACINE = {  # stage saved in the Racine column: (key, description). Stages 1-5 are from Racine (1972)
     '1': ('1', 'Mouth and facial movements'),
     '2': ('2', 'Head nodding'),
-    '3': ('3', 'Forelimb clonus'),
+    '3': ('3', 'Forelimb clonus / running circles'),
     '4': ('4', 'Rearing'),
     '5': ('5', 'Rearing and falling'),
-    '5+': ('6', 'More severe than 5'),
+    '5+': ('6', '5+ (popcorn)'),
 }
 STAGE_COLORS = {'1': '#fdd835', '2': '#fb8c00', '3': '#e53935', '4': '#8e24aa', '5': '#1e3a8a', '5+': '#000000'}
 SPEEDS = (1, 2, 4, 8, 16)
 STEP_S = 5  # arrow keys
 STATUS_POLL_MS = 5000
-LOWPASS_HZ = 1.0
+LOWPASS_HZ = 0.1
 PEAK_DISTANCE_S = 5  # minimum time between detected peaks
 THRESHOLD_PCT = 50  # default threshold, % of the range of the low-pass trace
 
 
 class VideoLabel(QtWidgets.QLabel):
-    """Shows a color frame scaled to the label with the ROI on it; draws a new ROI with the mouse in draw mode."""
+    """Shows a color frame scaled to the label with the ROI on it; draws a new ROI with the mouse in draw mode.
+    With zoom on, the ROI fills the label in one dimension, unless that would upsample the video."""
     roi_drawn = QtCore.Signal(list)
 
     def __init__(self):
@@ -54,6 +56,8 @@ class VideoLabel(QtWidgets.QLabel):
         self.frame = None  # BGR
         self.roi = None
         self.drawing = False
+        self.zoom = True
+        self.view = None  # (left, top, scale, ox, oy): frame pixel x is shown at (x - left) * scale + ox
         self.drag_start = None
         self.rubber_band = QtWidgets.QRubberBand(QtWidgets.QRubberBand.Rectangle, self)
 
@@ -65,14 +69,29 @@ class VideoLabel(QtWidgets.QLabel):
         if self.frame is None:
             self.clear()
             return
+        h, w = self.frame.shape[:2]
+        lw, lh = self.width(), self.height()
+        scale = min(lw / w, lh / h)  # whole frame
+        cx, cy = w / 2, h / 2
+        if self.roi is not None and self.zoom and not self.drawing:
+            x0, x1, y0, y1 = self.roi
+            scale = max(scale, min(lw / (x1 - x0), lh / (y1 - y0), 1.0))
+            cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        # visible part of the frame, centered on the ROI and shifted to stay in the frame
+        vw, vh = min(w, lw / scale), min(h, lh / scale)
+        left = int(min(max(cx - vw / 2, 0), w - vw))
+        top = int(min(max(cy - vh / 2, 0), h - vh))
         img = cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB)
         if self.roi is not None:
             x0, x1, y0, y1 = self.roi
-            cv2.rectangle(img, (x0, y0), (x1, y1), (0, 255, 0), max(2, img.shape[1] // 400))
-        h, w = img.shape[:2]
-        image = QtGui.QImage(img.data, w, h, 3 * w, QtGui.QImage.Format_RGB888)
-        self.setPixmap(QtGui.QPixmap.fromImage(image).scaled(self.size(), Qt.KeepAspectRatio,
-                                                             Qt.SmoothTransformation))
+            cv2.rectangle(img, (x0, y0), (x1, y1), (0, 255, 0), max(2, int(2 / scale)))
+        img = numpy.ascontiguousarray(img[top:top + int(vh), left:left + int(vw)])
+        ch, cw = img.shape[:2]
+        image = QtGui.QImage(img.data, cw, ch, 3 * cw, QtGui.QImage.Format_RGB888)
+        pixmap = QtGui.QPixmap.fromImage(image).scaled(round(cw * scale), round(ch * scale), Qt.KeepAspectRatio,
+                                                       Qt.SmoothTransformation)
+        self.view = (left, top, scale, (lw - pixmap.width()) / 2, (lh - pixmap.height()) / 2)
+        self.setPixmap(pixmap)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -81,9 +100,8 @@ class VideoLabel(QtWidgets.QLabel):
     def to_frame(self, pos):
         """Label position to frame pixel, clipped to the frame"""
         h, w = self.frame.shape[:2]
-        scale = min(self.width() / w, self.height() / h)
-        x0, y0 = (self.width() - w * scale) / 2, (self.height() - h * scale) / 2
-        return (int(min(max((pos.x() - x0) / scale, 0), w)), int(min(max((pos.y() - y0) / scale, 0), h)))
+        left, top, scale, ox, oy = self.view
+        return (int(min(max((pos.x() - ox) / scale + left, 0), w)), int(min(max((pos.y() - oy) / scale + top, 0), h)))
 
     def mousePressEvent(self, event):
         if self.drawing and self.frame is not None:
@@ -132,11 +150,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.file_label = QtWidgets.QLabel('No video')
         self.roi_button = QtWidgets.QPushButton('Draw ROI')
         self.roi_button.clicked.connect(self.start_roi)
+        self.zoom_button = QtWidgets.QPushButton('Zoom out')
+        self.zoom_button.setCheckable(True)
+        self.zoom_button.toggled.connect(self.zoom_toggled)
         self.status_label = QtWidgets.QLabel()
         top = QtWidgets.QHBoxLayout()
         top.addWidget(open_button)
         top.addWidget(self.file_label, stretch=1)
         top.addWidget(self.status_label)
+        top.addWidget(self.zoom_button)
         top.addWidget(self.roi_button)
 
         # video and controls
@@ -338,8 +360,13 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self.pause()
         self.video_label.drawing = True
+        self.video_label.update_pixmap()  # whole frame while drawing
         self.video_label.setCursor(Qt.CrossCursor)
         self.status_label.setText('<b>Drag a rectangle on the video</b>')
+
+    def zoom_toggled(self, zoom_out):
+        self.video_label.zoom = not zoom_out
+        self.video_label.update_pixmap()
 
     def roi_drawn(self, roi):
         self.video_label.drawing = False
