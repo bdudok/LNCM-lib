@@ -8,7 +8,8 @@ The files of a video <_RawData>/MonitorCam/<subfolders>/<stem>.mkv are in the sa
                                      row 1 the motion energy in the ROI (same measure as MotionEnergy.motion_energy)
     <stem>_motion_energy.lock        exists while the trace is queued or being computed
     <stem>_motion_energy.error.txt   traceback of a failed computation
-    <stem>_racine.xlsx               seizures marked in the GUI
+    <stem>_racine.jsonl              seizures marked in the GUI, one per line, saved on every change
+    <stem>_racine.xlsx               the marks exported with the GUI's Save button, escalating marks merged
 
 queue_motion starts a background process (python -m Video.RecoveryMotion <video>) that keeps running when the GUI is
 closed. The processes of a PC compute one video at a time: each waits for the queue lock in the temp folder.
@@ -31,6 +32,9 @@ from Proc2P.utils import lprint
 LOCK_MAX_AGE_S = 3 * 3600  # an older lock file is left over from a process that was killed
 QUEUE_LOCK = Path(tempfile.gettempdir()) / 'lncm_recovery_motion.lock'
 QUEUE_POLL_S = 10
+EVENT_COLUMNS = ['Start(s)', 'End(s)', 'Racine', 'Start time']
+STAGES = ('1', '2', '3', '4', '5', '5+')  # Racine stages, from mild to severe
+MERGE_GAP_S = 30  # escalating marks closer than this are merged into one seizure
 
 
 def processed_dir(video):
@@ -65,6 +69,10 @@ def error_fn(video):
 
 
 def events_fn(video):
+    return _fn(video, '_racine.jsonl')
+
+
+def excel_fn(video):
     return _fn(video, '_racine.xlsx')
 
 
@@ -88,6 +96,60 @@ def load_trace(video):
         return None
     t, me = numpy.load(fn)
     return t, me
+
+
+def load_events(video):
+    """Marked seizures: dicts with EVENT_COLUMNS keys, Racine as text. From the Excel file if there is no jsonl."""
+    fn = events_fn(video)
+    if fn.exists():
+        return [json.loads(line) for line in fn.read_text().splitlines() if line.strip()]
+    if not excel_fn(video).exists():
+        return []
+    import pandas
+    df = pandas.read_excel(excel_fn(video))
+    events = []
+    for _, row in df.iterrows():
+        e = {k: (None if pandas.isna(row[k]) else row[k]) for k in EVENT_COLUMNS}
+        e['Start(s)'] = float(e['Start(s)'])
+        e['End(s)'] = None if e['End(s)'] is None else float(e['End(s)'])
+        e['Racine'] = str(e['Racine'])
+        e['Start time'] = None if e['Start time'] is None else str(e['Start time'])
+        events.append(e)
+    return events
+
+
+def save_events(video, events):
+    """Write the marks to the jsonl file (through a temporary file, so a crash doesn't leave a partial file)"""
+    processed_dir(video).mkdir(parents=True, exist_ok=True)
+    fn = events_fn(video)
+    tmp = fn.with_name(fn.name + '.tmp')
+    tmp.write_text(''.join(json.dumps({k: e[k] for k in EVENT_COLUMNS}) + '\n' for e in events))
+    os.replace(tmp, fn)
+
+
+def export_excel(video, events):
+    """Write the marks to the Excel file. Raises PermissionError if the file is open in Excel."""
+    import pandas
+    df = pandas.DataFrame(events, columns=EVENT_COLUMNS)
+    df['Racine'] = [int(s) if s.isdigit() else s for s in df['Racine']]  # numbers stay numbers in Excel
+    df.to_excel(excel_fn(video), index=False)
+
+
+def merge_escalating(events):
+    """Merge marks of one escalating seizure: a mark is merged into the previous one if its stage is the same or
+    higher, it starts at most MERGE_GAP_S after the previous mark, and the previous mark has no end. The merged
+    seizure has the start (and start time) of the first mark, and the stage and end of the last."""
+    merged = []
+    last_start = None  # start of the last mark merged into merged[-1]
+    for e in sorted(events, key=lambda e: e['Start(s)']):
+        if (merged and merged[-1]['End(s)'] is None and e['Start(s)'] - last_start <= MERGE_GAP_S
+                and STAGES.index(e['Racine']) >= STAGES.index(merged[-1]['Racine'])):
+            merged[-1]['Racine'] = e['Racine']
+            merged[-1]['End(s)'] = e['End(s)']
+        else:
+            merged.append(dict(e))
+        last_start = e['Start(s)']
+    return merged
 
 
 def is_queued(video):

@@ -59,3 +59,27 @@ def test_compute_motion_in_roi(tmp_path, monkeypatch):
     # a new ROI deletes the trace
     RecoveryMotion.save_roi(video, [0, 160, 0, 120])
     assert RecoveryMotion.load_trace(video) is None
+
+
+def test_merge_escalating():
+    def e(start, stage, end=None):
+        return {'Start(s)': start, 'End(s)': end, 'Racine': stage, 'Start time': None}
+    events = [e(0, '2'), e(10, '3'), e(20, '3'), e(45, '5'), e(50, '5+', 70),  # one seizure, ends at 70
+              e(80, '3', 90), e(95, '4'),  # the first has an end: not merged
+              e(200, '4'), e(205, '2'),  # severity goes down
+              e(300, '1'), e(331, '2')]  # more than 30 s apart
+    merged = RecoveryMotion.merge_escalating(events)
+    assert [(m['Start(s)'], m['Racine'], m['End(s)']) for m in merged] == [
+        (0, '5+', 70), (80, '3', 90), (95, '4', None), (200, '4', None), (205, '2', None), (300, '1', None),
+        (331, '2', None)]
+    assert events[0]['Racine'] == '2'  # the input is not changed
+
+
+def test_events_files(tmp_path):
+    video = tmp_path / 'mouse1.mkv'
+    events = [{'Start(s)': 1.5, 'End(s)': None, 'Racine': '5+', 'Start time': '2026-11-05 13:57:00-06:00'},
+              {'Start(s)': 9.0, 'End(s)': 20.0, 'Racine': '3', 'Start time': None}]
+    RecoveryMotion.export_excel(video, events)
+    assert RecoveryMotion.load_events(video) == events  # no jsonl yet: from the Excel file
+    RecoveryMotion.save_events(video, events[:1])
+    assert RecoveryMotion.load_events(video) == events[:1]

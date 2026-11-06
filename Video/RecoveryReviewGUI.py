@@ -1,8 +1,11 @@
 """Review post-surgery recovery videos (MonitorCam) and mark seizures on the Racine scale.
 
-The window shows the video, the motion energy trace in the analysis ROI, and the marked seizures. A video without a
+The window shows the video, the motion energy trace in the analysis ROI, and the marked seizures. The 1 Hz
+low-pass filtered trace (orange) is scaled to the range of the raw trace; Next peak jumps to the next peak of it
+above the threshold, which is set in % of its range. A video without a
 saved ROI asks for one; saving the ROI queues the motion energy computation in the background
-(Video/RecoveryMotion.py), and the trace appears when it is done. Marks are saved on every change.
+(Video/RecoveryMotion.py), and the trace appears when it is done. Marks are saved on every change (jsonl);
+Save merges the marks of escalating seizures and writes the Excel file.
 Launch it with GUIs/launch_Review_Recovery.py.
 """
 import datetime
@@ -12,11 +15,11 @@ from pathlib import Path
 
 import cv2
 import numpy
-import pandas
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import Qt
+from scipy import signal
 
 from Video import RecoveryMotion
 
@@ -33,7 +36,9 @@ STAGE_COLORS = {'1': '#fdd835', '2': '#fb8c00', '3': '#e53935', '4': '#8e24aa', 
 SPEEDS = (1, 2, 4, 8, 16)
 STEP_S = 5  # arrow keys
 STATUS_POLL_MS = 5000
-EVENT_COLUMNS = ['Start(s)', 'End(s)', 'Racine', 'Start time']
+LOWPASS_HZ = 1.0
+PEAK_DISTANCE_S = 5  # minimum time between detected peaks
+THRESHOLD_PCT = 50  # default threshold, % of the range of the low-pass trace
 
 
 class VideoLabel(QtWidgets.QLabel):
@@ -115,7 +120,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.seekable = True
         self.t0 = None  # start time of the recording
         self.trace = None  # (times, motion energy)
-        self.events = []  # dicts with EVENT_COLUMNS keys
+        self.lowpass = None  # low-pass filtered motion energy, scaled to 0-1
+        self.peaks = None  # frame indices of the peaks of self.lowpass
+        self.events = []  # dicts with RecoveryMotion.EVENT_COLUMNS keys
+        self.excel_saved = True  # False if the marks changed since the Excel file was written in this window
         self.speed = 1
 
         # top row: file and processing status
@@ -158,13 +166,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self.canvas = FigureCanvasQTAgg(self.fig)
         self.plot_toolbar = NavigationToolbar2QT(self.canvas, self)
         self.marker = None
+        self.threshold_line = None
         self.background = None
         self.canvas.mpl_connect('draw_event', self.on_draw)
         self.canvas.mpl_connect('button_press_event', self.plot_click)
         plot_box = QtWidgets.QWidget()
         pbox = QtWidgets.QVBoxLayout(plot_box)
         pbox.setContentsMargins(0, 0, 0, 0)
-        pbox.addWidget(self.plot_toolbar)
+        self.next_peak_button = QtWidgets.QPushButton('Next peak [n]')
+        self.next_peak_button.clicked.connect(self.next_peak)
+        self.threshold_slider = QtWidgets.QSlider(Qt.Horizontal)
+        self.threshold_slider.setRange(0, 100)
+        self.threshold_slider.setValue(THRESHOLD_PCT)
+        self.threshold_slider.valueChanged.connect(self.threshold_changed)
+        self.threshold_label = QtWidgets.QLabel(f'Threshold: {THRESHOLD_PCT}%')
+        peak_row = QtWidgets.QHBoxLayout()
+        peak_row.addWidget(self.plot_toolbar)
+        peak_row.addStretch(1)
+        peak_row.addWidget(self.threshold_label)
+        peak_row.addWidget(self.threshold_slider, stretch=1)
+        peak_row.addWidget(self.next_peak_button)
+        pbox.addLayout(peak_row)
         pbox.addWidget(self.canvas)
         splitter = QtWidgets.QSplitter(Qt.Vertical)
         splitter.addWidget(video_box)
@@ -188,6 +210,9 @@ class MainWindow(QtWidgets.QMainWindow):
         delete_button = QtWidgets.QPushButton('Delete selected')
         delete_button.clicked.connect(self.delete_callback)
         side.addWidget(delete_button)
+        save_button = QtWidgets.QPushButton('[Ctrl+S] Save: merge escalating marks, write Excel')
+        save_button.clicked.connect(self.save_callback)
+        side.addWidget(save_button)
         side_box = QtWidgets.QWidget()
         side_box.setLayout(side)
         side_box.setFixedWidth(330)
@@ -203,7 +228,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(central)
 
         shortcuts = [('Space', self.play_callback), ('Left', lambda: self.step(-STEP_S)),
-                     ('Right', lambda: self.step(STEP_S)), ('e', self.end_callback)]
+                     ('Right', lambda: self.step(STEP_S)), ('e', self.end_callback), ('n', self.next_peak),
+                     ('Ctrl+S', self.save_callback)]
         shortcuts += [(key, lambda s=s: self.mark_callback(s)) for s, (key, _) in RACINE.items()]
         for key, callback in shortcuts:
             shortcut = QtGui.QShortcut(QtGui.QKeySequence(key), self)
@@ -221,7 +247,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def open_callback(self):
         start = self.raw_dir if os.path.isdir(self.raw_dir) else ''
         fn, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Open video', start, 'Videos (*.mkv *.mp4 *.avi)')
-        if fn:
+        if fn and self.ask_save():
             self.open_video(fn)
 
     def open_video(self, fn):
@@ -240,7 +266,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.file_label.setText(f'{self.video.name}  |  start: {self.t0.isoformat(sep=" ", timespec="seconds") if self.t0 else "unknown"}')
         self.video_label.roi = RecoveryMotion.load_roi(fn)
         self.load_events()
-        self.trace = RecoveryMotion.load_trace(fn)
+        self.set_trace(RecoveryMotion.load_trace(fn))
         self.show_frame(0)
         self.draw_plot()
         if not self.seekable:
@@ -259,22 +285,48 @@ class MainWindow(QtWidgets.QMainWindow):
         self.update_status()
 
     def load_events(self):
-        fn = RecoveryMotion.events_fn(self.video)
-        self.events = []
-        if fn.exists():
-            df = pandas.read_excel(fn)
-            self.events = [{k: (None if pandas.isna(row[k]) else row[k]) for k in EVENT_COLUMNS}
-                           for _, row in df.iterrows()]
-            for e in self.events:
-                e['Racine'] = str(e['Racine'])
+        self.events = RecoveryMotion.load_events(self.video)
+        self.excel_saved = True
         self.update_event_list()
 
     def save_events(self):
-        RecoveryMotion.processed_dir(self.video).mkdir(parents=True, exist_ok=True)
         self.events.sort(key=lambda e: e['Start(s)'])
-        df = pandas.DataFrame(self.events, columns=EVENT_COLUMNS)
-        df['Racine'] = [int(s) if s.isdigit() else s for s in df['Racine']]  # numbers stay numbers in Excel
-        df.to_excel(RecoveryMotion.events_fn(self.video), index=False)
+        RecoveryMotion.save_events(self.video, self.events)
+        self.excel_saved = False
+
+    def save_callback(self):
+        """Merge the marks of escalating seizures and write the Excel file. Returns False if it couldn't be written."""
+        if self.video is None:
+            return True
+        self.events = RecoveryMotion.merge_escalating(self.events)
+        self.save_events()
+        self.update_event_list()
+        self.draw_plot()
+        fn = RecoveryMotion.excel_fn(self.video)
+        try:
+            RecoveryMotion.export_excel(self.video, self.events)
+        except PermissionError:
+            QtWidgets.QMessageBox.warning(self, 'Save', f'Could not write {fn.name}. Close it in Excel and click '
+                                          'Save again. The marks are kept in the jsonl file.')
+            return False
+        self.excel_saved = True
+        self.statusBar().showMessage(f'Saved {fn}', 10000)
+        return True
+
+    def ask_save(self):
+        """Before closing the video: offer to save if the marks changed. Returns False to stay on the video."""
+        if self.excel_saved:
+            return True
+        box = QtWidgets.QMessageBox(
+            QtWidgets.QMessageBox.Question, 'Save',
+            'The marks changed since the last Save. Merge escalating marks and write the Excel file?\n'
+            'The marks are kept in the jsonl file either way.',
+            QtWidgets.QMessageBox.Save | QtWidgets.QMessageBox.Discard | QtWidgets.QMessageBox.Cancel, self)
+        box.button(QtWidgets.QMessageBox.Discard).setText("Don't save")
+        answer = box.exec()
+        if answer == QtWidgets.QMessageBox.Save:
+            return self.save_callback()
+        return answer == QtWidgets.QMessageBox.Discard
 
     # --- ROI and processing ---
     def start_roi(self):
@@ -302,7 +354,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.update_status()
             return
         RecoveryMotion.save_roi(self.video, roi)
-        self.trace = None
+        self.set_trace(None)
         self.draw_plot()
         RecoveryMotion.queue_motion(self.video)
         self.update_status()
@@ -311,7 +363,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.video is None or self.video_label.drawing:
             return
         if self.trace is None:
-            self.trace = RecoveryMotion.load_trace(self.video)
+            self.set_trace(RecoveryMotion.load_trace(self.video))
             if self.trace is not None:
                 self.draw_plot()
         if self.trace is not None:
@@ -325,6 +377,18 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             text = 'Motion energy: not computed'
         self.status_label.setText(text)
+
+    def set_trace(self, trace):
+        """Set the trace, and compute its low-pass filtered version and the peaks of it"""
+        self.trace = trace
+        self.lowpass = self.peaks = None
+        if trace is None or len(trace[0]) < 100:
+            return
+        t, me = trace
+        fs = 1 / numpy.median(numpy.diff(t))
+        lp = signal.sosfiltfilt(signal.butter(2, LOWPASS_HZ, fs=fs, output='sos'), me)
+        self.lowpass = (lp - lp.min()) / (lp.max() - lp.min())
+        self.peaks = signal.find_peaks(self.lowpass, distance=max(1, int(PEAK_DISTANCE_S * fs)))[0]
 
     # --- player ---
     def frame_time(self, frame):
@@ -394,12 +458,18 @@ class MainWindow(QtWidgets.QMainWindow):
     def draw_plot(self):
         ax = self.ax
         ax.clear()
+        self.threshold_line = None
         ax.set_xlabel('Time (min)')
         ax.set_ylabel('Motion energy')
         if self.trace is not None:
             t, me = self.trace
             ax.plot(t / 60, me, color='#444444', linewidth=0.6)
             ax.set_xlim(0, t[-1] / 60 if len(t) else 1)
+            if self.lowpass is not None:
+                ax.set_ylim(ax.get_ylim())  # keep the range of the raw trace
+                ax.plot(t / 60, self.scale_lowpass(self.lowpass), color='#fb8c00', linewidth=1)
+                self.threshold_line = ax.axhline(self.scale_lowpass(self.threshold()), color='#fb8c00',
+                                                 linestyle='--', linewidth=1)
         else:
             ax.text(0.5, 0.5, 'No motion energy yet', transform=ax.transAxes, ha='center', va='center',
                     color='#888888')
@@ -412,6 +482,29 @@ class MainWindow(QtWidgets.QMainWindow):
                     va='bottom', ha='center', fontweight='bold')
         self.marker = ax.axvline(self.frame_time(self.frame) / 60, color='#c62828', linewidth=1, animated=True)
         self.canvas.draw_idle()
+
+    def scale_lowpass(self, x):
+        """Low-pass trace (0-1) to the plot's y: its range is the range of the raw trace"""
+        me = self.trace[1]
+        return me.min() + x * (me.max() - me.min())
+
+    def threshold(self):
+        return self.threshold_slider.value() / 100
+
+    def threshold_changed(self, value):
+        self.threshold_label.setText(f'Threshold: {value}%')
+        if self.threshold_line is not None and self.lowpass is not None:
+            self.threshold_line.set_ydata([self.scale_lowpass(self.threshold())] * 2)
+            self.canvas.draw_idle()
+
+    def next_peak(self):
+        """Go to the next peak of the low-pass trace above the threshold"""
+        if self.peaks is None or not self.seekable:
+            return
+        peaks = self.peaks[(self.peaks > self.frame) & (self.lowpass[self.peaks] >= self.threshold())]
+        if len(peaks):
+            self.pause()
+            self.show_frame(int(peaks[0]))
 
     def on_draw(self, event):
         # store the plot without the marker on every draw, then draw the marker on top
@@ -488,6 +581,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.show_frame(self.time_frame(event['Start(s)']))
 
     def closeEvent(self, event):
+        if not self.ask_save():
+            event.ignore()
+            return
         self.pause()
         self.status_timer.stop()
         if self.cap is not None:
