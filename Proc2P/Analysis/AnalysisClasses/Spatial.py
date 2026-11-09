@@ -609,7 +609,7 @@ class Spatial:
                     binned, edges, _ = binned_statistic(xdat, ydat, 'mean', bins=bins)
                     ba[li, ci] = binned
             numpy.save(rdfn, ba)
-            self.cache['laps-' + save_tag] = ba
+        self.cache['laps-' + save_tag] = ba
 
     def pull_loc_rate(self, bins=50):
         a = self.session
