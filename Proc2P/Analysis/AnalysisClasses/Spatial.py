@@ -475,6 +475,10 @@ class Spatial:
                     ydat = ydat[incldat]
                 elif nan_policy == 'tozero':
                     ydat = numpy.nan_to_num(ydat)
+                if not len(ydat):
+                    # no valid frames for this cell (e.g. an all-NaN trace)
+                    ba[ci] = numpy.nan
+                    continue
                 if norm_trace:
                     ymeas = gaussian_filter(ydat, sigma=15)
                     ymeas -= numpy.percentile(ymeas, 50)
@@ -606,6 +610,9 @@ class Spatial:
                         ydat = ydat[incldat]
                     if nan_policy == 'tozero':
                         ydat = numpy.nan_to_num(ydat)
+                    if not len(ydat):
+                        # no valid frames for this cell in this lap; ba is already NaN
+                        continue
                     binned, edges, _ = binned_statistic(xdat, ydat, 'mean', bins=bins)
                     ba[li, ci] = binned
             numpy.save(rdfn, ba)
