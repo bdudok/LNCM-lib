@@ -93,13 +93,15 @@ class CaTrace(object):
         X = self.rel
         if fs is None:
             fs = float(self.version_info['fps'])
+        # each cell's own minimum is subtracted, so a cell's nnd does not depend on the other cells
         if len(X.shape) == 2:
-            self.nnd = oasis(numpy.nan_to_num(X - numpy.nanmin(X, axis=0)), batch_size=batch, tau=tau, fs=fs)
+            X0 = X - numpy.nanmin(X, axis=1, keepdims=True)
+            self.nnd = oasis(numpy.nan_to_num(X0), batch_size=batch, tau=tau, fs=fs)
         elif len(X.shape) == 3:
             self.nnd = numpy.zeros(X.shape)
             for ch in range(X.shape[2]):
-                self.nnd[..., ch] = oasis(numpy.nan_to_num(X[..., ch] - numpy.nanmin(X[..., ch], axis=0)),
-                                          batch_size=batch, tau=tau, fs=fs)
+                X0 = X[..., ch] - numpy.nanmin(X[..., ch], axis=1, keepdims=True)
+                self.nnd[..., ch] = oasis(numpy.nan_to_num(X0), batch_size=batch, tau=tau, fs=fs)
 
     def open_raw(self, trace=None, trunc=None):
         # init containers and pool
