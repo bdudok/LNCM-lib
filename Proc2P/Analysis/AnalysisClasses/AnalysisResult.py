@@ -58,6 +58,7 @@ class AnalysisResult:
         res = AnalysisResult(project_folder, 'Fig3_RunStop', steps=['3c_PSTHRunStop.py'])
         res.set_sessions(prefixes, dataset=ds)
         res.add_data('psth', df); res.add_stat('mixed_model', table); res.add_figure('psth', fig)
+        res.add_test('run vs rest', 'paired t-test', 't', 2.31, df=11, n='12 sessions, 4 animals', p=0.041)
         res.save()
     Items are written when added; save() writes the manifest and the report, and removes items of earlier runs.
     '''
@@ -82,7 +83,9 @@ class AnalysisResult:
         self.description = description
         self.params = {}
         self.items = {'figures': [], 'data': [], 'stats': []}
+        self.tests = []
         self.sessions = None
+        self.upload_sessions = True
         self.dataset_info = None
         self.folder.mkdir(parents=True, exist_ok=True)
 
@@ -100,12 +103,15 @@ class AnalysisResult:
         '''Analysis parameters to record in the manifest (values that json can't store are stored as text).'''
         self.params.update(kwargs)
 
-    def set_sessions(self, prefixes, dataset=None):
+    def set_sessions(self, prefixes, dataset=None, upload=True):
         '''
         The sessions that the result is computed from.
         :param prefixes: session prefixes
         :param dataset: optional DataSet. Its rows of these sessions are stored, with the dataset version.
+        :param upload: False if publishing should not export and upload these sessions (e.g. the entries are
+            confocal images, not imaging sessions). Stored in the manifest as 'upload_sessions'.
         '''
+        self.upload_sessions = bool(upload)
         prefixes = sorted(set(prefixes))
         if dataset is None:
             self.sessions = pandas.DataFrame({'Prefix': pandas.array(prefixes, dtype='string')})
@@ -151,6 +157,20 @@ class AnalysisResult:
         else:
             raise TypeError(f'stat should be a DataFrame or a str, got {type(stat).__name__}')
         self.register('stats', name, [fn], description)
+
+    def add_test(self, comparison, test, statistic, value, df, n, p):
+        '''
+        Add a statistical test to the 'Statistics reporting' table of the report: what a paper has to state.
+        :param comparison: what is compared (e.g. 'Cnr1 vs Rosa26, CB1 intensity')
+        :param test: name of the test
+        :param statistic: name of the test statistic (e.g. 't', 'U', 'chi2')
+        :param value: value of the test statistic
+        :param df: degrees of freedom (None if the test has none)
+        :param n: sample size, as text if there are several levels (e.g. '14 stacks, 5 animals')
+        :param p: exact p value
+        '''
+        self.tests.append({'comparison': comparison, 'test': test, 'statistic': statistic, 'value': float(value),
+                           'df': df, 'n': n, 'p': float(p)})
 
     def copy_script(self):
         '''Copy the script into the result folder, and return its record for the manifest.'''
@@ -200,6 +220,8 @@ class AnalysisResult:
             'python': sys.version.split()[0],
             'dataset': self.dataset_info,
             'n_sessions': len(self.sessions),
+            'upload_sessions': self.upload_sessions,
+            'tests': self.tests,
             'params': self.params,
             **self.items,
         }
@@ -231,6 +253,14 @@ class AnalysisResult:
                 text += f'<p>{esc(entry["description"])}</p>'
             return text + f'<p class="note">{esc(", ".join(entry["files"]))}</p>'
 
+        if m['tests']:
+            out.append('<h2>Statistics reporting</h2>')
+            tests = pandas.DataFrame(m['tests'])
+            tests['statistic'] = [f'{s} = {v:.4g}' for s, v in zip(tests['statistic'], tests['value'])]
+            tests['df'] = ['' if d is None else str(d) for d in tests['df']]
+            tests['p'] = [f'{p:.4g}' for p in tests['p']]
+            tests = tests[['comparison', 'test', 'statistic', 'df', 'n', 'p']]
+            out.append(f'<div class="scroll">{tests.to_html(index=False, escape=True)}</div>')
         if m['figures']:
             out.append('<h2>Figures</h2>')
         for entry in m['figures']:
@@ -255,6 +285,8 @@ class AnalysisResult:
             out.append(self.table_html(pandas.read_feather(self.get_fn('data', entry['files'][0])), REPORT_MAX_ROWS))
 
         out.append(f'<h2>Sessions ({len(self.sessions)})</h2>')
+        if not m['upload_sessions']:
+            out.append('<p class="note">These sessions are not exported or uploaded when the result is published.</p>')
         if m['dataset'] is not None:
             out.append(f'<p class="note">DataSet version {m["dataset"]["version"]}, '
                        f'{esc(m["dataset"]["project_folder"])}</p>')

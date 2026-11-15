@@ -79,3 +79,32 @@ def test_sessions_are_required_and_checked(tmp_path):
         res.set_sessions(['s1', 's9'], dataset=ds)
     with pytest.raises(ValueError, match='set_sessions'):
         res.save()
+
+
+def test_reporting_table_and_upload_flag(tmp_path):
+    res = AnalysisResult(tmp_path, 'Fig1', script=__file__)
+    res.set_sessions(['246_1', '246_2'], upload=False)
+    res.add_test('KO vs control', 'LMM likelihood ratio test', 'chi2', 7.0926, df=1, n='14 stacks, 5 animals',
+                 p=0.00774)
+    res.add_test('a vs b', 'Mann-Whitney U, two-sided', 'U', 46, df=None, n='8, 6', p=0.0027)
+    res.save()
+
+    folder = tmp_path / 'Results' / 'Fig1'
+    manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
+    assert manifest['upload_sessions'] is False
+    assert manifest['tests'][0] == {'comparison': 'KO vs control', 'test': 'LMM likelihood ratio test',
+                                    'statistic': 'chi2', 'value': 7.0926, 'df': 1, 'n': '14 stacks, 5 animals',
+                                    'p': 0.00774}
+    report = (folder / 'report.html').read_text(encoding='utf-8')
+    assert report.index('Statistics reporting') < report.index('<h2>Sessions')
+    for text in ('chi2 = 7.093', '0.00774', '14 stacks, 5 animals', 'not exported or uploaded'):
+        assert text in report, text
+
+
+def test_sessions_are_uploaded_by_default(tmp_path):
+    res = AnalysisResult(tmp_path, 'Fig1', script=__file__)
+    res.set_sessions(['s1'])
+    res.save()
+    manifest = json.loads((tmp_path / 'Results' / 'Fig1' / 'manifest.json').read_text(encoding='utf-8'))
+    assert manifest['upload_sessions'] is True and manifest['tests'] == []
+    assert 'Statistics reporting' not in (tmp_path / 'Results' / 'Fig1' / 'report.html').read_text(encoding='utf-8')
