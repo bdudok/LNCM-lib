@@ -14,7 +14,8 @@ class Publication:
     '''
     The record of a paper: which AnalysisResults it contains, and which figure and panel each of them is.
     The results stay in their project folders; the paper folder holds:
-        publication.json: the results, with their figure names, panels, scripts and statistics
+        publication.json: the results, with their figure names, panels, scripts and statistics. Of each result,
+            'steps' are analysis scripts to share; 'processing_steps' are a record and are not shared.
         <name>.html: the same as a page, with links to the report of each result
         figure_numbers.xlsx: optional table for the final figure and panel numbers (write_figure_lut)
     Usage (the script lists all results of the paper and is rerun when one is added or a panel changes):
@@ -99,7 +100,7 @@ class Publication:
             with open(fn, encoding='utf-8') as f:
                 m = json.load(f)
             entries.append({**r, 'title': m['title'], 'result_created': m['created'], 'script': m['script'],
-                            'steps': m['steps'], 'n_sessions': m['n_sessions'],
+                            'steps': m['steps'], 'processing_steps': m['processing_steps'], 'n_sessions': m['n_sessions'],
                             'upload_sessions': m.get('upload_sessions', True), 'tests': m.get('tests', [])})
         self.manifest = {'name': self.name, 'title': self.title,
                          'updated': datetime.now().isoformat(timespec='seconds'), 'results': entries}

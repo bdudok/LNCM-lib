@@ -11,7 +11,7 @@ from Proc2P.Analysis.AnalysisClasses.Publication import Publication
 
 
 def make_result(project, identifier, upload=True):
-    res = AnalysisResult(project, identifier, script=__file__)
+    res = AnalysisResult(project, identifier, script=__file__, steps=['1_pull.py'], processing_steps=['0_register.py'])
     res.set_sessions(['s1', 's2'], upload=upload)
     res.add_test('a vs b', 'paired t-test', 't', 2.5, df=1, n='2 sessions', p=0.04)
     res.save()
@@ -35,6 +35,7 @@ def test_save_lists_results_with_working_names(tmp_path):
     assert (ratio['figure'], ratio['panel'], ratio['final_figure']) == ('NF1-CRISPR', 'B', '')
     assert ratio['upload_sessions'] is False and manifest['results'][1]['upload_sessions'] is True
     assert ratio['script']['file'] == 'test_publication.py'
+    assert ratio['steps'] == ['1_pull.py'] and ratio['processing_steps'] == ['0_register.py']
     report = (folder / 'paper-x.html').read_text(encoding='utf-8')
     assert 'ratio/ratio.html' in report and '2, not uploaded' in report
     assert 'NF1-CRISPR B' in report and 't = 2.5' in report

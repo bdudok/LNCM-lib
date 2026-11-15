@@ -37,7 +37,8 @@ def add_items(res, figure_name='psth'):
 
 def test_save_writes_items_snapshot_and_manifest(tmp_path):
     ds = make_ds(tmp_path)
-    res = AnalysisResult(tmp_path, 'Fig1', script=__file__, steps=['1_construct.py', '3_pull.py'])
+    res = AnalysisResult(tmp_path, 'Fig1', script=__file__, steps=['1_construct.py', '3_pull.py'],
+                         processing_steps=['0_register.py'])
     res.set_params(window=(-3, -1), min_stops=2)
     res.set_sessions(['s2', 's1', 's1'], dataset=ds)
     add_items(res)
@@ -53,6 +54,7 @@ def test_save_writes_items_snapshot_and_manifest(tmp_path):
 
     manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
     assert manifest['steps'] == ['1_construct.py', '3_pull.py']
+    assert manifest['processing_steps'] == ['0_register.py']
     assert manifest['dataset']['version'] == ds.ver
     assert manifest['params'] == {'window': [-3, -1], 'min_stops': 2}
     assert manifest['script']['path'] == 'tests/test_analysis_result.py'
@@ -64,6 +66,7 @@ def test_save_writes_items_snapshot_and_manifest(tmp_path):
     assert 'data:image/png;base64' in report
     assert '<text' in (folder / 'figures' / 'psth.svg').read_text(encoding='utf-8')  # text is not outlined
     assert 'p = 0.04 &lt;n=2&gt;' in report
+    assert 'Processing before (not shared)' in report and '0_register.py' in report
 
 
 def test_rerun_removes_items_not_added_again(tmp_path):
@@ -141,7 +144,7 @@ def test_plot_script_makes_the_figures_from_the_saved_result(tmp_path, monkeypat
     plot = scripts / '3_analysis_plot.py'
     plot.write_text(PLOT_SCRIPT.format(project=tmp_path, figure='first'), encoding='utf-8')
 
-    res = AnalysisResult(tmp_path, 'Fig1', script=analysis, plot_script=plot.name)
+    res = AnalysisResult(tmp_path, 'Fig1', script=analysis, plot_script=plot.name, processing_steps=['0_register.py'])
     res.set_params(gain=2)
     res.set_sessions(['s1'])
     res.add_data('values', pandas.DataFrame({'y': [0.5, 1.5]}))
@@ -170,6 +173,7 @@ def test_plot_script_makes_the_figures_from_the_saved_result(tmp_path, monkeypat
     again = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
     assert sorted(fn.name for fn in (folder / 'figures').iterdir()) == ['second.png', 'second.svg']
     assert again['created'] == manifest['created'] and again['script'] == manifest['script']
+    assert again['processing_steps'] == ['0_register.py']
     assert (folder / 'data' / 'values.feather').exists() and (folder / 'data' / 'trace.npy').exists()
 
 

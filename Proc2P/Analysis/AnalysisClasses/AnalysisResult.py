@@ -74,14 +74,17 @@ class AnalysisResult:
     __name__ = 'AnalysisResult'
 
     def __init__(self, project_folder, identifier, script=None, steps=None, title=None, description=None,
-                 plot_script=None):
+                 plot_script=None, processing_steps=None):
         '''
         :param project_folder: the project folder of the analysis (as for DataSet)
         :param identifier: unique name of the result within the project, used as the folder name
         :param script: path of the script that makes the result. Default: the script being run.
         :param plot_script: optional script that makes the figures from the saved result (see the class docstring).
             A file name is looked up in the folder of script. save() runs it.
-        :param steps: file names of the scripts that have to be run before this one, in run order
+        :param steps: file names of the analysis scripts that have to be run before this one, in run order.
+            They are shared with the result: they run on the processed sessions.
+        :param processing_steps: file names of the scripts that processed the sessions before the analysis (e.g.
+            registration, pulling traces, cell screening), in run order. Recorded only; they are not shared.
         :param title, description: shown in the report
         '''
         self.project_folder = Path(project_folder)
@@ -95,6 +98,7 @@ class AnalysisResult:
         self.plot_script = Path(plot_script).resolve() if plot_script is not None else None
         self.loaded_manifest = None
         self.steps = list(steps) if steps is not None else []
+        self.processing_steps = list(processing_steps) if processing_steps is not None else []
         self.title = title if title is not None else identifier
         self.description = description
         self.params = {}
@@ -118,7 +122,7 @@ class AnalysisResult:
         with open(fn, encoding='utf-8') as f:
             m = json.load(f)
         res = cls(project_folder, identifier, script=script, steps=m['steps'], title=m['title'],
-                  description=m['description'])
+                  description=m['description'], processing_steps=m['processing_steps'])
         res.loaded_manifest = m
         res.params = m['params']
         res.items = {'figures': [], 'data': m['data'], 'stats': m['stats']}
@@ -285,6 +289,7 @@ class AnalysisResult:
                 'plot_script': None,
                 'plotted': None,
                 'steps': self.steps,
+                'processing_steps': self.processing_steps,
                 'library': self.library_record(),
                 'python': sys.version.split()[0],
                 'dataset': self.dataset_info,
@@ -396,6 +401,8 @@ class AnalysisResult:
                 rows.append((f'{label} commit', '<span class="warn">not in a git repository</span>'))
         if m['steps']:
             rows.append(('Steps run before', '<br>'.join(esc(str(s)) for s in m['steps'])))
+        if m['processing_steps']:
+            rows.append(('Processing before (not shared)', '<br>'.join(esc(str(s)) for s in m['processing_steps'])))
         for key, value in m['params'].items():
             rows.append((f'Parameter: {key}', esc(json.dumps(value, default=str))))
         out.append('<table>' + ''.join(f'<tr><th>{k}</th><td style="text-align:left">{v}</td></tr>'
