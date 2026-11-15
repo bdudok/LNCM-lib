@@ -62,6 +62,7 @@ def test_save_writes_items_snapshot_and_manifest(tmp_path):
 
     report = (folder / 'Fig1.html').read_text(encoding='utf-8')
     assert 'data:image/png;base64' in report
+    assert '<text' in (folder / 'figures' / 'psth.svg').read_text(encoding='utf-8')  # text is not outlined
     assert 'p = 0.04 &lt;n=2&gt;' in report
 
 

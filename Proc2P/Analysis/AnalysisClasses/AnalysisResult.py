@@ -169,14 +169,14 @@ class AnalysisResult:
         entries[:] = [e for e in entries if e['name'] != name]  # adding a name again replaces it
         entries.append({'name': name, 'files': [fn.name for fn in files], 'description': description, **info})
 
-    def add_figure(self, name, fig, description=None, formats=('png', 'svg'), dpi=300, editable_text=False):
+    def add_figure(self, name, fig, description=None, formats=('png', 'svg'), dpi=300, text_as_font=True):
         '''
         Save a matplotlib figure. The png is shown in the report.
-        :param editable_text: keep the text of the svg as text. It is written as 'font-size: 12px' for 12 pt, which
-            some programs import as 9 pt. By default text is saved as outlines, with the size it has in the figure.
+        :param text_as_font: text in the svg stays text in the font of the figure (12 pt is written as
+            'font-size: 12px' in a drawing whose unit is the point). False saves text as outlines.
         '''
         files = []
-        with matplotlib.rc_context({'svg.fonttype': 'none' if editable_text else 'path'}):
+        with matplotlib.rc_context({'svg.fonttype': 'none' if text_as_font else 'path'}):
             for ext in formats:
                 fn = self.get_fn('figures', name, f'.{ext}')
                 fig.savefig(fn, dpi=dpi)
