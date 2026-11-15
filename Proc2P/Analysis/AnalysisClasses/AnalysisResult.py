@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 import matplotlib
+import numpy
 import pandas
 
 LIB_ROOT = Path(__file__).resolve().parents[3]
@@ -53,7 +54,7 @@ class AnalysisResult:
         sessions.feather: one row per session used (the DataSet rows, if a DataSet was given)
         figures/, data/, stats/: the items added
         script/: a copy of the script as it was run
-        report.html: all of the above on one page
+        <identifier>.html: the report, all of the above on one page
     Usage:
         res = AnalysisResult(project_folder, 'Fig3_RunStop', steps=['3c_PSTHRunStop.py'])
         res.set_sessions(prefixes, dataset=ds)
@@ -61,14 +62,25 @@ class AnalysisResult:
         res.add_test('run vs rest', 'paired t-test', 't', 2.31, df=11, n='12 sessions, 4 animals', p=0.041)
         res.save()
     Items are written when added; save() writes the manifest and the report, and removes items of earlier runs.
+
+    The figures can be made by a separate plot script, so that a plot can be changed without running the analysis
+    again. The analysis script names it (plot_script='..._plot.py') and adds no figures; its save() runs the plot
+    script. The plot script uses only what is stored in the result:
+        res = AnalysisResult.load(project_folder, 'Fig3_RunStop')
+        df = res.get_data('psth'); window = res.params['window']
+        res.add_figure('psth', fig)
+        res.save()
     '''
     __name__ = 'AnalysisResult'
 
-    def __init__(self, project_folder, identifier, script=None, steps=None, title=None, description=None):
+    def __init__(self, project_folder, identifier, script=None, steps=None, title=None, description=None,
+                 plot_script=None):
         '''
         :param project_folder: the project folder of the analysis (as for DataSet)
         :param identifier: unique name of the result within the project, used as the folder name
         :param script: path of the script that makes the result. Default: the script being run.
+        :param plot_script: optional script that makes the figures from the saved result (see the class docstring).
+            A file name is looked up in the folder of script. save() runs it.
         :param steps: file names of the scripts that have to be run before this one, in run order
         :param title, description: shown in the report
         '''
@@ -78,6 +90,10 @@ class AnalysisResult:
         if script is None:
             script = getattr(sys.modules['__main__'], '__file__', None)
         self.script = Path(script).resolve() if script is not None else None
+        if plot_script is not None and self.script is not None:
+            plot_script = self.script.parent / plot_script  # stays as given if plot_script is an absolute path
+        self.plot_script = Path(plot_script).resolve() if plot_script is not None else None
+        self.loaded_manifest = None
         self.steps = list(steps) if steps is not None else []
         self.title = title if title is not None else identifier
         self.description = description
@@ -89,11 +105,34 @@ class AnalysisResult:
         self.dataset_info = None
         self.folder.mkdir(parents=True, exist_ok=True)
 
+    @classmethod
+    def load(cls, project_folder, identifier, script=None):
+        '''
+        Open a saved result in a plot script. The data, stats, tests and parameters are those of the saved result;
+        the figures are the ones this script adds. save() then updates the figures and the report.
+        :param script: path of the plot script. Default: the script being run.
+        '''
+        fn = Path(project_folder) / 'Results' / identifier / 'manifest.json'
+        if not fn.exists():
+            raise FileNotFoundError(f'Result {identifier} is not saved: {fn} not found. Run its analysis script first.')
+        with open(fn, encoding='utf-8') as f:
+            m = json.load(f)
+        res = cls(project_folder, identifier, script=script, steps=m['steps'], title=m['title'],
+                  description=m['description'])
+        res.loaded_manifest = m
+        res.params = m['params']
+        res.items = {'figures': [], 'data': m['data'], 'stats': m['stats']}
+        res.tests = m['tests']
+        res.sessions = pandas.read_feather(res.get_fn('sessions'))
+        res.upload_sessions = m['upload_sessions']
+        res.dataset_info = m['dataset']
+        return res
+
     def get_fn(self, kind, name=None, ext=''):
         '''
         :param kind: 'manifest', 'sessions', 'report', or the folder of an item: 'figures', 'data', 'stats', 'script'
         '''
-        fixed = {'manifest': 'manifest.json', 'sessions': 'sessions.feather', 'report': 'report.html'}
+        fixed = {'manifest': 'manifest.json', 'sessions': 'sessions.feather', 'report': f'{self.identifier}.html'}
         if kind in fixed:
             return self.folder / fixed[kind]
         (self.folder / kind).mkdir(exist_ok=True)
@@ -130,21 +169,43 @@ class AnalysisResult:
         entries[:] = [e for e in entries if e['name'] != name]  # adding a name again replaces it
         entries.append({'name': name, 'files': [fn.name for fn in files], 'description': description, **info})
 
-    def add_figure(self, name, fig, description=None, formats=('png', 'svg'), dpi=300):
-        '''Save a matplotlib figure. The png is shown in the report; svg keeps text editable.'''
+    def add_figure(self, name, fig, description=None, formats=('png', 'svg'), dpi=300, editable_text=False):
+        '''
+        Save a matplotlib figure. The png is shown in the report.
+        :param editable_text: keep the text of the svg as text. It is written as 'font-size: 12px' for 12 pt, which
+            some programs import as 9 pt. By default text is saved as outlines, with the size it has in the figure.
+        '''
         files = []
-        with matplotlib.rc_context({'svg.fonttype': 'none'}):
+        with matplotlib.rc_context({'svg.fonttype': 'none' if editable_text else 'path'}):
             for ext in formats:
                 fn = self.get_fn('figures', name, f'.{ext}')
                 fig.savefig(fn, dpi=dpi)
                 files.append(fn)
         self.register('figures', name, files, description)
 
-    def add_data(self, name, df, description=None):
-        '''Save a table of the values behind a figure or a statistic (feather).'''
-        fn = self.get_fn('data', name, '.feather')
-        df.reset_index(drop=True).to_feather(fn)
-        self.register('data', name, [fn], description, rows=len(df), columns=[str(c) for c in df.columns])
+    def add_data(self, name, data, description=None):
+        '''Save the values behind a figure or a statistic: a DataFrame (feather) or a numpy array (npy).'''
+        if isinstance(data, pandas.DataFrame):
+            fn = self.get_fn('data', name, '.feather')
+            data.reset_index(drop=True).to_feather(fn)
+            self.register('data', name, [fn], description, rows=len(data), columns=[str(c) for c in data.columns])
+        elif isinstance(data, numpy.ndarray):
+            fn = self.get_fn('data', name, '.npy')
+            numpy.save(fn, data, allow_pickle=False)
+            self.register('data', name, [fn], description, shape=list(data.shape), dtype=str(data.dtype))
+        else:
+            raise TypeError(f'data should be a DataFrame or a numpy array, got {type(data).__name__}')
+
+    def get_data(self, name):
+        '''Read a data item of the result: a DataFrame or a numpy array, as it was added.'''
+        entries = [e for e in self.items['data'] if e['name'] == name]
+        if not entries:
+            raise KeyError(f'Result {self.identifier} has no data item {name}. '
+                           f'It has: {", ".join(e["name"] for e in self.items["data"])}')
+        fn = self.get_fn('data', entries[0]['files'][0])
+        if fn.suffix == '.npy':
+            return numpy.load(fn, allow_pickle=False)
+        return pandas.read_feather(fn)
 
     def add_stat(self, name, stat, description=None):
         '''Save a statistical result: a DataFrame (feather) or text (txt).'''
@@ -172,11 +233,15 @@ class AnalysisResult:
         self.tests.append({'comparison': comparison, 'test': test, 'statistic': statistic, 'value': float(value),
                            'df': df, 'n': n, 'p': float(p)})
 
-    def copy_script(self):
-        '''Copy the script into the result folder, and return its record for the manifest.'''
+    def copy_script(self, clear=True):
+        '''
+        Copy the script into the result folder, and return its record for the manifest.
+        :param clear: remove the script copies of earlier runs first
+        '''
+        if clear:
+            shutil.rmtree(self.folder / 'script', ignore_errors=True)
         if self.script is None:
             return None
-        shutil.rmtree(self.folder / 'script', ignore_errors=True)
         shutil.copy2(self.script, self.get_fn('script', self.script.name))
         record = {'file': self.script.name}
         state = git_state(self.script)
@@ -209,27 +274,37 @@ class AnalysisResult:
         if self.sessions is None:
             raise ValueError('Set the sessions of the result with set_sessions before saving.')
         self.remove_old_items()
-        self.manifest = {
-            'identifier': self.identifier,
-            'title': self.title,
-            'description': self.description,
-            'created': datetime.now().isoformat(timespec='seconds'),
-            'script': self.copy_script(),
-            'steps': self.steps,
-            'library': self.library_record(),
-            'python': sys.version.split()[0],
-            'dataset': self.dataset_info,
-            'n_sessions': len(self.sessions),
-            'upload_sessions': self.upload_sessions,
-            'tests': self.tests,
-            'params': self.params,
-            **self.items,
-        }
+        now = datetime.now().isoformat(timespec='seconds')
+        if self.loaded_manifest is None:
+            self.manifest = {
+                'identifier': self.identifier,
+                'title': self.title,
+                'description': self.description,
+                'created': now,
+                'script': self.copy_script(),
+                'plot_script': None,
+                'plotted': None,
+                'steps': self.steps,
+                'library': self.library_record(),
+                'python': sys.version.split()[0],
+                'dataset': self.dataset_info,
+                'n_sessions': len(self.sessions),
+                'upload_sessions': self.upload_sessions,
+                'tests': self.tests,
+                'params': self.params,
+                **self.items,
+            }
+        else:
+            # opened by a plot script: the record of the analysis is kept, the figures are replaced
+            self.manifest = {**self.loaded_manifest, 'plot_script': self.copy_script(clear=False), 'plotted': now,
+                             'tests': self.tests, 'params': self.params, **self.items}
         with open(self.get_fn('manifest'), 'w', encoding='utf-8') as f:
             json.dump(self.manifest, f, indent=2, default=str)
         self.get_fn('report').write_text(self.report_html(), encoding='utf-8')
         print(f'AnalysisResult {self.identifier}: {len(self.sessions)} sessions, {len(self.items["figures"])} figures, '
               f'{len(self.items["data"])} data tables, {len(self.items["stats"])} stats saved in {self.folder}')
+        if self.loaded_manifest is None and self.plot_script is not None:
+            subprocess.run([sys.executable, str(self.plot_script)], check=True, cwd=self.plot_script.parent)
 
     @staticmethod
     def table_html(df, max_rows=None):
@@ -238,6 +313,16 @@ class AnalysisResult:
             note = f'<p class="note">First {max_rows} of {len(df)} rows.</p>'
             df = df.head(max_rows)
         return f'<div class="scroll">{df.to_html(index=False, na_rep="", float_format="{:.4g}".format)}</div>{note}'
+
+    @staticmethod
+    def tests_html(tests, first_columns=()):
+        '''The 'Statistics reporting' table of a list of tests (see add_test).'''
+        tests = pandas.DataFrame(tests)
+        tests['statistic'] = [f'{s} = {v:.4g}' for s, v in zip(tests['statistic'], tests['value'])]
+        tests['df'] = ['' if d is None else str(d) for d in tests['df']]
+        tests['p'] = [f'{p:.4g}' for p in tests['p']]
+        tests = tests[[*first_columns, 'comparison', 'test', 'statistic', 'df', 'n', 'p']]
+        return f'<div class="scroll">{tests.to_html(index=False, escape=True)}</div>'
 
     def report_html(self):
         m = self.manifest
@@ -255,12 +340,7 @@ class AnalysisResult:
 
         if m['tests']:
             out.append('<h2>Statistics reporting</h2>')
-            tests = pandas.DataFrame(m['tests'])
-            tests['statistic'] = [f'{s} = {v:.4g}' for s, v in zip(tests['statistic'], tests['value'])]
-            tests['df'] = ['' if d is None else str(d) for d in tests['df']]
-            tests['p'] = [f'{p:.4g}' for p in tests['p']]
-            tests = tests[['comparison', 'test', 'statistic', 'df', 'n', 'p']]
-            out.append(f'<div class="scroll">{tests.to_html(index=False, escape=True)}</div>')
+            out.append(self.tests_html(m['tests']))
         if m['figures']:
             out.append('<h2>Figures</h2>')
         for entry in m['figures']:
@@ -282,7 +362,10 @@ class AnalysisResult:
             out.append('<h2>Data</h2>')
         for entry in m['data']:
             out.append(item_head(entry))
-            out.append(self.table_html(pandas.read_feather(self.get_fn('data', entry['files'][0])), REPORT_MAX_ROWS))
+            if 'shape' in entry:
+                out.append(f'<p class="note">Array, shape {tuple(entry["shape"])}, {esc(entry["dtype"])}</p>')
+            else:
+                out.append(self.table_html(self.get_data(entry['name']), REPORT_MAX_ROWS))
 
         out.append(f'<h2>Sessions ({len(self.sessions)})</h2>')
         if not m['upload_sessions']:
@@ -295,7 +378,12 @@ class AnalysisResult:
 
         out.append('<h2>Provenance</h2>')
         rows = [('Created', m['created']), ('Python', m['python'])]
-        for label, record in (('Script', m['script']), ('Library', m['library'])):
+        if m['plotted']:
+            rows.append(('Figures made', m['plotted']))
+        records = [('Script', m['script']), ('Library', m['library'])]
+        if m['plotted']:
+            records.insert(1, ('Plot script', m['plot_script']))
+        for label, record in records:
             if not record:
                 rows.append((label, 'not recorded'))
                 continue
