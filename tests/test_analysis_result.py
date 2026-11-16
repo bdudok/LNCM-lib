@@ -277,3 +277,31 @@ def test_mouse_table_has_the_age_at_the_first_session_used(tmp_path, monkeypatch
     res.save()
     assert not (folder / 'mice.feather').exists()
     assert 'could not be read from Baserow' in (folder / 'Fig1.html').read_text(encoding='utf-8')
+
+
+def test_mouse_table_reads_baserow_only_for_what_the_dataset_lacks(tmp_path, monkeypatch):
+    from Proc2P.Analysis.AnalysisClasses import AnalysisResult as module
+
+    ds = make_ds(tmp_path)
+    for pf, date in (('s1', '2025-04-11'), ('s2', '2025-04-01')):
+        ds.set_by_dict(pf, {'Sex': 'F', 'Strain': 'PV-Cre'})
+        ds.set_by_dict(pf, {'DOB': '2025-01-01', 'FirstSurgery': '2025-03-02', 'Date': date}, type=pandas.Timestamp)
+    ds.save_df()
+    calls = []
+
+    def read_mouse_db(animals, prefixes):
+        calls.append((list(animals), list(prefixes)))
+        return {'m2': {'Sex': 'M', 'Strain': 'C57BL/6J', 'DOB': '2025-02-01'}}, {'s3': '2025-05-02'}
+
+    monkeypatch.setattr(module, 'read_mouse_db', read_mouse_db)
+    res = AnalysisResult(tmp_path, 'Fig1', script=__file__)
+    res.set_sessions(['s1', 's2'], dataset=ds)  # everything is in the DataSet
+    assert calls == []
+    m1 = res.mice.set_index('Animal').loc['m1']
+    assert (m1['Sex'], m1['Strain'], m1['AgeFirstSession'], m1['AgeFirstSurgery']) == ('F', 'PV-Cre', 90, 60)
+
+    res.set_sessions(['s1', 's2', 's3'], dataset=ds)  # m2 and s3 are not
+    assert calls == [(['m2'], ['s3'])]
+    mice = res.mice.set_index('Animal')
+    assert mice.loc['m1', 'Strain'] == 'PV-Cre' and mice.loc['m2', 'Strain'] == 'C57BL/6J'
+    assert mice.loc['m2', 'AgeFirstSession'] == 90 and pandas.isna(mice.loc['m2', 'AgeFirstSurgery'])

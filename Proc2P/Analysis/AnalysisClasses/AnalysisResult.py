@@ -234,23 +234,42 @@ class AnalysisResult:
 
     def mouse_table(self):
         '''
-        One row per animal of the sessions. Sex is from the DataSet (from Baserow if it is not set there); Strain
-        and DOB are from Baserow. FirstSession is the date of the first session of the animal used in this result
-        (Baserow), nSessions the number of its sessions used. AgeFirstSession and AgeFirstSurgery are in days.
+        One row per animal of the sessions. The DataSet is the pin on the metadata: Sex, Strain, DOB and FirstSurgery
+        of an animal and Date of a session are taken from its columns of these names. Baserow is read only for the
+        animals and sessions that have no value there (the first surgery is not in Baserow). FirstSession is the
+        date of the first session of the animal used in this result, nSessions the number of its sessions used.
+        AgeFirstSession and AgeFirstSurgery are in days.
         '''
         sessions = self.sessions.dropna(subset='Animal')
         animals = sorted(sessions['Animal'].unique())
-        entries, dates = read_mouse_db(animals, sessions['Prefix'])
+
+        def pinned(rows, key):
+            values = rows[key].dropna() if key in rows else []
+            return values.iloc[0] if len(values) else None
+
+        pins = {animal: {key: pinned(sessions.loc[sessions['Animal'] == animal], key)
+                         for key in (*MOUSE_FIELDS, 'FirstSurgery')} for animal in animals}
+        session_dates = pandas.to_datetime(sessions['Date']) if 'Date' in sessions else \
+            pandas.Series(pandas.NaT, index=sessions.index)
+        look_up_animals = [animal for animal in animals if any(pins[animal][key] is None for key in MOUSE_FIELDS)]
+        look_up_prefixes = sessions.loc[session_dates.isna(), 'Prefix']
+        entries, dates = {}, {}
+        if look_up_animals or len(look_up_prefixes):
+            entries, dates = read_mouse_db(look_up_animals, look_up_prefixes)
+        session_dates = session_dates.fillna(pandas.to_datetime(sessions['Prefix'].map(dates)))
         surgeries = read_surgery_dates(animals)
-        session_dates = pandas.to_datetime(sessions['Prefix'].map(dates))
         rows = []
         for animal in animals:
-            entry = entries[animal] or {}
+            entry = entries.get(animal) or {}
+            pin = pins[animal]
             wh = sessions['Animal'] == animal
-            sex = sessions.loc[wh, 'Sex'].dropna() if 'Sex' in sessions else []
-            rows.append({'Animal': animal, 'Sex': sex.iloc[0] if len(sex) else entry.get('Sex'),
-                         'Strain': entry.get('Strain'), 'DOB': entry.get('DOB'), 'FirstSurgery': surgeries[animal],
-                         'FirstSession': session_dates[wh].min(), 'nSessions': int(wh.sum())})
+            row = {'Animal': animal}
+            for key in MOUSE_FIELDS:
+                row[key] = pin[key] if pin[key] is not None else entry.get(key)
+            row['FirstSurgery'] = pin['FirstSurgery'] if pin['FirstSurgery'] is not None else surgeries[animal]
+            row['FirstSession'] = session_dates[wh].min()
+            row['nSessions'] = int(wh.sum())
+            rows.append(row)
         mice = pandas.DataFrame(rows)
         for key in ('Animal', 'Sex', 'Strain'):
             mice[key] = mice[key].astype('string')
