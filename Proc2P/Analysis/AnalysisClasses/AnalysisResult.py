@@ -15,6 +15,7 @@ import pandas
 import requests
 
 from BaserowAPI.BaserowRequests import GetSessions
+from BaserowAPI.config import config as baserow_config
 
 LIB_ROOT = Path(__file__).resolve().parents[3]
 CONFIRMED_ENV = 'LNCM_UNCOMMITTED_CONFIRMED'  # set for the plot script that save() runs: already confirmed
@@ -56,19 +57,23 @@ def git_state(path):
         return None
 
 
-MOUSE_FIELDS = {'Sex': 'Sex*', 'Strain': 'Strain*', 'DOB': 'DOB*'}  # column of the mouse table: field in Baserow
+# column of the mouse table: field in Baserow
+MOUSE_FIELDS = {'Sex': 'Sex*', 'Strain': 'Strain*', 'DOB': 'DOB*', 'FirstSurgery': baserow_config['surgery_field']}
+AGE_MAX = 1000  # days; a larger age, or one that is not positive, gets a warning
 
 
 def read_mouse_db(animals, prefixes):
     '''
     Read the mouse entries and the dates of the sessions from Baserow.
-    :return: {animal: {'Sex', 'Strain', 'DOB'}}, {prefix: date}. None for the entries that are not found.
+    :return: {animal: {'Sex', 'Strain', 'DOB', 'FirstSurgery'}}, {prefix: date}. None for the entries that are not
+        found and for the fields that are empty.
     '''
     db = GetSessions(timeout=30)
     mice = {}
     for animal in animals:
         rows = db.get_mouse(mtag=animal)
-        mice[animal] = {key: rows.iloc[0][field] for key, field in MOUSE_FIELDS.items()} if len(rows) else None
+        mice[animal] = {key: empty_to_none(rows.iloc[0].get(field)) for key, field in MOUSE_FIELDS.items()} \
+            if len(rows) else None
     dates = {}
     for prefix in prefixes:
         rows = db.get_session(prefix)  # Image.ID is the prefix with a suffix (-000)
@@ -76,9 +81,22 @@ def read_mouse_db(animals, prefixes):
     return mice, dates
 
 
-def read_surgery_dates(animals):
-    '''The date of the first surgery of each animal. None for all until the ELN can be read from the library.'''
-    return {animal: None for animal in animals}
+def empty_to_none(value):
+    '''A field of a Baserow row: None if it is empty (None, '', or 'None' as text).'''
+    return None if value is None or str(value).strip() in ('', 'None') else value
+
+
+def age_warnings(mice):
+    '''Text for each age column of the mouse table that has a missing, not positive or too large value.'''
+    labels = {'AgeFirstSurgery': 'Age at the first surgery', 'AgeFirstSession': 'Age at the first session'}
+    warnings = []
+    for key, label in labels.items():
+        days = mice[key]
+        for problem, wh in (('missing', days.isna()), ('0 or negative', (days <= 0).fillna(False)),
+                            (f'over {AGE_MAX} days', (days > AGE_MAX).fillna(False))):
+            if wh.any():
+                warnings.append(f'{label} is {problem} for: {", ".join(mice.loc[wh.astype(bool), "Animal"])}.')
+    return warnings
 
 
 class AnalysisResult:
@@ -227,6 +245,8 @@ class AnalysisResult:
             try:
                 self.mice = self.mouse_table()
                 self.mice.to_feather(self.get_fn('mice'))
+                for warning in age_warnings(self.mice):
+                    print(f'AnalysisResult {self.identifier} WARNING: {warning}')
             except requests.RequestException as e:
                 self.mice_error = f'{type(e).__name__}: {e}'
                 print(f'AnalysisResult {self.identifier}: the animals could not be read from Baserow. '
@@ -236,7 +256,7 @@ class AnalysisResult:
         '''
         One row per animal of the sessions. The DataSet is the pin on the metadata: Sex, Strain, DOB and FirstSurgery
         of an animal and Date of a session are taken from its columns of these names. Baserow is read only for the
-        animals and sessions that have no value there (the first surgery is not in Baserow). FirstSession is the
+        animals and sessions that have no value there. FirstSession is the
         date of the first session of the animal used in this result, nSessions the number of its sessions used.
         AgeFirstSession and AgeFirstSurgery are in days.
         '''
@@ -248,7 +268,7 @@ class AnalysisResult:
             return values.iloc[0] if len(values) else None
 
         pins = {animal: {key: pinned(sessions.loc[sessions['Animal'] == animal], key)
-                         for key in (*MOUSE_FIELDS, 'FirstSurgery')} for animal in animals}
+                         for key in MOUSE_FIELDS} for animal in animals}
         session_dates = pandas.to_datetime(sessions['Date']) if 'Date' in sessions else \
             pandas.Series(pandas.NaT, index=sessions.index)
         look_up_animals = [animal for animal in animals if any(pins[animal][key] is None for key in MOUSE_FIELDS)]
@@ -257,7 +277,6 @@ class AnalysisResult:
         if look_up_animals or len(look_up_prefixes):
             entries, dates = read_mouse_db(look_up_animals, look_up_prefixes)
         session_dates = session_dates.fillna(pandas.to_datetime(sessions['Prefix'].map(dates)))
-        surgeries = read_surgery_dates(animals)
         rows = []
         for animal in animals:
             entry = entries.get(animal) or {}
@@ -266,7 +285,6 @@ class AnalysisResult:
             row = {'Animal': animal}
             for key in MOUSE_FIELDS:
                 row[key] = pin[key] if pin[key] is not None else entry.get(key)
-            row['FirstSurgery'] = pin['FirstSurgery'] if pin['FirstSurgery'] is not None else surgeries[animal]
             row['FirstSession'] = session_dates[wh].min()
             row['nSessions'] = int(wh.sum())
             rows.append(row)
@@ -301,7 +319,8 @@ class AnalysisResult:
         for key in table.select_dtypes('datetime').columns:
             table = table.assign(**{key: table[key].dt.strftime('%Y-%m-%d')})
         table = table.astype(object).where(table.notna(), '')  # to_html writes missing strings and Int64 as <NA>
-        return f'<p>{html.escape(summary)}</p>' + self.table_html(table)
+        warnings = ''.join(f'<p class="warn">{html.escape(w)}</p>' for w in age_warnings(mice))
+        return f'<p>{html.escape(summary)}</p>' + warnings + self.table_html(table)
 
     def register(self, kind, name, files, description, **info):
         entries = self.items[kind]

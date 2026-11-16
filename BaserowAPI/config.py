@@ -13,6 +13,11 @@ except ImportError:
 # setx BASEROW_LOGGER_TOKEN "<token>"
 baserow_logger_token = os.environ.get('BASEROW_LOGGER_TOKEN') or baserow_logger_token
 
+# Token that may edit the mice table. Only SetFirstSurgery uses it (run by SurgeryDB); everything else uses the
+# tokens above. In a Windows terminal, run:
+# setx BASEROW_SURGERY_TOKEN "<token>"
+baserow_surgery_token = os.environ.get('BASEROW_SURGERY_TOKEN', '')
+
 try:
     from BaserowAPI.LG_API_token import token as lg_token
 except ImportError:
@@ -35,6 +40,8 @@ config = {
     "http": "http://10.18.4.112:5001",
     "api_token": baserow_token,
     "logger_token": baserow_logger_token,
+    "surgery_token": baserow_surgery_token,
+    "surgery_field": "FirstSurgeryDate",  # date field of the mice table
     "lg_token": lg_token,
     "session_url": "http://10.18.4.112:5001/api/database/rows/table/490/?user_field_names=true",
     "mice_url": "http://10.18.4.112:5001/api/database/rows/table/492/?user_field_names=true",

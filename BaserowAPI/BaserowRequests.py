@@ -139,6 +139,20 @@ class GetSessions:
                                 )
             return resp.json()
 
+    def get_mice(self, page_size=200):
+        '''All rows of the mice table, as a DataFrame.'''
+        url = config['mice_url']
+        params = {'size': page_size}
+        rows = []
+        while url:
+            resp = requests.get(url, headers={"Authorization": self.auth_string}, params=params,
+                                timeout=self.timeout)
+            resp.raise_for_status()
+            page = resp.json()
+            rows.extend(page['results'])
+            url, params = page['next'], None  # the next url has the parameters
+        return pandas.DataFrame(rows)
+
     def put_new(self, data_dict):
         resp = requests.post(
             config['session_url'],
@@ -339,3 +353,34 @@ if __name__ == '__main__':
     db = GetSessions()
     # session_df = db.search(project=project, task=task, incltag=incltag)
     # print(session_df[['Image.ID', 'Processed.Path']])
+
+
+class SetFirstSurgery:
+    '''
+    Writes the date of the first surgery of a mouse in the mice table. This is the only use of the token that may
+    edit the mice table (config['surgery_token']); reading is done with GetSessions and its read-only token.
+    '''
+
+    def __init__(self, timeout=30):
+        if not config['surgery_token']:
+            raise ValueError('No token to edit the mice table. Set it in a Windows terminal with:\n'
+                             'setx BASEROW_SURGERY_TOKEN "<token>"')
+        self.auth_string = f"Token {config['surgery_token']}"
+        self.timeout = timeout
+
+    def set(self, row_id, date):
+        '''
+        :param row_id: 'id' of the mouse in the mice table
+        :param date: date of the first surgery
+        '''
+        return self.patch(row_id, {config['surgery_field']: pandas.Timestamp(date).strftime('%Y-%m-%d')})
+
+    def patch(self, row_id, payload):
+        assert list(payload) == [config['surgery_field']], \
+            f'Only {config["surgery_field"]} may be edited with this token, got {list(payload)}'
+        base, query = config['mice_url'].split('?')
+        resp = requests.patch(f'{base}{int(row_id)}/?{query}',
+                              headers={"Authorization": self.auth_string, "Content-Type": "application/json"},
+                              json=payload, timeout=self.timeout)
+        resp.raise_for_status()
+        return resp

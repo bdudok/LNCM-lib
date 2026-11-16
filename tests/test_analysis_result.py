@@ -305,3 +305,31 @@ def test_mouse_table_reads_baserow_only_for_what_the_dataset_lacks(tmp_path, mon
     mice = res.mice.set_index('Animal')
     assert mice.loc['m1', 'Strain'] == 'PV-Cre' and mice.loc['m2', 'Strain'] == 'C57BL/6J'
     assert mice.loc['m2', 'AgeFirstSession'] == 90 and pandas.isna(mice.loc['m2', 'AgeFirstSurgery'])
+
+
+def test_first_surgery_falls_back_to_baserow_and_ages_are_checked(tmp_path, monkeypatch, capsys):
+    from Proc2P.Analysis.AnalysisClasses import AnalysisResult as module
+
+    ds = make_ds(tmp_path)
+    dates = {'s1': '2025-04-11', 's2': '2025-04-01', 's3': '2025-01-01'}
+
+    def read_mouse_db(animals, prefixes):
+        return ({'m1': {'Sex': 'F', 'Strain': 'C57BL/6J', 'DOB': '2025-01-01', 'FirstSurgery': '2025-03-02'},
+                 'm2': {'Sex': 'M', 'Strain': 'C57BL/6J', 'DOB': '2025-01-01', 'FirstSurgery': None}},
+                {p: dates[p] for p in prefixes})
+
+    monkeypatch.setattr(module, 'read_mouse_db', read_mouse_db)
+    res = AnalysisResult(tmp_path, 'Fig1', script=__file__)
+    res.set_sessions(['s1', 's2', 's3'], dataset=ds)
+    mice = res.mice.set_index('Animal')
+    assert mice.loc['m1', 'AgeFirstSurgery'] == 60 and mice.loc['m2', 'AgeFirstSession'] == 0
+    printed = capsys.readouterr().out
+    res.save()
+    report = (tmp_path / 'Results' / 'Fig1' / 'Fig1.html').read_text(encoding='utf-8')
+    for text in ('Age at the first surgery is missing for: m2.', 'Age at the first session is 0 or negative for: m2.'):
+        assert text in printed and text in report, text
+    assert 'for: m1' not in report
+
+    ds.set_field('s3', 'Date', '2028-01-01', type=pandas.Timestamp)  # the DataSet value is used for the session date
+    res.set_sessions(['s3'], dataset=ds)
+    assert 'Age at the first session is over 1000 days for: m2.' in module.age_warnings(res.mice)
