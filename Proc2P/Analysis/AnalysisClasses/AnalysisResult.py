@@ -2,6 +2,7 @@ import base64
 import hashlib
 import html
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,7 @@ import numpy
 import pandas
 
 LIB_ROOT = Path(__file__).resolve().parents[3]
+CONFIRMED_ENV = 'LNCM_UNCOMMITTED_CONFIRMED'  # set for the plot script that save() runs: already confirmed
 REPORT_MAX_ROWS = 50  # rows of a data table shown in the report; the file has all rows
 
 REPORT_STYLE = '''
@@ -67,6 +69,7 @@ class AnalysisResult:
         res.add_test('run vs rest', 'paired t-test', 't', 2.31, df=11, n='12 sessions, 4 animals', p=0.041)
         res.save()
     Items are written when added; save() writes the manifest and the report, and removes items of earlier runs.
+    If the script, the plot script or LNCM-lib has uncommitted changes, creating the result waits for enter.
 
     The figures can be made by a separate plot script, so that a plot can be changed without running the analysis
     again. The analysis script names it (plot_script='..._plot.py') and adds no figures; its save() runs the plot
@@ -113,6 +116,7 @@ class AnalysisResult:
         self.upload_sessions = True
         self.dataset_info = None
         self.folder.mkdir(parents=True, exist_ok=True)
+        self.confirm_uncommitted()
 
     @classmethod
     def load(cls, project_folder, identifier, script=None):
@@ -136,6 +140,15 @@ class AnalysisResult:
         res.upload_sessions = m['upload_sessions']
         res.dataset_info = m['dataset']
         return res
+
+    def confirm_uncommitted(self):
+        '''Wait for enter if the script, the plot script or LNCM-lib has uncommitted changes.'''
+        if os.environ.get(CONFIRMED_ENV):
+            return
+        dirty = [path.name for path in (self.script, self.plot_script, LIB_ROOT)
+                 if path is not None and (git_state(path) or {}).get('dirty')]
+        if dirty:
+            input(f'Uncommitted changes in analysis code ({", ".join(dirty)}); press enter to continue')
 
     def get_fn(self, kind, name=None, ext=''):
         '''
@@ -314,7 +327,8 @@ class AnalysisResult:
         print(f'AnalysisResult {self.identifier}: {len(self.sessions)} sessions, {len(self.items["figures"])} figures, '
               f'{len(self.items["data"])} data tables, {len(self.items["stats"])} stats saved in {self.folder}')
         if self.loaded_manifest is None and self.plot_script is not None:
-            subprocess.run([sys.executable, str(self.plot_script)], check=True, cwd=self.plot_script.parent)
+            subprocess.run([sys.executable, str(self.plot_script)], check=True, cwd=self.plot_script.parent,
+                           env={**os.environ, CONFIRMED_ENV: '1'})
 
     @staticmethod
     def table_html(df, max_rows=None):

@@ -210,3 +210,25 @@ def test_git_state_dirty_only_for_the_path(tmp_path):
 
     script.write_text('a = 2\n')
     assert git_state(script)['dirty']
+
+
+def test_uncommitted_script_waits_for_enter(tmp_path, monkeypatch):
+    import subprocess
+
+    from Proc2P.Analysis.AnalysisClasses import AnalysisResult as module
+
+    script = tmp_path / 'script.py'
+    script.write_text('a = 1\n')
+    for args in (['init'], ['commit', '--allow-empty', '-m', 'init']):  # the script is untracked
+        subprocess.run(['git', '-C', str(tmp_path), '-c', 'user.name=t', '-c', 'user.email=t@t', *args], check=True,
+                       capture_output=True)
+    prompts = []
+    monkeypatch.setattr('builtins.input', prompts.append)
+    monkeypatch.setattr(module, 'LIB_ROOT', tmp_path / 'not_a_repo')
+
+    AnalysisResult(tmp_path, 'Fig1', script=script)
+    assert prompts == []  # confirmed already: the plot script run by save()
+
+    monkeypatch.delenv(module.CONFIRMED_ENV)
+    AnalysisResult(tmp_path, 'Fig1', script=script)
+    assert len(prompts) == 1 and 'script.py' in prompts[0]
