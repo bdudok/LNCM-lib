@@ -180,3 +180,33 @@ def test_plot_script_makes_the_figures_from_the_saved_result(tmp_path, monkeypat
 def test_load_needs_a_saved_result(tmp_path):
     with pytest.raises(FileNotFoundError, match='Run its analysis script first'):
         AnalysisResult.load(tmp_path, 'Fig1', script=__file__)
+
+
+def test_git_state_dirty_only_for_the_path(tmp_path):
+    import subprocess
+
+    from Proc2P.Analysis.AnalysisClasses.AnalysisResult import git_state
+
+    def git(*args):
+        subprocess.run(['git', '-C', str(tmp_path), '-c', 'user.name=t', '-c', 'user.email=t@t', *args], check=True,
+                       capture_output=True)
+
+    script, other = tmp_path / 'script.py', tmp_path / 'other.py'
+    script.write_text('a = 1\n')
+    other.write_text('b = 1\n')
+    git('init')
+    git('add', '.')
+    git('commit', '-m', 'init')
+    assert not git_state(script)['dirty']
+    assert not git_state(tmp_path)['dirty']
+
+    # changes of other files don't count for a file; untracked files don't count for a folder
+    (tmp_path / 'new.py').write_text('c = 1\n')
+    assert not git_state(tmp_path)['dirty']
+    assert git_state(tmp_path / 'new.py')['dirty']
+    other.write_text('b = 2\n')
+    assert not git_state(script)['dirty']
+    assert git_state(tmp_path)['dirty']
+
+    script.write_text('a = 2\n')
+    assert git_state(script)['dirty']

@@ -31,9 +31,14 @@ pre {background: #f4f4f4; padding: 0.5em; overflow-x: auto;}
 
 
 def git_state(path):
-    '''Commit and uncommitted-changes flag of the repo that contains path, or None if it can't be read.'''
+    '''
+    Commit of the repo that contains path, and if path has uncommitted changes; None if it can't be read.
+    A file: 'dirty' if that file is modified or not tracked; other files of the repo don't count.
+    A folder: 'dirty' if any tracked file of the repo is modified; untracked files don't count.
+    '''
     path = Path(path)
     folder = path if path.is_dir() else path.parent
+    status_args = ('--untracked-files=no',) if path.is_dir() else ('--', str(path))
 
     def git(*args):
         return subprocess.run(['git', '-C', str(folder), *args], capture_output=True, text=True, check=True).stdout
@@ -41,7 +46,7 @@ def git_state(path):
     try:
         root = Path(git('rev-parse', '--show-toplevel').strip())
         return {'repo': root.name, 'commit': git('rev-parse', 'HEAD').strip(),
-                'dirty': bool(git('status', '--porcelain').strip()), 'root': root}
+                'dirty': bool(git('status', '--porcelain', *status_args).strip()), 'root': root}
     except (OSError, subprocess.CalledProcessError):
         return None
 
