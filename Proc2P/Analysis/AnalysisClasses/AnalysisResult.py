@@ -12,6 +12,9 @@ from pathlib import Path
 import matplotlib
 import numpy
 import pandas
+import requests
+
+from BaserowAPI.BaserowRequests import GetSessions
 
 LIB_ROOT = Path(__file__).resolve().parents[3]
 CONFIRMED_ENV = 'LNCM_UNCOMMITTED_CONFIRMED'  # set for the plot script that save() runs: already confirmed
@@ -53,12 +56,39 @@ def git_state(path):
         return None
 
 
+MOUSE_FIELDS = {'Sex': 'Sex*', 'Strain': 'Strain*', 'DOB': 'DOB*'}  # column of the mouse table: field in Baserow
+
+
+def read_mouse_db(animals, prefixes):
+    '''
+    Read the mouse entries and the dates of the sessions from Baserow.
+    :return: {animal: {'Sex', 'Strain', 'DOB'}}, {prefix: date}. None for the entries that are not found.
+    '''
+    db = GetSessions(timeout=30)
+    mice = {}
+    for animal in animals:
+        rows = db.get_mouse(mtag=animal)
+        mice[animal] = {key: rows.iloc[0][field] for key, field in MOUSE_FIELDS.items()} if len(rows) else None
+    dates = {}
+    for prefix in prefixes:
+        rows = db.get_session(prefix)  # Image.ID is the prefix with a suffix (-000)
+        dates[prefix] = rows.iloc[0]['Date'] if len(rows) else None
+    return mice, dates
+
+
+def read_surgery_dates(animals):
+    '''The date of the first surgery of each animal. None for all until the ELN can be read from the library.'''
+    return {animal: None for animal in animals}
+
+
 class AnalysisResult:
     '''
     The record of one result (usually a figure): the figures, the tables behind them, the statistics, the list of
     sessions used, and the code version. Saved in <project_folder>/Results/<identifier>/:
         manifest.json: script, commits of the script's repo and of LNCM-lib, DataSet version, parameters, contents
         sessions.feather: one row per session used (the DataSet rows, if a DataSet was given)
+        mice.feather: one row per animal of the sessions (if a DataSet was given): sex, strain, date of birth,
+            and the age at the first surgery and at the first session used in the result. Read from Baserow.
         figures/, data/, stats/: the items added
         script/: a copy of the script as it was run
         <identifier>.html: the report, all of the above on one page
@@ -113,6 +143,8 @@ class AnalysisResult:
         self.items = {'figures': [], 'data': [], 'stats': []}
         self.tests = []
         self.sessions = None
+        self.mice = None
+        self.mice_error = None
         self.upload_sessions = True
         self.dataset_info = None
         self.folder.mkdir(parents=True, exist_ok=True)
@@ -137,6 +169,8 @@ class AnalysisResult:
         res.items = {'figures': [], 'data': m['data'], 'stats': m['stats']}
         res.tests = m['tests']
         res.sessions = pandas.read_feather(res.get_fn('sessions'))
+        if res.get_fn('mice').exists():
+            res.mice = pandas.read_feather(res.get_fn('mice'))
         res.upload_sessions = m['upload_sessions']
         res.dataset_info = m['dataset']
         return res
@@ -152,9 +186,10 @@ class AnalysisResult:
 
     def get_fn(self, kind, name=None, ext=''):
         '''
-        :param kind: 'manifest', 'sessions', 'report', or the folder of an item: 'figures', 'data', 'stats', 'script'
+        :param kind: 'manifest', 'sessions', 'mice', 'report', or the folder of an item: 'figures', 'data', 'stats', 'script'
         '''
-        fixed = {'manifest': 'manifest.json', 'sessions': 'sessions.feather', 'report': f'{self.identifier}.html'}
+        fixed = {'manifest': 'manifest.json', 'sessions': 'sessions.feather', 'mice': 'mice.feather',
+                 'report': f'{self.identifier}.html'}
         if kind in fixed:
             return self.folder / fixed[kind]
         (self.folder / kind).mkdir(exist_ok=True)
@@ -168,7 +203,8 @@ class AnalysisResult:
         '''
         The sessions that the result is computed from.
         :param prefixes: session prefixes
-        :param dataset: optional DataSet. Its rows of these sessions are stored, with the dataset version.
+        :param dataset: optional DataSet. Its rows of these sessions are stored, with the dataset version, and
+            the table of the animals is made (see mouse_table).
         :param upload: False if publishing should not export and upload these sessions (e.g. the entries are
             confocal images, not imaging sessions). Stored in the manifest as 'upload_sessions'.
         '''
@@ -185,6 +221,68 @@ class AnalysisResult:
             self.sessions = df.sort_values('Prefix').reset_index(drop=True)
             self.dataset_info = {'project_folder': str(dataset.project_folder), 'version': int(dataset.ver)}
         self.sessions.to_feather(self.get_fn('sessions'))
+        self.mice, self.mice_error = None, None
+        self.get_fn('mice').unlink(missing_ok=True)
+        if dataset is not None:
+            try:
+                self.mice = self.mouse_table()
+                self.mice.to_feather(self.get_fn('mice'))
+            except requests.RequestException as e:
+                self.mice_error = f'{type(e).__name__}: {e}'
+                print(f'AnalysisResult {self.identifier}: the animals could not be read from Baserow. '
+                      f'{self.mice_error}')
+
+    def mouse_table(self):
+        '''
+        One row per animal of the sessions. Sex is from the DataSet (from Baserow if it is not set there); Strain
+        and DOB are from Baserow. FirstSession is the date of the first session of the animal used in this result
+        (Baserow), nSessions the number of its sessions used. AgeFirstSession and AgeFirstSurgery are in days.
+        '''
+        sessions = self.sessions.dropna(subset='Animal')
+        animals = sorted(sessions['Animal'].unique())
+        entries, dates = read_mouse_db(animals, sessions['Prefix'])
+        surgeries = read_surgery_dates(animals)
+        session_dates = pandas.to_datetime(sessions['Prefix'].map(dates))
+        rows = []
+        for animal in animals:
+            entry = entries[animal] or {}
+            wh = sessions['Animal'] == animal
+            sex = sessions.loc[wh, 'Sex'].dropna() if 'Sex' in sessions else []
+            rows.append({'Animal': animal, 'Sex': sex.iloc[0] if len(sex) else entry.get('Sex'),
+                         'Strain': entry.get('Strain'), 'DOB': entry.get('DOB'), 'FirstSurgery': surgeries[animal],
+                         'FirstSession': session_dates[wh].min(), 'nSessions': int(wh.sum())})
+        mice = pandas.DataFrame(rows)
+        for key in ('Animal', 'Sex', 'Strain'):
+            mice[key] = mice[key].astype('string')
+        for key in ('DOB', 'FirstSurgery', 'FirstSession'):
+            mice[key] = pandas.to_datetime(mice[key])
+        for key in ('FirstSurgery', 'FirstSession'):
+            mice[f'Age{key}'] = (mice[key] - mice['DOB']).dt.days.astype('Int64')
+        return mice
+
+    def mice_html(self):
+        '''The summary and the table of the animals for the report.'''
+        mice = self.mice
+
+        def counts(key):
+            return ', '.join(f'{n} {value}' for value, n in mice[key].value_counts().items()) or 'not available'
+
+        def age(key):
+            days = mice[key].dropna().astype(float)
+            if not len(days):
+                return 'not available'
+            if len(days) == 1:
+                return f'{days.iloc[0]:.0f} days (n = 1)'
+            return (f'mean ± SD = {days.mean():.4g} ± {days.std():.4g} days '
+                    f'(range {days.min():.0f}–{days.max():.0f}, n = {len(days)})')
+
+        summary = (f'Sex: {counts("Sex")}. Strain: {counts("Strain")}. Age at the first session used in this result: '
+                   f'{age("AgeFirstSession")}. Age at the first surgery: {age("AgeFirstSurgery")}.')
+        table = mice.dropna(axis=1, how='all')
+        for key in table.select_dtypes('datetime').columns:
+            table = table.assign(**{key: table[key].dt.strftime('%Y-%m-%d')})
+        table = table.astype(object).where(table.notna(), '')  # to_html writes missing strings and Int64 as <NA>
+        return f'<p>{html.escape(summary)}</p>' + self.table_html(table)
 
     def register(self, kind, name, files, description, **info):
         entries = self.items[kind]
@@ -312,6 +410,8 @@ class AnalysisResult:
                 'python': sys.version.split()[0],
                 'dataset': self.dataset_info,
                 'n_sessions': len(self.sessions),
+                'n_animals': None if self.mice is None else len(self.mice),
+                'mice_error': self.mice_error,
                 'upload_sessions': self.upload_sessions,
                 'tests': self.tests,
                 'params': self.params,
@@ -390,6 +490,13 @@ class AnalysisResult:
                 out.append(f'<p class="note">Array, shape {tuple(entry["shape"])}, {esc(entry["dtype"])}</p>')
             else:
                 out.append(self.table_html(self.get_data(entry['name']), REPORT_MAX_ROWS))
+
+        if self.mice is not None:
+            out.append(f'<h2>Animals ({len(self.mice)})</h2>')
+            out.append(self.mice_html())
+        elif m.get('mice_error'):  # results saved before the animals were added don't have the key
+            out.append('<h2>Animals</h2>')
+            out.append(f'<p class="warn">The animals could not be read from Baserow. {esc(m["mice_error"])}</p>')
 
         out.append(f'<h2>Sessions ({len(self.sessions)})</h2>')
         if not m['upload_sessions']:

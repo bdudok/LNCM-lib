@@ -123,7 +123,8 @@ class GetSessions:
             params = {f"filter__field_{config['MouseID']['Mouse.ID']}__equal": mtag}
             resp = requests.get(config['mice_url'],
                                 headers={"Authorization": self.auth_string},
-                                params=params
+                                params=params,
+                                timeout=self.timeout,
                                 )
             self.results = pandas.DataFrame(resp.json()['results'])
             if ret_sex:

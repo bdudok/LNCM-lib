@@ -232,3 +232,48 @@ def test_uncommitted_script_waits_for_enter(tmp_path, monkeypatch):
     monkeypatch.delenv(module.CONFIRMED_ENV)
     AnalysisResult(tmp_path, 'Fig1', script=script)
     assert len(prompts) == 1 and 'script.py' in prompts[0]
+
+
+def test_mouse_table_has_the_age_at_the_first_session_used(tmp_path, monkeypatch):
+    import requests
+
+    from Proc2P.Analysis.AnalysisClasses import AnalysisResult as module
+
+    ds = make_ds(tmp_path)
+    ds.set_field('s1', 'Sex', 'F')
+    ds.save_df()
+    dates = {'s1': '2025-04-11', 's2': '2025-04-01', 's3': '2025-05-01'}
+
+    def read_mouse_db(animals, prefixes):
+        assert list(animals) == ['m1', 'm2']
+        return ({'m1': {'Sex': 'M', 'Strain': 'C57BL/6J', 'DOB': '2025-01-01'}, 'm2': None},
+                {p: dates[p] for p in prefixes})
+
+    monkeypatch.setattr(module, 'read_mouse_db', read_mouse_db)
+    res = AnalysisResult(tmp_path, 'Fig1', script=__file__)
+    res.set_sessions(['s1', 's2', 's3'], dataset=ds)
+    res.save()
+    folder = tmp_path / 'Results' / 'Fig1'
+    mice = pandas.read_feather(folder / 'mice.feather').set_index('Animal')
+    assert mice.loc['m1', 'Sex'] == 'F'  # the DataSet value is used, not the one in the db
+    assert mice.loc['m1', 'AgeFirstSession'] == 90 and mice.loc['m1', 'nSessions'] == 2
+    assert pandas.isna(mice.loc['m2', 'AgeFirstSession']) and mice['AgeFirstSurgery'].isna().all()
+    report = (folder / 'Fig1.html').read_text(encoding='utf-8')
+    for text in ('Animals (2)', 'Sex: 1 F', 'Strain: 1 C57BL/6J', '90 days (n = 1)',
+                 'Age at the first surgery: not available', '2025-04-01'):
+        assert text in report, text
+    animals = report[report.index('Animals (2)'):report.index('Sessions (3)')]
+    assert 'NA' not in animals and '00:00' not in animals
+
+    # only the sessions used count; without the db the result is saved with a warning
+    res.set_sessions(['s1', 's3'], dataset=ds)
+    assert res.mice.set_index('Animal').loc['m1', 'AgeFirstSession'] == 100
+
+    def no_connection(animals, prefixes):
+        raise requests.ConnectionError('no route')
+
+    monkeypatch.setattr(module, 'read_mouse_db', no_connection)
+    res.set_sessions(['s1', 's3'], dataset=ds)
+    res.save()
+    assert not (folder / 'mice.feather').exists()
+    assert 'could not be read from Baserow' in (folder / 'Fig1.html').read_text(encoding='utf-8')
