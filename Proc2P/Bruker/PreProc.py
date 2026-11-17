@@ -99,7 +99,7 @@ class PreProc:
         top_scan = {}  # session-level scan settings, used for the frame capture time
         for child in list(root.find('PVStateShard')):
             key = child.attrib['key']
-            if key in ('linesPerFrame', 'scanLinePeriod'):
+            if key in ('linesPerFrame', 'scanLinePeriod', 'framePeriod'):
                 top_scan[key] = float(child.attrib['value'])
             if key in simple_keys:
                 self.md_keys.append(key)
@@ -123,7 +123,8 @@ class PreProc:
             key = child.attrib['key']
             if key in get_keys:
                 sdict[key] = child.attrib['value']
-        self.framerate = 1 / float(sdict['framePeriod'])
+        # Bruker writes framePeriod into a frame only when it differs from the session-level value
+        self.framerate = 1 / float(sdict.get('framePeriod', top_scan['framePeriod']))
         if 'scanLinePeriod' in sdict:
             self.linetime = float(sdict['scanLinePeriod'])  # not always there, not sure why.
         else:
