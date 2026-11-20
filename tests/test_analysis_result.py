@@ -333,3 +333,14 @@ def test_first_surgery_falls_back_to_baserow_and_ages_are_checked(tmp_path, monk
     ds.set_field('s3', 'Date', '2028-01-01', type=pandas.Timestamp)  # the DataSet value is used for the session date
     res.set_sessions(['s3'], dataset=ds)
     assert 'Age at the first session is over 1000 days for: m2.' in module.age_warnings(res.mice)
+
+
+def test_report_tables_cap_long_text():
+    '''A long text cell (e.g. a cell list of the DataSet) is cut in the report; short ones and numbers are kept.'''
+    cells = str(list(range(1000)))
+    df = pandas.DataFrame({'Prefix': ['s1'], 'Cells.R.Incl': pandas.array([cells], dtype='string'), 'n': [3]})
+    out = AnalysisResult.table_html(df)
+    assert cells not in out
+    assert f'{cells[:80]}… ({len(cells)} characters)' in out
+    assert '>s1<' in out and '>3<' in out
+    assert df['Cells.R.Incl'].iloc[0] == cells  # the table itself is not changed

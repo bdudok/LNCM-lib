@@ -20,6 +20,7 @@ from BaserowAPI.config import config as baserow_config
 LIB_ROOT = Path(__file__).resolve().parents[3]
 CONFIRMED_ENV = 'LNCM_UNCOMMITTED_CONFIRMED'  # set for the plot script that save() runs: already confirmed
 REPORT_MAX_ROWS = 50  # rows of a data table shown in the report; the file has all rows
+REPORT_MAX_CHARS = 80  # characters of a text cell shown in the report tables (e.g. the cell lists of the DataSet)
 
 REPORT_STYLE = '''
 body {font-family: Arial, sans-serif; margin: 2em auto; max-width: 1100px; padding: 0 1em; color: #222;}
@@ -474,6 +475,11 @@ class AnalysisResult:
         if max_rows is not None and len(df) > max_rows:
             note = f'<p class="note">First {max_rows} of {len(df)} rows.</p>'
             df = df.head(max_rows)
+        df = df.copy()
+        for key in df.columns:
+            if df[key].dtype == object or isinstance(df[key].dtype, pandas.StringDtype):
+                df[key] = df[key].map(lambda v: f'{v[:REPORT_MAX_CHARS]}… ({len(v)} characters)'
+                                      if isinstance(v, str) and len(v) > REPORT_MAX_CHARS else v)
         return f'<div class="scroll">{df.to_html(index=False, na_rep="", float_format="{:.4g}".format)}</div>{note}'
 
     @staticmethod
