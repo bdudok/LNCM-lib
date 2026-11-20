@@ -30,8 +30,11 @@ class Event(object):
     def __init__(self, ripples, p1, p2):
         self.r = ripples
         self.p = [int(p1), int(p2)]
-        self.power = self.r.get_power(self.p)
         self.incl = True
+
+    @property
+    def power(self):
+        return self.r.get_power(self.p)
 
     def flip(self):
         self.incl = not self.incl
@@ -46,7 +49,6 @@ class UI(object):
 
 
 LEGACY_CHANNEL_FILE = 'legacy_channel.json'
-LEGACY_SUFFIXES = ('.np', '.npy', '.ripples')
 
 
 def ask_legacy_channel_console(prefix, n_channels):
@@ -90,7 +92,7 @@ def ripple_folder(session_path, channel, n_channels, ask=None):
         None: ask_legacy_channel_console
     '''
     root = Path(session_path) / '_ripples'
-    has_legacy = root.is_dir() and any(f.is_file() and f.suffix in LEGACY_SUFFIXES for f in root.iterdir())
+    has_legacy = root.is_dir() and any(f.suffix == '.ripples' for f in root.iterdir())
     if has_legacy:
         marker = root / LEGACY_CHANNEL_FILE
         if marker.exists():
@@ -111,6 +113,10 @@ def ripple_folder(session_path, channel, n_channels, ask=None):
 
 class Ripples(object):
     __name__ = 'Ripples'
+    # filtered traces, computed on first access by these methods
+    LAZY_ATTRS = {'filter': 'gen_filt', 'ftr': 'run_filt', 'envelope': 'run_filt', 'std': 'run_filt',
+                  'theta': 'calc_theta', 'tft': 'calc_theta'}
+
     def __init__(self, procpath, prefix, fs=2000, bands=('theta', 'ripple'), config=None, enum=False, force=False,
                  keep_ripples=False, ephys_channel=1, tag=None, strict_tag=False, load_minimal=False,
                  ask_legacy_channel=None, **kwargs):
@@ -122,14 +128,6 @@ class Ripples(object):
             config = {}
         if type(prefix) is str and prefix.endswith('.ephys'):
             prefix = prefix[:-6]
-        self.attrs = []
-        if 'ripple' in bands:
-            self.attrs.extend(['ftr', 'envelope'])
-        if 'theta' in bands:
-            self.attrs.extend(['theta', 'tft'])
-        if 'sgamma' in bands:
-            self.attrs.extend(['sgamma', 'sgft'])
-        self.load_attrs = ['ftr', 'theta', 'sgamma']
         self.bands = bands
         self.procpath = procpath
         self.prefix = prefix
@@ -145,26 +143,17 @@ class Ripples(object):
             self.read_phys()
             self.path = ripple_folder(Path(procpath) / prefix, ephys_channel, len(self.ephys_all_channels),
                                       ask=ask_legacy_channel)
-            exist = os.path.exists(self.path)
-            if not exist:
-                os.makedirs(self.path)
         else:
-            exist = False
             load_minimal = True
         if not load_minimal:
             need_sort = False
-            if (not exist) or force:
-                self.gen_filt()
-                if 'ripple' in bands:
-                    self.run_filt()
-                if 'theta' in bands:
-                    self.calc_theta()
-                if 'sgamma' in bands:
-                    self.calc_sgamma()
-                self.save()
-            else:
-                self.load()
-            if exist and not force:
+            # filtered traces are not saved, only the event lists (.ripples). They are computed when first used
+            # (LAZY_ATTRS); sgamma is computed here because its attributes are shared with other gamma bands
+            if 'sgamma' in bands:
+                self.calc_sgamma()
+            has_events = self.path.is_dir() and any(f.suffix == '.ripples' for f in self.path.iterdir())
+            # a required tag is loaded (and raises if missing) instead of being created by detection
+            if (has_events or (strict_tag and tag is not None)) and not force:
                 self.load_ripples(tag)
             elif not keep_ripples:
                 self.pick_events()
@@ -178,22 +167,13 @@ class Ripples(object):
                 times = numpy.array([x.p[0] for x in self.events])
                 self.events = [self.events[i] for i in numpy.argsort(times)]
 
-    def save(self):
-        for attr in self.attrs:
-            self.__getattribute__(attr).tofile(self.path / f'{attr}.np')
-
-    def load(self):
-        for attr in self.attrs:
-            fn = self.path / f'{attr}.np'
-            if os.path.exists(fn):
-                self.__setattr__(attr, numpy.fromfile(fn))
-        for attr in self.load_attrs:
-            if attr not in self.attrs:
-                fn = self.path / f'{attr}.np'
-                if os.path.exists(fn):
-                    self.__setattr__(attr, numpy.fromfile(fn))
-        if hasattr(self, 'ftr'):
-            self.std = self.ftr.std()
+    def __getattr__(self, name):
+        # only called for attributes not set yet
+        method = Ripples.LAZY_ATTRS.get(name)
+        if method is None:
+            raise AttributeError(f'Ripples has no attribute {name}')
+        getattr(self, method)()
+        return self.__dict__[name]
 
     def param_defaults(self, config):
         self.lowcut = 130
@@ -384,7 +364,7 @@ class Ripples(object):
             self.calc_powers()
             self.save_ripples()
 
-    def get_HFOs(self, lowcut=80, highcut=500, tr1=7, tr2=5, gap=1000, minl=10, save_envelope=True, use_current=False):
+    def get_HFOs(self, lowcut=80, highcut=500, tr1=7, tr2=5, gap=1000, minl=10, use_current=False):
         '''Detect HFOs and return single event/ cluster onsets'''
         self.require_3_cycles = False  # HFO detection keeps single-transient events
         if not use_current:
@@ -404,9 +384,6 @@ class Ripples(object):
             for t in times:
                 self.events.append(Event(self, t, t + self.ms(minl)))
         self.save_ripples(overwrite=True)
-        if save_envelope and not use_current:
-            self.attrs = ['ftr', 'envelope']
-            self.save()
         return times
 
     def calc_powers(self):
@@ -606,6 +583,7 @@ class Ripples(object):
         self.prep_fig()
         self.tsource = False
         if order == 'power':
+            self.calc_powers()
             order = self.plist
         else:
             order = range(len(self.events))
@@ -702,6 +680,7 @@ class Ripples(object):
             ea = numpy.empty((len(events), 2))
             for i, p in enumerate(events):
                 ea[i, :] = p
+        self.path.mkdir(parents=True, exist_ok=True)
         ea.tofile(self.path / ts)
         lprint(self, f'{ts} saved with {self.count_included()} events. Tr1: {self.tr1}, Tr2:{self.tr2}',
                logger=self.log)
@@ -715,6 +694,7 @@ class Ripples(object):
             ea = numpy.empty((len(events), 2))
             for i, p in enumerate(events):
                 ea[i, :] = p
+        self.path.mkdir(parents=True, exist_ok=True)
         pandas.DataFrame(ea,
                          columns=['RippleStart', 'RippleStop']).to_excel(self.path / f'{self.prefix}_ripple_times.xlsx')
         print(self.prefix, 'ripples exported.')
@@ -740,11 +720,7 @@ class Ripples(object):
         self.ripples_fn = fn
         events = numpy.fromfile(self.path / fn)
         events = events.reshape((int(len(events) / 2), 2))
-        self.events = []
-        if hasattr(self, 'envelope'):
-            for p in events:
-                self.events.append(Event(self, *p))
-            self.calc_powers()
+        self.events = [Event(self, *p) for p in events]
 
     def export_matlab(self):
         '''
@@ -774,6 +750,7 @@ class Ripples(object):
         mat = {'__header__': header, '__version__': version, '__globals__': globals, 'fs': self.fs, 'gn': gn, 'of': gn,
                's': s, 'total_ns': self.n}
 
+        self.path.mkdir(parents=True, exist_ok=True)
         scipy.io.savemat(self.path / f'{self.prefix}_ephysexport.mat', mat)
 
 

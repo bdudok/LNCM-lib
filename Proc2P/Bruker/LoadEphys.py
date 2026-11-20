@@ -1,12 +1,13 @@
 from pathlib import Path
 import os
 
-import matplotlib.pyplot as plt
 import numpy
 class Ephys:
     '''to interface with spike detector (emulate legacy ripples.trace)'''
 
     def __init__(self, procpath, prefix, channel=1):
+        # {attribute name: function}, computed on first access (e.g. the frame power arrays set by map_ripples)
+        self.lazy = {}
         self.path = Path(procpath) / prefix
         epn = self.path / f'{prefix}_ephys.npy'
         self.prefix = prefix
@@ -26,3 +27,11 @@ class Ephys:
                 self.trace = self.edat[channel].astype('float') / 1000
         else:
             self.trace = None
+
+    def __getattr__(self, name):
+        lazy = self.__dict__.get('lazy', {})
+        if name in lazy:
+            value = lazy.pop(name)()
+            setattr(self, name, value)
+            return value
+        raise AttributeError(f'{type(self).__name__} has no attribute {name}')

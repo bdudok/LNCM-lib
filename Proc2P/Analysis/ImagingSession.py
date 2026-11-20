@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import matplotlib.pyplot as plt
+import functools
 import numpy
 import pandas
 from sklearn.metrics import mutual_info_score
@@ -58,6 +59,30 @@ class Pos:
         if numpy.isnan(tdt):
             tdt = 0
         return int(tdt)
+
+
+def frame_means(trace, frames, nframes):
+    '''
+    Mean of an LFP-rate trace in each imaging frame.
+    Frame f spans from the end of frame f-1 (from sample 0 for the first frame) to the first later sample whose frame
+    index is above f. Frames whose end is not reached are 0.
+    :param frames: frame index of each sample (Ephys.frames), nondecreasing
+    '''
+    n = len(frames)
+    f = numpy.arange(nframes)
+    first_after = numpy.searchsorted(frames, f, side='right')
+    # each frame ends at least one sample after the previous one
+    ends = numpy.maximum.accumulate(first_after - f) + f
+    ends = ends[ends < n]
+    starts = numpy.concatenate([[0], ends[:-1]])
+    out = numpy.zeros(nframes)
+    if len(ends) == 0:
+        return out
+    sums = numpy.add.reduceat(trace, numpy.concatenate([starts, ends[-1:]]))[:-1]
+    counts = ends - starts
+    with numpy.errstate(invalid='ignore'):
+        out[:len(ends)] = numpy.where(counts > 0, sums / numpy.maximum(counts, 1), numpy.nan)
+    return out
 
 
 class ImagingSession(object):
@@ -498,36 +523,22 @@ class ImagingSession(object):
                     frs.append(f)
         frs.sort()
         self.ripple_frames = numpy.array(frs)
-        #store power per frame in files (or load if already exists)
+        # mean power per frame, computed when first used
+        for key, band in (('ripple_power', 'ripple'), ('theta_power', 'theta'), ('hf_power', 'HF')):
+            self.ephys.__dict__.pop(key, None)
+            self.ephys.lazy[key] = functools.partial(self.frame_power, self.ripples, band)
 
-        keys = ('ripple_power', 'theta_power', 'hf_power')
-        bands = ('ripple', 'theta', 'HF')
-        power_getter = {'ripple': 'envelope', 'theta': 'theta', 'HF': None}
-        path = self.ripples.path
-        # later extend this to use multiple channels
-        for band, key in zip(bands, keys):
-            cfn = path / f'{key}.npy'
-            if os.path.exists(cfn):
-                setattr(self.ephys, key, numpy.load(cfn))
-            else:
-                lprint(self, f'Saving {band} power file ...')
-                filt = Filter.Filter(self.ephys.trace, fs)
-                frame_power = numpy.zeros(nframes)
-                power_key = power_getter[band]
-                if power_key is not None:
-                    envelope = getattr(self.ripples, power_key)
-                else:
-                    locut, hicut = self.CF.bands[band]
-                    ftr, envelope = filt.run_filt(filt.gen_filt(locut, hicut))
-                t0, f = 0, 0
-                for t1, s in enumerate(self.ephys.frames):
-                    if s > f:
-                        if f < nframes:
-                            frame_power[f] = envelope[t0:t1].mean()
-                            t0 = t1
-                            f += 1
-                setattr(self.ephys, key, frame_power)
-                numpy.save(cfn, frame_power)
+    def frame_power(self, ripples, band):
+        '''mean LFP power in each imaging frame. band: 'ripple', 'theta' (from ripples), or a band in CF.bands'''
+        if band == 'ripple':
+            envelope = ripples.envelope
+        elif band == 'theta':
+            envelope = ripples.theta
+        else:
+            filt = Filter.Filter(self.ephys.trace, self.si['fs'])
+            locut, hicut = self.CF.bands[band]
+            ftr, envelope = filt.run_filt(filt.gen_filt(locut, hicut))
+        return frame_means(envelope, self.ephys.frames, self.ca.frames)
         # lprint(self, f'power available in bands: ' + str(bands))
 
     def rippletrigger(self, param=None, ch=0):

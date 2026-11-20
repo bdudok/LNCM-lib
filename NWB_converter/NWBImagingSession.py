@@ -73,11 +73,11 @@ class NWBImagingSession(ImagingSession):
 
     def write_ripples(self):
         '''
-        Write the stored ripple events. Ripples only loads events together with the filtered LFP,
-        so that is computed first (from lfp_ch, as ImagingSession.map_ripples uses it).
+        Write the stored ripple events to the ripple folder of lfp_ch (as ImagingSession.map_ripples uses it).
         '''
         r = Ripples(self.procpath, self.prefix, fs=self.si['fs'], ephys_channel=self.lfp_ch, force=True,
                     keep_ripples=True)
+        r.path.mkdir(parents=True, exist_ok=True)
         for tag, events in self.stored_ripples.items():
             events.astype('float64').tofile(r.path / f'{tag}.ripples')
         self.ripples_written = True
