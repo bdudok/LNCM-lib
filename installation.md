@@ -8,9 +8,7 @@ The main env, used by the GUIs, analysis scripts and motion correction (suite2p)
    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
    ```
 2. Build the env by running `envs\update_env.bat` (double-click, or from a new cmd/PowerShell window).
-   The location is `uv_env_dir` in `envs/site_config.json` (`N:/envs` in our lab); each user gets a subfolder:
-   - The env goes to `<uv_env_dir>\<username>\lncm`.
-   - uv's Python 3.11 goes to `<uv_env_dir>\<username>\uv\python`. The env needs it, don't delete it.
+   The env goes to `<uv_env_dir>\<username>\lncm`; `uv_env_dir` is set in `envs/site_config.json` (`N:/envs` in our lab).
 3. In PyCharm, add `<uv_env_dir>\<username>\lncm\Scripts\python.exe` as an existing interpreter (type Python, not uv) and select it for the projects.
    - See `envs/pycharm-workspace.md` for how to set up PyCharm projects in a clean way.
    - See `envs/Pycharm console starting script.py` for setting up the console in PyCharm (required for run configs with Python console).
