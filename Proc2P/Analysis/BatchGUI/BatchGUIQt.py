@@ -32,7 +32,8 @@ from Proc2P.Analysis.RoiEditor import SIMAConfig
 from Proc2P.Analysis.PullSignals import PullConfig
 from Proc2P.Bruker.LoadRegistered import Source
 from Proc2P.Analysis.CaTrace import ProcessConfig
-from Proc2P.Analysis.Ripples import Ripples, RippleConfig
+from Proc2P.Analysis.Ripples import Ripples, RippleConfig, legacy_channel_from_config
+from Proc2P.Bruker.PreProc import SessionInfo
 import tifffile
 import cv2
 from LFP.Setup import Setup
@@ -584,9 +585,12 @@ class GUI_main(QtWidgets.QMainWindow):
         cfg = {}
         for key in ('tr1', 'tr2', 'y_scale'):
             cfg[key] = getattr(self.Ripple_config, key)
-        self.ripples = Ripples(self.wdir, self.active_prefix[0], config=cfg,
+        prefix = self.active_prefix[0]
+        fs = SessionInfo(os.path.join(self.wdir, prefix), prefix).load(must_exist=True)['fs']
+        self.ripples = Ripples(self.wdir, prefix, fs=fs, config=cfg,
                                force=self.Ripple_config.overwrite_existing,
-                               ephys_channel=self.Ripple_config.channel, tag=self.Ripple_config.tag)
+                               ephys_channel=self.Ripple_config.channel, tag=self.Ripple_config.tag,
+                               ask_legacy_channel=legacy_channel_from_config(self.Ripple_config))
 
     def display_ripples_callback(self):
         self.load_ripple()

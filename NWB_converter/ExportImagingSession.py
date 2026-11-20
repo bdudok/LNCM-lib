@@ -11,6 +11,7 @@ from Proc2P.Analysis.PullSignals import pull_signals
 from Proc2P.Analysis.CaTrace import CaTrace
 from Proc2P.Analysis.AnalysisClasses.Spatial import Spatial
 from Proc2P.Bruker.LoadEphys import Ephys
+from Proc2P.Analysis.Ripples import ripple_folder
 
 import cv2
 
@@ -216,12 +217,15 @@ class ExportImagingSession(ImagingSession):
 
     def export_ripples(self, tags=None):
         '''
-        Ripple events saved by Ripples (_ripples/<tag>.ripples), as start and stop LFP sample indices.
+        Ripple events of lfp_ch saved by Ripples (<tag>.ripples in ripple_folder), as start and stop LFP sample indices.
         Filtered LFP and power traces are not exported; Ripples recomputes them from the LFP.
         :param tags: list of ripple tags (file names without .ripples). None: all
         :return: dict of {tag: numpy array, shape (n_events, 2), float, start and stop sample}
         '''
-        path = self.path / '_ripples'
+        if not (self.path / '_ripples').exists():
+            return {}
+        n_channels = numpy.load(self.path / f'{self.prefix}_ephys.npy', mmap_mode='r').shape[0] - 1
+        path = ripple_folder(self.path, self.lfp_ch, n_channels)
         if not path.exists():
             return {}
         if tags is None:

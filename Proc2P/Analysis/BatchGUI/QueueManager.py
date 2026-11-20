@@ -12,7 +12,8 @@ from Proc2P.Analysis.RoiEditor import Worker as SIMA_Worker
 from Proc2P.Analysis.PullSignals import Worker as Pull_Worker
 from Proc2P.Analysis.CaTrace import CaTrace
 from Proc2P.Analysis.CaTrace import Worker as Process_Cell_Worker
-from Proc2P.Analysis.Ripples import Ripples
+from Proc2P.Analysis.Ripples import Ripples, RippleConfig, legacy_channel_from_config
+from Proc2P.Bruker.PreProc import SessionInfo
 
 class JobType(Enum):
     TEST = 0
@@ -90,8 +91,10 @@ class RippleWorker(Process):
             cfg={}
             for key in ('tr1', 'tr2', 'y_scale'):
                 cfg[key] = kwargs[key]
-            r = Ripples(wdir, prefix, config=cfg, force=kwargs['overwrite_existing'],
-                                   ephys_channel=kwargs['channel'], tag=kwargs['tag'])
+            fs = SessionInfo(os.path.join(wdir, prefix), prefix).load(must_exist=True)['fs']
+            r = Ripples(wdir, prefix, fs=fs, config=cfg, force=kwargs['overwrite_existing'],
+                        ephys_channel=kwargs['channel'], tag=kwargs['tag'],
+                        ask_legacy_channel=legacy_channel_from_config(RippleConfig(**kwargs)))
             self.res_queue.put((self.__name__ + str(self.n), f'{prefix}: {r.count_included()} events saved.'))
 
 

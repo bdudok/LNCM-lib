@@ -1,4 +1,4 @@
-import numpy, scipy, os, pandas
+import numpy, scipy, os, pandas, json
 from matplotlib import pyplot as plt
 # from LFP.EphysFunctions import butter_bandpass_filter
 from scipy.signal import bessel, hilbert, decimate, sosfiltfilt
@@ -21,6 +21,9 @@ class RippleConfig:
     overwrite_existing: bool = False
     exclude_spikes: bool=False
     channel: int = 1
+    # channel of the ripple files saved in _ripples/ without a channel, if the session has several (0: not set)
+    old_files_channel: int = 0
+    discard_old_files: bool = False
 
 class Event(object):
     def __init__(self, ripples, p1, p2):
@@ -41,10 +44,79 @@ class UI(object):
         self.pressed = event.key
 
 
+LEGACY_CHANNEL_FILE = 'legacy_channel.json'
+LEGACY_SUFFIXES = ('.np', '.npy', '.ripples')
+
+
+def ask_legacy_channel_console(prefix, n_channels):
+    '''Ask which LFP channel the files directly in _ripples/ (saved before per-channel folders) come from.
+    :return: channel number, or None to discard the old files'''
+    question = (f'{prefix}: the ripple files in _ripples/ were saved without the LFP channel, and the session has '
+                f'{n_channels} LFP channels. Enter the channel they were detected on (1-{n_channels}), '
+                f'or d to discard them and detect again: ')
+    while True:
+        try:
+            answer = input(question).strip().lower()
+        except (EOFError, OSError):  # no console: worker process, or pytest capturing stdin
+            raise RuntimeError(f'{prefix}: the LFP channel of the ripple files in _ripples/ is unknown. '
+                               f'Open the session\'s ripples interactively once to set it.')
+        if answer == 'd':
+            return None
+        if answer.isdigit() and 1 <= int(answer) <= n_channels:
+            return int(answer)
+
+
+def legacy_channel_from_config(config):
+    '''ask function for ripple_folder that answers from RippleConfig (old_files_channel, discard_old_files)'''
+    def answer(prefix, n_channels):
+        if config.discard_old_files:
+            return None
+        if 1 <= config.old_files_channel <= n_channels:
+            return config.old_files_channel
+        raise ValueError(f'{prefix}: the ripple files in _ripples/ were saved without the LFP channel, and the '
+                         f'session has {n_channels} LFP channels. Set old_files_channel to the channel they were '
+                         f'detected on, or set discard_old_files to detect again.')
+    return answer
+
+
+def ripple_folder(session_path, channel, n_channels, ask=None):
+    '''
+    Folder of the ripple files of one LFP channel: <session>/_ripples/Ch<channel>.
+    Files saved directly in _ripples/ (before per-channel folders) are used for the channel they were detected on:
+    the only channel if the session has one, otherwise the channel the user picks once (stored in
+    _ripples/legacy_channel.json). If the user discards them, they are ignored and every channel is detected again.
+    :param ask: function(prefix, n_channels) returning the channel of the old files, or None to discard them.
+        None: ask_legacy_channel_console
+    '''
+    root = Path(session_path) / '_ripples'
+    has_legacy = root.is_dir() and any(f.is_file() and f.suffix in LEGACY_SUFFIXES for f in root.iterdir())
+    if has_legacy:
+        marker = root / LEGACY_CHANNEL_FILE
+        if marker.exists():
+            with open(marker, 'r') as f:
+                legacy_channel = json.load(f)['channel']
+        elif n_channels == 1:
+            legacy_channel = 1
+        else:
+            if ask is None:
+                ask = ask_legacy_channel_console
+            legacy_channel = ask(Path(session_path).name, n_channels)
+            with open(marker, 'w') as f:
+                json.dump({'channel': legacy_channel}, f)
+        if legacy_channel == channel:
+            return root
+    return root / f'Ch{channel}'
+
+
 class Ripples(object):
     __name__ = 'Ripples'
     def __init__(self, procpath, prefix, fs=2000, bands=('theta', 'ripple'), config=None, enum=False, force=False,
-                 keep_ripples=False, ephys_channel=1, tag=None, strict_tag=False, load_minimal=False, **kwargs):
+                 keep_ripples=False, ephys_channel=1, tag=None, strict_tag=False, load_minimal=False,
+                 ask_legacy_channel=None, **kwargs):
+        '''
+        :param ask_legacy_channel: function(prefix, n_channels) asking the user which channel the files saved in
+            _ripples/ without a channel come from, or None to discard them (see ripple_folder)
+        '''
         if config is None:
             config = {}
         if type(prefix) is str and prefix.endswith('.ephys'):
@@ -61,7 +133,6 @@ class Ripples(object):
         self.procpath = procpath
         self.prefix = prefix
         self.log = logger()
-        self.log.set_handle(procpath, prefix)
         self.tag = tag
         self.strict_tag = strict_tag
         self.fs = fs
@@ -69,8 +140,10 @@ class Ripples(object):
         self.channels = None
         self.ephys_channel = ephys_channel
         if prefix is not None:
-            self.path = Path(procpath) / prefix / '_ripples'
+            self.log.set_handle(procpath, prefix)
             self.read_phys()
+            self.path = ripple_folder(Path(procpath) / prefix, ephys_channel, len(self.ephys_all_channels),
+                                      ask=ask_legacy_channel)
             exist = os.path.exists(self.path)
             if not exist:
                 os.makedirs(self.path)
