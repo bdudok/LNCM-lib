@@ -128,6 +128,8 @@ class Ripples(object):
             config = {}
         if type(prefix) is str and prefix.endswith('.ephys'):
             prefix = prefix[:-6]
+        if tag == '':
+            tag = None  # empty tag field in BatchGUI: save under the date and time
         self.bands = bands
         self.procpath = procpath
         self.prefix = prefix

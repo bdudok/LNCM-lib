@@ -59,6 +59,12 @@ def test_cycle_criterion(procpath):
     assert len(r.events) == 8
 
 
+def test_empty_tag(procpath):
+    r = Ripples(procpath, PREFIX, fs=FS, ephys_channel=2, tag='')
+    saved = [f.name for f in r.path.glob('*.ripples')]
+    assert len(saved) == 1 and saved[0] != '.ripples'
+
+
 def test_legacy_single_channel(tmp_path):
     root = write_legacy(tmp_path)
     assert ripple_folder(tmp_path, 1, 1, ask=never_ask) == root
