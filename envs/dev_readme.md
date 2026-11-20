@@ -1,7 +1,10 @@
 # Developing LNCM-lib
 
 ## Changing packages
-To change packages, edit `pyproject.toml` and run `uv lock`, then commit both files.
+To change packages, edit `pyproject.toml` and run `uv lock`, then commit both files. Importing LNCM-lib (`envs/env_check.py`) then warns each user whose env was synced from an older `uv.lock` to run `envs\update_env.bat`.
+
+## Python 3.6 version
+The Python 3.6 version of the library is on the `Python36_version` branch.
 
 Qt: PySide6 is the only Qt binding in the env. Don't add another one (e.g. PyQt6 via `suite2p[gui]`): bindings ship Qt DLLs with the same names, and when one binding's DLLs are loaded first, importing the other fails with `DLL load failed ... The specified procedure could not be found`.
 

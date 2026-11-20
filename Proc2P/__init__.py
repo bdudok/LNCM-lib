@@ -18,6 +18,7 @@ pd = pandas
 from scipy import stats
 
 
+import envs  # warns if the env is out of date with uv.lock
 from BaserowAPI.BaserowRequests import GetSessions
 from Proc2P.utils import read_excel, lprint, norm, ewma, completed_list, ts
 from PlotTools.MyColorLib import get_color

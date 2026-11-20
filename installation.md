@@ -1,8 +1,6 @@
 # Install instructions
 
 ## lncm env
-The main env, used by the GUIs, analysis scripts and motion correction (suite2p). It is defined in `pyproject.toml` and pinned in `uv.lock` (both in the repo root). Each user builds their own env.
-
 1. Install uv (once), in PowerShell:
    ```
    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
@@ -16,11 +14,7 @@ The main env, used by the GUIs, analysis scripts and motion correction (suite2p)
    ```
    <uv_env_dir>\<username>\lncm\Scripts\python.exe -m pytest
    ```
-5. After pulling changes to `uv.lock`, run `envs\update_env.bat` again. It does nothing if the env is up to date.
+5. If importing LNCM-lib warns that the env is not up to date, run `envs\update_env.bat` again.
 
 ## Envs for other tools
 SIMA (Python 3.6), DeepLabCut and PyControl need separate envs: see `envs/ENV_SETUP_README.txt`.
-
-# Looking for the python 3.6 version?
-The main branch has been updated (Python 3.11).
-The old version (Python 3.6) is available here: https://github.com/bdudok/LNCM-lib.git

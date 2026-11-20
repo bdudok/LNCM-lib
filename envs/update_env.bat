@@ -30,6 +30,8 @@ uv sync --locked
 if errorlevel 1 (
     echo uv sync failed, see the messages above.
 ) else (
+    rem the env is up to date with this uv.lock (envs\env_check.py compares them on import)
+    copy /y uv.lock "%UV_PROJECT_ENVIRONMENT%\lncm_synced_uv.lock" >nul
     echo Done. PyCharm interpreter: %UV_PROJECT_ENVIRONMENT%\Scripts\python.exe
 )
 pause
