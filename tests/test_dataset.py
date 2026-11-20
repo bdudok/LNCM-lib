@@ -162,3 +162,17 @@ def test_unsupported_value(tmp_path):
     ds = make_ds(tmp_path)
     with pytest.raises(TypeError, match='Pass type=str'):
         ds.set_field('s1', 'Bad', [1, 2])
+
+
+def test_excel_open_warns(tmp_path, monkeypatch):
+    '''An Excel copy that can't be written (open in Excel) warns, and the DataSet is still saved.'''
+    ds = make_ds(tmp_path)
+    ds.set_field('s1', 'Done')
+
+    def locked(*args, **kwargs):
+        raise PermissionError('file is open')
+
+    monkeypatch.setattr(pandas.DataFrame, 'to_excel', locked)
+    with pytest.warns(UserWarning, match='Excel copy'):
+        ds.save_df('excel')
+    assert field(DataSet(tmp_path), 's1', 'Done')

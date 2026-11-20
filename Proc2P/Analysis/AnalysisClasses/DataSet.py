@@ -1,6 +1,7 @@
 import json
 import os
 import ast
+import warnings
 import datetime
 from pathlib import Path
 
@@ -198,7 +199,12 @@ class DataSet:
 
     def save_df(self, ver='current'):
         if ver == 'excel':
-            self.df.to_excel(self.get_fn(ext='.xlsx'))
+            # the Excel file is only a copy for reading; it can't be written while it is open
+            try:
+                self.df.to_excel(self.get_fn(ext='.xlsx'))
+            except PermissionError:
+                warnings.warn(f'Excel copy of the DataSet not saved (no write permission, is it open?): '
+                              f'{self.get_fn(ext=".xlsx")}')
             self.report()
         if ver == 'current':
             assert not self.readonly_flag
