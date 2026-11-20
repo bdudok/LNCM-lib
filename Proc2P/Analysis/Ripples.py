@@ -21,6 +21,7 @@ class RippleConfig:
     overwrite_existing: bool = False
     exclude_spikes: bool=False
     channel: int = 1
+    require_3_cycles: bool = True
     # channel of the ripple files saved in _ripples/ without a channel, if the session has several (0: not set)
     old_files_channel: int = 0
     discard_old_files: bool = False
@@ -206,6 +207,9 @@ class Ripples(object):
         self.window = self.ms(1)
         self.width_lotr = self.ms(50)
         self.y_scale = 1
+        # events need this many cycles of ripple-band phase between the tr2 crossings
+        self.require_3_cycles = True
+        self.min_cycles = 3
         for key, value in config.items():
             setattr(self, key, value)
 
@@ -237,11 +241,21 @@ class Ripples(object):
             htr = hilbert(self.ftr)
             self.envelope = numpy.abs(htr)
             self.std = self.ftr.std()
+            self.phase = None
         else:
             ftr = sosfiltfilt(filter, trace)
             htr = hilbert(ftr)
             envelope = numpy.abs(htr)
             return ftr, envelope
+
+    def count_cycles(self, p1, p2):
+        '''number of cycles of the ripple-band phase (Hilbert) from p1 to p2'''
+        if getattr(self, 'phase', None) is None:
+            self.phase = numpy.unwrap(numpy.angle(hilbert(self.ftr)))
+        return (self.phase[p2] - self.phase[p1]) / (2 * numpy.pi)
+
+    def has_cycles(self, p1, p2):
+        return (not self.require_3_cycles) or self.count_cycles(p1, p2) >= self.min_cycles
 
     def get_filt_trace(self, cutoffs):
         nyq = 0.5 * self.fs
@@ -323,7 +337,7 @@ class Ripples(object):
             else:
                 passed_spike_test = True
             # filter if minlength is met
-            if passed_spike_test and p2 - p1 > self.minl:
+            if passed_spike_test and p2 - p1 > self.minl and self.has_cycles(p1, p2):
                 self.events.append(Event(self, p1, p2))
                 return p1, p2
 
@@ -360,7 +374,7 @@ class Ripples(object):
             for i in range(p1, p2):
                 if self.envelope[i] > tr1:
                     # filter if minlength is met
-                    if p2 - p1 > self.minl:
+                    if p2 - p1 > self.minl and self.has_cycles(p1, p2):
                         self.events.append(Event(self, p1, p2))
                     break
             p1 = p2 + self.window
@@ -372,6 +386,7 @@ class Ripples(object):
 
     def get_HFOs(self, lowcut=80, highcut=500, tr1=7, tr2=5, gap=1000, minl=10, save_envelope=True, use_current=False):
         '''Detect HFOs and return single event/ cluster onsets'''
+        self.require_3_cycles = False  # HFO detection keeps single-transient events
         if not use_current:
             self.lowcut = lowcut
             self.highcut = highcut

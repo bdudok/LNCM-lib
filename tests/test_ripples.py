@@ -46,6 +46,19 @@ def test_channels_kept_apart(procpath):
     assert numpy.array_equal(Ripples(procpath, PREFIX, fs=FS, ephys_channel=2).ftr, r2.ftr)
 
 
+def test_cycle_criterion(procpath):
+    r = Ripples(procpath, PREFIX, fs=FS, ephys_channel=2, force=True)
+    assert len(r.events) == 8
+    # 50 ms bursts of 160 Hz, the tr2 crossings are a bit wider
+    assert all(8 <= r.count_cycles(*e.p) <= 14 for e in r.events)
+    r.min_cycles = 100
+    r.pick_events(skip_save=True)
+    assert len(r.events) == 0
+    r.require_3_cycles = False
+    r.pick_events(skip_save=True)
+    assert len(r.events) == 8
+
+
 def test_legacy_single_channel(tmp_path):
     root = write_legacy(tmp_path)
     assert ripple_folder(tmp_path, 1, 1, ask=never_ask) == root

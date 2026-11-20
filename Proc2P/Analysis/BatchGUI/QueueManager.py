@@ -89,7 +89,7 @@ class RippleWorker(Process):
         for data in iter(self.queue.get, None):
             wdir, prefix, kwargs = data
             cfg={}
-            for key in ('tr1', 'tr2', 'y_scale'):
+            for key in ('tr1', 'tr2', 'y_scale', 'require_3_cycles'):
                 cfg[key] = kwargs[key]
             fs = SessionInfo(os.path.join(wdir, prefix), prefix).load(must_exist=True)['fs']
             r = Ripples(wdir, prefix, fs=fs, config=cfg, force=kwargs['overwrite_existing'],

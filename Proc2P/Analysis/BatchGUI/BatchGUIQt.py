@@ -583,7 +583,7 @@ class GUI_main(QtWidgets.QMainWindow):
             return 0
         self.active_ripple_setting = json.dumps(asdict(self.Ripple_config))
         cfg = {}
-        for key in ('tr1', 'tr2', 'y_scale'):
+        for key in ('tr1', 'tr2', 'y_scale', 'require_3_cycles'):
             cfg[key] = getattr(self.Ripple_config, key)
         prefix = self.active_prefix[0]
         fs = SessionInfo(os.path.join(self.wdir, prefix), prefix).load(must_exist=True)['fs']
