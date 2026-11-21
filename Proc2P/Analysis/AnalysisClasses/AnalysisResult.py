@@ -1,11 +1,14 @@
 import base64
 import hashlib
 import html
+import inspect
 import json
+import marshal
 import os
 import shutil
 import subprocess
 import sys
+import types
 from datetime import datetime
 from pathlib import Path
 
@@ -56,6 +59,108 @@ def git_state(path):
                 'dirty': bool(git('status', '--porcelain', *status_args).strip()), 'root': root}
     except (OSError, subprocess.CalledProcessError):
         return None
+
+
+def sha256(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def plain_value(value):
+    '''A json value that stands for value in a fingerprint (arrays and tables by their hash); TypeError if value is
+    not data (e.g. an object, a module or a function).'''
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, numpy.generic):
+        return value.item()
+    if isinstance(value, os.PathLike):
+        return os.fspath(value)
+    if isinstance(value, (list, tuple)):
+        return [plain_value(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): plain_value(v) for k, v in value.items()}
+    if isinstance(value, numpy.ndarray):
+        data = str(value.tolist()).encode() if value.dtype == object else numpy.ascontiguousarray(value).tobytes()
+        return {'ndarray': sha256(data), 'shape': list(value.shape), 'dtype': str(value.dtype)}
+    if isinstance(value, (pandas.DataFrame, pandas.Series)):
+        return {'pandas': sha256(pandas.util.hash_pandas_object(value).values.tobytes())}
+    raise TypeError(f'not a data value: {type(value).__name__}')
+
+
+def source_hash(obj, codes):
+    '''hash of the source of a function or class; of its compiled code if the source can't be read (e.g. defined in
+    the console), which also changes when its lines move'''
+    try:
+        return sha256(inspect.getsource(obj).encode())
+    except (OSError, TypeError):
+        return 'code ' + sha256(b''.join(marshal.dumps(c) for c in codes))
+
+
+def code_names(code):
+    '''names that a code object and the code objects inside it (comprehensions, inner functions) look up'''
+    names = set(code.co_names)
+    for const in code.co_consts:
+        if isinstance(const, types.CodeType):
+            names |= code_names(const)
+    return names
+
+
+def code_fingerprint(func):
+    '''
+    What the result of func depends on in its script:
+        sources: hash of the source of func and of the functions and classes of its module that it uses, recursively
+        values: the data values (numbers, strings, paths, lists, dicts, arrays, tables) of the globals they use
+        fingerprints: fingerprint() of the objects they use that have one (e.g. a DataSet)
+        library: names of modules, and functions and classes from other modules (e.g. LNCM-lib): not tracked
+        untracked: other objects they use, which are not tracked
+    '''
+    module = func.__module__
+    fp = {'sources': {}, 'values': {}, 'fingerprints': {}, 'library': set(), 'untracked': set()}
+    todo = [func]
+    while todo:
+        f = todo.pop()
+        if f.__qualname__ in fp['sources']:
+            continue
+        if inspect.isclass(f):
+            codes = [m.__code__ for m in vars(f).values() if inspect.isfunction(m)]
+            scope, module_globals = {}, vars(sys.modules[module])
+        else:
+            codes = [f.__code__]
+            scope = {name: cell.cell_contents for name, cell in zip(f.__code__.co_freevars, f.__closure__ or ())}
+            module_globals = f.__globals__
+        fp['sources'][f.__qualname__] = source_hash(f, codes)
+        names = set().union(*(code_names(c) for c in codes)) | set(scope)
+        for name in sorted(names):
+            if name in scope:
+                value = scope[name]
+            elif name in module_globals:
+                value = module_globals[name]
+            else:
+                continue  # a builtin, or an attribute name
+            if (inspect.isfunction(value) or inspect.isclass(value)) and value.__module__ == module:
+                todo.append(value)
+            elif inspect.ismodule(value) or inspect.isroutine(value) or inspect.isclass(value):
+                fp['library'].add(name)
+            elif callable(getattr(value, 'fingerprint', None)):
+                fp['fingerprints'][name] = value.fingerprint()
+            else:
+                try:
+                    fp['values'][name] = plain_value(value)
+                except TypeError:
+                    fp['untracked'].add(name)
+    fp['library'] = sorted(fp['library'])
+    fp['untracked'] = sorted(fp['untracked'])
+    return fp
+
+
+def fingerprint_changes(old, new):
+    '''names of the sources, values and fingerprints that differ between two fingerprints'''
+    changes = []
+    for section in ('sources', 'values', 'fingerprints'):
+        a, b = old.get(section, {}), new.get(section, {})
+        for name in sorted(set(a) | set(b)):
+            if json.dumps(a.get(name), sort_keys=True) != json.dumps(b.get(name), sort_keys=True):
+                changes.append(f'{section[:-1]} {name}')
+    return changes
 
 
 # column of the mouse table: field in Baserow
@@ -120,6 +225,13 @@ class AnalysisResult:
     Items are written when added; save() writes the manifest and the report, and removes items of earlier runs.
     If the script, the plot script or LNCM-lib has uncommitted changes, creating the result waits for enter.
 
+    Data that takes long to compute (e.g. opening the sessions) can be cached, so that changing the statistics or
+    figures after it does not compute it again (see cached_data):
+        def compute_responses():  # the session loop; uses ds and the settings at the top of the script
+            ...
+            return responses
+        responses = res.cached_data('responses', compute_responses)
+
     The figures can be made by a separate plot script, so that a plot can be changed without running the analysis
     again. The analysis script names it (plot_script='..._plot.py') and adds no figures; its save() runs the plot
     script. The plot script uses only what is stored in the result:
@@ -166,6 +278,7 @@ class AnalysisResult:
         self.mice_error = None
         self.upload_sessions = True
         self.dataset_info = None
+        self.cache_records = {}
         self.folder.mkdir(parents=True, exist_ok=True)
         self.confirm_uncommitted()
 
@@ -192,6 +305,7 @@ class AnalysisResult:
             res.mice = pandas.read_feather(res.get_fn('mice'))
         res.upload_sessions = m['upload_sessions']
         res.dataset_info = m['dataset']
+        res.cache_records = m.get('cache', {})
         return res
 
     def confirm_uncommitted(self):
@@ -238,7 +352,8 @@ class AnalysisResult:
                 raise ValueError(f'Sessions not in the DataSet: {", ".join(missing)}')
             df = dataset.df.loc[dataset.df['Prefix'].isin(prefixes)]
             self.sessions = df.sort_values('Prefix').reset_index(drop=True)
-            self.dataset_info = {'project_folder': str(dataset.project_folder), 'version': int(dataset.ver)}
+            self.dataset_info = {'project_folder': str(dataset.project_folder), 'version': int(dataset.ver),
+                                 'fingerprint': dataset.fingerprint()}
         self.sessions.to_feather(self.get_fn('sessions'))
         self.mice, self.mice_error = None, None
         self.get_fn('mice').unlink(missing_ok=True)
@@ -355,6 +470,76 @@ class AnalysisResult:
         else:
             raise TypeError(f'data should be a DataFrame or a numpy array, got {type(data).__name__}')
 
+    def cached_data(self, name, compute, descriptions=None, recompute=False):
+        '''
+        Data that takes long to compute (e.g. from opening the sessions), computed only when what it depends on
+        changed, so that the statistics and figures after it can be changed and rerun without computing it again.
+        :param name: name of the cache record
+        :param compute: function without arguments that returns a DataFrame or numpy array, or a dict of them. Its
+            result depends on its source, the functions and classes of the script it uses, the data values of the
+            globals they use, and the fingerprint() of objects they use (a DataSet: construct it outside compute).
+            Modules and LNCM-lib code are not tracked.
+        :param descriptions: description of the data item (single result) or {item name: description} (dict result)
+        :param recompute: compute even if the saved data matches, e.g. after a change in LNCM-lib
+        :return: what compute returned; the items are added as data items (a single result is named name)
+        The fingerprint and the code version that computed the data are saved in cache/<name>.json, and in the
+        manifest. The data is computed again if the record or a data file is missing, or the fingerprint differs.
+        '''
+        fp = json.loads(json.dumps(code_fingerprint(compute)))
+        record_fn = self.folder / 'cache' / f'{name}.json'
+        old = json.loads(record_fn.read_text(encoding='utf-8')) if record_fn.exists() else None
+        if old is None:
+            reasons = ['no saved data']
+        else:
+            reasons = fingerprint_changes(old['fingerprint'], fp)
+            missing = [item for item, fn in old['items'].items() if not (self.folder / 'data' / fn).exists()]
+            reasons += [f'missing file of {item}' for item in missing]
+            if recompute:
+                reasons.append('recompute=True')
+        if not reasons:
+            single = not old['dict']
+            result = {}
+            for item, fn in old['items'].items():
+                fn = self.folder / 'data' / fn
+                result[item] = numpy.load(fn, allow_pickle=False) if fn.suffix == '.npy' else pandas.read_feather(fn)
+                self.add_data(item, result[item], old['descriptions'].get(item))
+            lib_now = self.library_record().get('commit')
+            script = old['script'] or {}
+            print(f'AnalysisResult {self.identifier}: {name} loaded, computed {old["computed"]} with script commit '
+                  f'{script.get("commit", "unknown")[:10]}{" (uncommitted changes)" if script.get("dirty") else ""}')
+            if old['library'].get('commit') != lib_now:
+                print(f'    LNCM-lib changed since then ({old["library"].get("commit", "unknown")[:10]} -> '
+                      f'{(lib_now or "unknown")[:10]}): use recompute=True if the change affects {name}')
+            elif old['library'].get('dirty'):
+                print(f'    LNCM-lib had uncommitted changes when {name} was computed: use recompute=True if they '
+                      f'have changed since')
+            if fp['untracked']:
+                print(f'    not tracked: {", ".join(fp["untracked"])}')
+            self.cache_records[name] = {k: v for k, v in old.items() if k != 'fingerprint'}
+            return result[name] if single else result
+
+        print(f'AnalysisResult {self.identifier}: computing {name} ({"; ".join(reasons)})')
+        value = compute()
+        is_dict = isinstance(value, dict)
+        result = value if is_dict else {name: value}
+        if not isinstance(descriptions, dict):
+            descriptions = {name: descriptions}
+        files = {}
+        for item, data in result.items():
+            self.add_data(item, data, descriptions.get(item))
+            files[item] = next(e['files'][0] for e in self.items['data'] if e['name'] == item)
+        script = git_state(self.script) if self.script is not None else None
+        record = {'computed': datetime.now().isoformat(timespec='seconds'), 'dict': is_dict, 'items': files,
+                  'descriptions': {k: v for k, v in descriptions.items() if k in files},
+                  'script': None if script is None else {k: script[k] for k in ('repo', 'commit', 'dirty')},
+                  'library': self.library_record(), 'fingerprint': fp}
+        record_fn.parent.mkdir(exist_ok=True)
+        record_fn.write_text(json.dumps(record, indent=2, default=str), encoding='utf-8')
+        if fp['untracked']:
+            print(f'    not tracked: {", ".join(fp["untracked"])}')
+        self.cache_records[name] = {k: v for k, v in record.items() if k != 'fingerprint'}
+        return value
+
     def get_data(self, name):
         '''Read a data item of the result: a DataFrame or a numpy array, as it was added.'''
         entries = [e for e in self.items['data'] if e['name'] == name]
@@ -448,6 +633,7 @@ class AnalysisResult:
                 'library': self.library_record(),
                 'python': sys.version.split()[0],
                 'dataset': self.dataset_info,
+                'cache': self.cache_records,
                 'n_sessions': len(self.sessions),
                 'n_animals': None if self.mice is None else len(self.mice),
                 'mice_error': self.mice_error,
@@ -569,6 +755,12 @@ class AnalysisResult:
                 rows.append((f'{label} commit', f'{esc(record["repo"])} {esc(record["commit"])}{state}'))
             else:
                 rows.append((f'{label} commit', '<span class="warn">not in a git repository</span>'))
+        for name, record in m.get('cache', {}).items():
+            script, library = record.get('script') or {}, record.get('library') or {}
+            dirty = ' <span class="warn">with uncommitted changes</span>' if script.get('dirty') else ''
+            rows.append((f'Cached data: {esc(name)}',
+                         f'computed {esc(record["computed"])} with script commit {esc(script.get("commit", "unknown"))}'
+                         f'{dirty}, library commit {esc(library.get("commit", "unknown"))}'))
         if m['steps']:
             rows.append(('Steps run before', '<br>'.join(esc(str(s)) for s in m['steps'])))
         if m['processing_steps']:

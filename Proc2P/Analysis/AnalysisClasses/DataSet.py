@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import ast
@@ -433,3 +434,12 @@ class DataSet:
     def is_true(series):
         # missing values count as not True
         return series.eq(True).fillna(False).astype(bool)
+
+    def fingerprint(self):
+        '''
+        Hash of the table as it is now: column names, row order and values. Changes whenever the contents change,
+        also when the DataSet is saved again under the same version.
+        '''
+        h = hashlib.sha256(json.dumps([str(c) for c in self.df.columns]).encode())
+        h.update(pandas.util.hash_pandas_object(self.df, index=False).values.tobytes())
+        return h.hexdigest()
