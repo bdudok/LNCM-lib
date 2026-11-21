@@ -9,6 +9,7 @@ import pandas
 import tifffile
 from pynwb import NWBHDF5IO
 
+from envs.site_config import CONFIG
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.Analysis.Ripples import Ripples
 
@@ -32,6 +33,16 @@ no eye or face traces yet.
 '''
 
 
+def default_temp_root():
+    '''nwb_scratch of the site config; None (the system's temp folder) if it is not an absolute path on this system,
+    e.g. a Windows path in a Linux container'''
+    root = Path(CONFIG.nwb_scratch)
+    if not root.is_absolute():
+        return None
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
 class NWBImagingSession(ImagingSession):
     __name__ = 'NWBImagingSession'
 
@@ -41,12 +52,15 @@ class NWBImagingSession(ImagingSession):
         :param procpath: folder of the NWB file
         :param prefix: session prefix
         :param nwb_filename: name of the NWB file in procpath. {prefix} is replaced with the session prefix
-        :param temp_root: folder for the temporary processed folder. None: the system's temp folder
+        :param temp_root: folder for the temporary processed folder. None: nwb_scratch of the site config
+            (see default_temp_root)
         Other arguments are passed to ImagingSession.
         '''
         self.nwb_path = Path(procpath) / nwb_filename.format(prefix=prefix)
         if not self.nwb_path.exists():
             raise FileNotFoundError(f'NWB file not found: {self.nwb_path}')
+        if temp_root is None:
+            temp_root = default_temp_root()
         self.temp_folder = Path(tempfile.mkdtemp(prefix='NWBImagingSession_', dir=temp_root))
         self._cleanup = weakref.finalize(self, shutil.rmtree, self.temp_folder, ignore_errors=True)
         self.stored_ripples = {}

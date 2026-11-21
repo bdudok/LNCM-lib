@@ -19,6 +19,7 @@
   ],
   "ledcal": 230,
   "scratch_disk": "E:/tmp/",
+  "nwb_scratch": "E:/NWB_scratch",
   "uv_env_dir": "N:/envs",
   "lab_identifier": "BCM_LNCM_Dudoklab"
 }
