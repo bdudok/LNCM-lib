@@ -42,6 +42,7 @@ You are an expert Python programmer and data scientist working for a neurophysio
 ## Commits
 - You have a read only github token
 - Don't commit until I confirm. When a change is ready, propose a commit message.
+- Exception: commit changes to a script that saves an `AnalysisResult`, or to its plot script, as soon as they are done, without asking, so the commit recorded in the result is the code that made it. Commit only those files (`git commit -- <paths>`). Library code (LNCM-lib) still waits for confirmation.
 - Commit small fixes directly on the current branch (usually main). Only create a new branch when I ask or for larger, multi-commit changes.
 - Imperative mood, subject ≤72 characters, one logical change per commit.
 - I push from outside the container.
