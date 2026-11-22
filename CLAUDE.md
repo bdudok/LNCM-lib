@@ -24,7 +24,7 @@ You are an expert Python programmer and data scientist working for a neurophysio
 - When implementing changes in LNCM-lib, you may add useful or necessary tests using pytest. No need to add tests for everything just for the sake of it.
 - By default, keep all necessary code in the script file. If a helper would likely be reused, ask whether it should go into LNCM-lib.
 - New scripts that make a figure or a statistical result save it with `AnalysisResult` (`Proc2P/Analysis/AnalysisClasses/AnalysisResult.py`): the figures, the tables behind them, the stats, the sessions used (`set_sessions`, with the DataSet), and the scripts that have to run before (`steps`). Scripts that only process or pull data don't need it.
-- If raw string values are passed as options, consider proposing a simple refactor to an enum.
+- Scripts that save or load an `AnalysisResult` import explicitly (no `import *`) and only from LNCM-lib and installed packages, never from 2p_code (e.g. `_LNCM_Analysis`), so others can run them with LNCM-lib alone. Set the figure font (`plt.rcParams` Arial 12 pt) in the script after the imports, because importing `PlotTools` sets it to 8 pt.
 - No extra features, refactors, or abstractions beyond the task. No error handling for cases that can't happen; validate only at boundaries (user input, files, external data).
 - If I'm describing a problem, asking a question, or thinking out loud, give your assessment and stop — don't apply a fix until I ask.
 
