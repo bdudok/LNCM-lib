@@ -14,7 +14,9 @@ from Proc2P.Bruker import MotionCorrect
 '''
 Template for pre-processing and motion correction.
 Specify the search criteria and settings below, then run using the suite2p interpreter.
-Confirm the list of sessions by hitting Enter after it's displayed. 
+Confirm the list of sessions by hitting Enter after it's displayed.
+The sessions are queued on the job queue (dashboard: http://SVR-LNCM-01:8766). The script waits and prints each result;
+if you stop it, the sessions are still processed.
 '''
 
 '''
