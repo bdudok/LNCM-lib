@@ -20,7 +20,7 @@ from urllib.parse import urlparse, parse_qs
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 from JobQueue.common import (JOB_TYPES, RUNNER_LOST_S, ASSIGN_TIMEOUT_S, api_port, dashboard_port,
-                             manager_data_dir, display_name)
+                             manager_data_dir, display_name, resolve)
 
 ACTIVE = ('assigned', 'running')
 FINISHED = ('done', 'failed')
@@ -72,6 +72,7 @@ class Manager:
         self.db.executescript(SCHEMA)
         self.lock = threading.Lock()
         self.runners = {}  # runner_id: dict(user, lib_root, pid, last_seen, workers)
+        self.hook_threads = []  # running on_done hooks
         self.started = time.time()
 
     # --- identity
@@ -154,10 +155,12 @@ class Manager:
                 self.db.execute("UPDATE jobs SET status='running', started=? WHERE id=? AND runner_id=?",
                                 (now, job_id, rid))
             for f in req.get('finished', []):
-                self.db.execute('UPDATE jobs SET status=?, finished=?, result=?, error=?, worker=? '
-                                'WHERE id=? AND runner_id=?',
-                                ('done' if f['ok'] else 'failed', now, f.get('result'), f.get('error'),
-                                 f.get('worker'), f['job_id'], rid))
+                cur = self.db.execute('UPDATE jobs SET status=?, finished=?, result=?, error=?, worker=? '
+                                      'WHERE id=? AND runner_id=?',
+                                      ('done' if f['ok'] else 'failed', now, f.get('result'), f.get('error'),
+                                       f.get('worker'), f['job_id'], rid))
+                if f['ok'] and cur.rowcount:
+                    self._start_hook(f['job_id'])
             self._expire(now)
             self._schedule(now)
             rows = self.db.execute("SELECT id, job_type, payload FROM jobs WHERE runner_id=? AND status='assigned'",
@@ -167,6 +170,28 @@ class Manager:
             return {'assign': [{'job_id': r['id'], 'job_type': r['job_type'], 'payload': json.loads(r['payload'])}
                                for r in rows],
                     'pending': pending}
+
+    def _start_hook(self, job_id):
+        '''Run the job type's on_done in a thread, so a slow Baserow doesn't hold up the runners.'''
+        row = self.db.execute('SELECT job_type, payload FROM jobs WHERE id=?', (job_id,)).fetchone()
+        spec = JOB_TYPES.get(row['job_type'])
+        if spec is None or spec.on_done is None:
+            return
+        t = threading.Thread(target=self._run_hook, args=(job_id, spec.on_done, json.loads(row['payload'])),
+                             daemon=True)
+        self.hook_threads = [h for h in self.hook_threads if h.is_alive()] + [t]
+        t.start()
+
+    def _run_hook(self, job_id, hook, payload):
+        try:
+            note = resolve(hook)(payload)
+        except Exception as e:
+            traceback.print_exc()
+            note = f'{hook.split(":")[-1]} failed: {e!r}'
+        if note:
+            with self.lock:
+                self.db.execute("UPDATE jobs SET result=COALESCE(result || '. ', '') || ? WHERE id=?",
+                                (note, job_id))
 
     def _live_runner(self, user, lib_root):
         now = time.time()

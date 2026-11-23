@@ -162,3 +162,39 @@ def test_video_job_handlers_write_error_file(tmp_path, monkeypatch):
     assert 'cannot read' in RecoveryMotion.error_fn(video).read_text()
     assert not RecoveryMotion.lock_fn(video).exists()
 
+
+
+def test_on_done_hook_adds_its_message_to_the_result(tmp_path, monkeypatch):
+    from JobQueue import manager as manager_module
+    calls = []
+    monkeypatch.setitem(manager_module.JOB_TYPES, 'TEST',
+                        common.JobTypeSpec('JobQueue.common:echo_job', 3, on_done='JobQueue.hooks:motion_corrected'))
+    monkeypatch.setattr('JobQueue.hooks.motion_corrected', lambda data: calls.append(data) or 'Task set')
+    m = Manager(tmp_path / 'jobs.sqlite')
+    ids = [m.submit(job('ann', i))['job_id'] for i in (1, 2)]
+    sync(m, 'ann')  # assigns both
+    sync(m, 'ann', started=ids, finished=[{'job_id': ids[0], 'ok': True, 'result': 'ann1', 'worker': 'w'},
+                                          {'job_id': ids[1], 'ok': False, 'error': 'tb', 'worker': 'w'}])
+    for t in m.hook_threads:
+        t.join()
+    assert calls == [['ann1']]  # only for the job that finished without error
+    jobs = {j['job_id']: j for j in m.jobs({'user': 'ann', 'token': 'ann-token', 'job_ids': ids})['jobs']}
+    assert jobs[ids[0]]['result'] == 'ann1. Task set'
+
+
+def test_set_task_changes_only_a_task_in_the_expected_state(monkeypatch):
+    from types import SimpleNamespace
+    from BaserowAPI import BaserowRequests
+    monkeypatch.setitem(BaserowRequests.config, 'task_token', 'write')
+    patched = []
+    row = {'Image.ID': 'm_001-000', 'Task': {'value': 'MotionCorr'}}
+    fake = SimpleNamespace(
+        get=lambda url, **kw: SimpleNamespace(json=lambda: row, raise_for_status=lambda: None),
+        patch=lambda url, **kw: patched.append((url, kw['json'], kw['headers']['Authorization']))
+        or SimpleNamespace(raise_for_status=lambda: None))
+    monkeypatch.setattr(BaserowRequests, 'requests', fake)
+    assert BaserowRequests.SetTask().advance(7, 'MotionCorr', 'Segment') == 'Baserow Task of m_001-000 set to Segment'
+    assert patched == [(patched[0][0], {'Task': 'Segment'}, 'Token write')] and '/490/7/?' in patched[0][0]
+    row['Task'] = {'value': 'Done'}
+    assert 'not changed' in BaserowRequests.SetTask().advance(7, 'MotionCorr', 'Segment')
+    assert len(patched) == 1

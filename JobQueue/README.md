@@ -31,11 +31,15 @@ Settings are in `envs/site_config.json` (`job_queue`: ports, `data_dir`). Names 
    Register-ScheduledTask -TaskName "LNCM motion energy watcher" -Action $action -Trigger $trigger -Settings $settings -User $cred.UserName -Password $cred.GetNetworkCredential().Password -RunLevel Limited
    Start-ScheduledTask -TaskName "LNCM motion energy watcher"
    ```
-4. Allow the dashboard port on the lab network (admin PowerShell):
+4. Give the manager the Baserow token that sets Task from MotionCorr to Segment after motion correction:
+   1. In Baserow, create a database token with only *Update* permission, on the sessions table.
+   2. In a terminal of the manager's account, run `setx BASEROW_TASK_TOKEN "<token>"`.
+   3. Restart the manager task. Without the token, MotionCorrect jobs still run, and their result on the dashboard says the Task was not set.
+5. Allow the dashboard port on the lab network (admin PowerShell):
    ```powershell
    New-NetFirewallRule -DisplayName "LNCM job queue dashboard" -Direction Inbound -Protocol TCP -LocalPort 8766 -Action Allow
    ```
-5. Open `http://SVR-LNCM-01:8766` from another lab computer.
+6. Open `http://SVR-LNCM-01:8766` from another lab computer.
 
 After pulling changes to `JobQueue` or `envs/site_config.json`, or editing `envs/user_names.json`, restart the manager, and after changes to `Video/MotionWatcher.py` the watcher: `Stop-ScheduledTask` then `Start-ScheduledTask` with the task name.
 
@@ -53,7 +57,8 @@ Job data may contain str, numbers, bool, None, lists, tuples, dicts with str key
 ## Add a job type
 1. Write a function (in `handlers.py`, or in its own module like `Video.MotionEnergy.run_job`) that takes the job data and returns a result message. Import the heavy modules inside the function.
 2. Add it to `JOB_TYPES` in `common.py`, with `max_n`, the number of jobs of this type that can run at once for all users together.
-3. Restart the manager. Until then it refuses the new type.
+3. To run something in the manager's account after a job succeeds (e.g. a Baserow update), write a function in `hooks.py` and set it as `on_done`. It must not take long or import heavy modules.
+4. Restart the manager. Until then it refuses the new type.
 
 ## Token errors
 Each user's first request registers the token in `%USERPROFILE%\.lncm_jobqueue\token`. If that file is deleted, the manager refuses the user's requests. To reset, stop the manager and delete the user's row from the `users` table of `jobs.sqlite`.

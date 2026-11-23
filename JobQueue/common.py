@@ -21,6 +21,7 @@ from envs.site_config import CONFIG
 class JobTypeSpec:
     handler: str  # 'module:function'; the function takes the decoded job data and returns a result string
     max_n: int  # max number of jobs of this type running at the same time, for all users together
+    on_done: str | None = None  # 'module:function' the manager runs after a job finished without error (hooks.py)
 
 
 # Clients can only submit these types. To add one, write a handler function and add it here.
@@ -34,7 +35,7 @@ JOB_TYPES = {
     'Ripples': JobTypeSpec('JobQueue.handlers:ripples', 3),
     'MotionEnergy': JobTypeSpec('Video.MotionEnergy:run_job', 4),
     'RecoveryMotion': JobTypeSpec('Video.RecoveryMotion:run_job', 1),
-    'MotionCorrect': JobTypeSpec('Proc2P.Bruker.MotionCorrect:run_job', 3),
+    'MotionCorrect': JobTypeSpec('Proc2P.Bruker.MotionCorrect:run_job', 3, on_done='JobQueue.hooks:motion_corrected'),
 }
 
 RUNNER_SYNC_S = 1.0  # runners report to the manager this often
