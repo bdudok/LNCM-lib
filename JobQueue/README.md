@@ -13,7 +13,7 @@ Settings are in `envs/site_config.json` (`job_queue`: ports, `data_dir`). Names 
 
 ## One-time setup on the server
 1. Create the `data_dir` folder (`N:\jobqueue`) and remove write access for other users from it.
-2. Register the manager as a task that runs whether you're logged on or not. In PowerShell, enter your password when asked:
+2. Register the manager as a task that runs whether you're logged on or not. In an admin PowerShell, enter your own account's password when asked:
    ```powershell
    $cred = Get-Credential "$env:USERDOMAIN\$env:USERNAME"
    ```
