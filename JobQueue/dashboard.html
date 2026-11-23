@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab Job Queue</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e3e3de;
+    --ok: #1a7f37; --bad: #c62f1f; --busy: #3b5bdb; --chip: #efefea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161614; --panel: #1f1f1d; --text: #ececea; --muted: #9a9a94; --line: #33332f;
+      --ok: #4cc26a; --bad: #f0705f; --busy: #7d97f5; --chip: #2a2a27;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Arial, sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+  .status { font-size: 13px; color: var(--muted); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+  section.wide { grid-column: 1 / -1; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.wrap { white-space: normal; word-break: break-word; }
+  tr:last-child td { border-bottom: none; }
+  .chip { display: inline-block; padding: 0 7px; border-radius: 10px; background: var(--chip); font-size: 12px; }
+  .busy { color: var(--busy); } .idle { color: var(--muted); }
+  .empty { color: var(--muted); font-size: 13px; padding: 4px 0; }
+  .warn { color: var(--bad); font-size: 13px; margin-top: 8px; }
+  details { border-bottom: 1px solid var(--line); padding: 6px 0; }
+  details:last-child { border-bottom: none; }
+  summary { cursor: pointer; font-size: 13px; }
+  summary .meta { color: var(--muted); }
+  pre { margin: 6px 0 2px; padding: 8px; background: var(--chip); border-radius: 6px; font-size: 12px;
+        overflow-x: auto; white-space: pre; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Lab job queue</h1>
+    <span class="status"><span id="dot" class="dot"></span><span id="state">connecting…</span></span>
+  </header>
+  <div class="grid">
+    <section>
+      <h2>Queue by job type</h2>
+      <div class="scroll"><table id="queue"></table></div>
+      <div id="no-runner" class="warn"></div>
+    </section>
+    <section>
+      <h2>Active workers</h2>
+      <div class="scroll" id="workers"></div>
+    </section>
+    <section class="wide">
+      <h2>Running</h2>
+      <div class="scroll" id="running"></div>
+    </section>
+    <section class="wide">
+      <h2>Errors</h2>
+      <div id="failed"></div>
+    </section>
+    <section class="wide">
+      <h2>Recently completed</h2>
+      <div class="scroll" id="done"></div>
+    </section>
+  </div>
+</main>
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const time = t => t ? new Date(t * 1000).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}) : '';
+function dur(s) {
+  if (s == null) return '';
+  s = Math.max(0, Math.round(s));
+  if (s < 60) return s + ' s';
+  if (s < 3600) return Math.floor(s / 60) + ' min';
+  return Math.floor(s / 3600) + ' h ' + Math.floor(s % 3600 / 60) + ' min';
+}
+function table(cols, rows) {
+  if (!rows.length) return '<div class="empty">None</div>';
+  const head = cols.map(c => `<th class="${c.cls || ''}">${c.h}</th>`).join('');
+  const body = rows.map(r => '<tr>' + cols.map(c => `<td class="${c.cls || ''}">${c.f(r)}</td>`).join('') + '</tr>').join('');
+  return `<table><tr>${head}</tr>${body}</table>`;
+}
+function render(d) {
+  const q = Object.entries(d.queue).filter(([, v]) => v.pending || v.running || v.max_n);
+  document.getElementById('queue').innerHTML =
+    '<tr><th>Type</th><th class="num">Waiting</th><th class="num">Running</th><th class="num">Max</th></tr>' +
+    q.map(([t, v]) => `<tr><td>${esc(t)}</td><td class="num">${v.pending}</td><td class="num">${v.running}</td><td class="num">${v.max_n}</td></tr>`).join('');
+  document.getElementById('no-runner').textContent = d.no_runner.length
+    ? 'Waiting for the user to open BatchGUI or queue a job: ' + d.no_runner.join(', ') : '';
+  document.getElementById('workers').innerHTML = table([
+    {h: 'User', f: w => esc(w.name)}, {h: 'Worker', f: w => esc(w.worker)},
+    {h: 'State', f: w => w.busy ? `<span class="busy">● ${esc(w.label) || 'busy'}</span>` : '<span class="idle">idle</span>'},
+    {h: 'PID', cls: 'num', f: w => w.pid}], d.workers);
+  document.getElementById('running').innerHTML = table([
+    {h: 'User', f: j => esc(j.name)}, {h: 'Type', f: j => `<span class="chip">${esc(j.job_type)}</span>`},
+    {h: 'Job', cls: 'wrap', f: j => esc(j.label)}, {h: 'Queued', f: j => time(j.created)},
+    {h: 'Running for', cls: 'num', f: j => j.started ? dur(d.now - j.started) : 'starting'}], d.running);
+  document.getElementById('failed').innerHTML = d.failed.length ? d.failed.map(j =>
+    `<details><summary><span class="chip">${esc(j.job_type)}</span> ${esc(j.label)} <span class="meta">· ${esc(j.name)} · ${time(j.finished)}</span></summary><pre>${esc(j.error)}</pre></details>`
+  ).join('') : '<div class="empty">None</div>';
+  document.getElementById('done').innerHTML = table([
+    {h: 'Finished', f: j => time(j.finished)}, {h: 'User', f: j => esc(j.name)},
+    {h: 'Type', f: j => `<span class="chip">${esc(j.job_type)}</span>`},
+    {h: 'Result', cls: 'wrap', f: j => esc(j.result || j.label)},
+    {h: 'Took', cls: 'num', f: j => j.started ? dur(j.finished - j.started) : ''}], d.done);
+}
+async function refresh() {
+  const dot = document.getElementById('dot'), state = document.getElementById('state');
+  try {
+    const r = await fetch('api/status', {cache: 'no-store'});
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    render(d);
+    dot.className = 'dot ok';
+    state.textContent = `manager running for ${dur(d.uptime)} · updated ${new Date().toLocaleTimeString()}`;
+  } catch (e) {
+    dot.className = 'dot bad';
+    state.textContent = 'manager not reachable';
+  }
+}
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

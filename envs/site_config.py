@@ -22,6 +22,8 @@ class SiteConfig:
     nwb_scratch: str #temporary processed folders of NWBImagingSession (on a data drive, not the boot drive)
     lab_identifier: str #name of the lab, for generating dataset identifiers
     uv_env_dir: str #envs/update_env.bat builds each user's lncm env in <uv_env_dir>/<username>/lncm
+    user_names: dict #Windows user name (u******) -> name shown on the job queue dashboard
+    job_queue: dict #job queue manager: api_port (localhost), dashboard_port (lab network), data_dir (manager's database)
 
 def _load_config(fname) -> SiteConfig:
     this_package = Path(__file__).resolve().parent
