@@ -26,6 +26,58 @@ See: Proc2P/Analysis/S2P_template/20261007_BatchRun_MotionCorrect_Template.py
 
 
 POLL_S = 10  # run checks the queued jobs this often
+PRESETS = ('Calcium', 'Voltage')
+
+
+def preset_settings(preset='Calcium', mc_only=True):
+    '''
+    suite2p settings for lab recordings.
+    :param preset: 'Calcium', 'Voltage', or None for the suite2p defaults (with the lab's general settings)
+    :param mc_only: only motion correct, skip detection, extraction and deconvolution
+    '''
+    settings = suite2p.default_settings()
+    reg = settings['registration']
+    reg['do_bidiphase'] = True  # whether or not to compute and correct bidirectional phase offset
+    reg['two_step_registration'] = True  # run registration twice
+    if preset == 'Calcium':
+        reg['nonrigid'] = True
+        # full-height blocks, 16 px wide. 511 instead of 512, because suite2p 1.x fails with a single block along a
+        # dimension (github.com/MouseLand/suite2p/issues/1211). Movies must have more than 511 lines; for 256x48
+        # movies use Voltage.
+        reg['block_size'] = [511, 16]
+        reg['batch_size'] = 500
+    elif preset == 'Voltage':
+        reg['snr_thresh'] = 1.5  # increased, so that low snr frames don't get corrected
+        reg['nonrigid'] = False  # no movement expected within frame
+        reg['block_size'] = [512, 48]  # power of 2 and/or 3 (e.g. 128, 256, 384, etc) #use full frame as one block
+        reg['batch_size'] = 5000  # use full rec as one batch
+        reg['maxregshift'] = 0.05  # reduced, because fow is small
+    elif preset is not None:
+        raise ValueError(f'Unknown preset {preset}, use one of {PRESETS} or None')
+    settings['io']['delete_bin'] = False
+    settings['io']['move_bin'] = True
+    if mc_only:
+        settings['run']['do_detection'] = False  # also skips extraction and deconvolution
+    return settings
+
+
+def queue_sessions(settings, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch, fast_disk=None,
+                   client=None):
+    '''
+    Queue pre-processing and motion correction of each session on the job queue. Arguments: see process_session.
+    :param session_df: Baserow rows of the sessions (GetSessions)
+    :return: {job id: prefix}
+    '''
+    if client is None:
+        client = QueueClient()
+    jobs = {}
+    for _, item in session_df.iterrows():
+        prefix = item['Image.ID'][:-4]
+        entry = json.loads(item.to_json(default_handler=str))  # the Baserow row, as JSON values
+        job_id = client.submit('MotionCorrect', (settings, entry, pre_only, overwrite_previous, overwrite_preproc,
+                                                 ref_ch, fast_disk), label=prefix, key=prefix)
+        jobs[job_id] = prefix
+    return jobs
 
 
 def run(settings, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch, fast_disk=None):
@@ -35,13 +87,8 @@ def run(settings, session_df, pre_only, overwrite_previous, overwrite_preproc, r
     waiting, the jobs stay queued (see the dashboard). Arguments: see process_session.
     '''
     client = QueueClient()
-    jobs = {}
-    for _, item in session_df.iterrows():
-        prefix = item['Image.ID'][:-4]
-        entry = json.loads(item.to_json(default_handler=str))  # the Baserow row, as JSON values
-        job_id = client.submit('MotionCorrect', (settings, entry, pre_only, overwrite_previous, overwrite_preproc,
-                                                 ref_ch, fast_disk), label=prefix, key=prefix)
-        jobs[job_id] = prefix
+    jobs = queue_sessions(settings, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch, fast_disk,
+                          client=client)
     lprint(None, f'Queued {len(jobs)} sessions. Waiting for them to finish; if you stop the script, they still run.')
     failed = []
     while jobs:

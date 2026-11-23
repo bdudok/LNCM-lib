@@ -30,3 +30,15 @@ def test_motion_correct_run_queues_sessions_and_raises_on_failure(monkeypatch):
     common.encode(data)  # JSON-compatible
     assert data[1]['Image.ID'] == 'mouse_2026-01-01_x_001-000' and data[1]['Notes'] is None
     assert data[2:] == (False, True, False, 'Ch2', None)
+
+
+def test_preset_settings():
+    from Proc2P.Bruker import MotionCorrect
+    s = MotionCorrect.preset_settings('Voltage', mc_only=True)
+    reg = s['registration']
+    assert (reg['nonrigid'], reg['block_size'], reg['batch_size'], reg['snr_thresh'], reg['maxregshift']) == \
+        (False, [512, 48], 5000, 1.5, 0.05)
+    assert reg['do_bidiphase'] and reg['two_step_registration'] and not s['run']['do_detection']
+    assert MotionCorrect.preset_settings('Calcium')['registration']['block_size'] == [511, 16]
+    with pytest.raises(ValueError):
+        MotionCorrect.preset_settings('GCaMP')
