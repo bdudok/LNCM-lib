@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (QApplication, QLabel, QWidget, QHBoxLayout, QVBox
 
 import numpy
 from LFP.Setup import Setup
+from Proc2P.AppIcon import set_app_icon
 
 '''
 Manually review automatically detected seizures
@@ -680,6 +681,7 @@ def main(*args, **kwargs):
     '''for launching in a subprocess'''
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     app = QtWidgets.QApplication()
+    set_app_icon(app, 'Sz', '#C2185B')
     # app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling)
     app.setStyleSheet("QPushButton{font-size: 12pt;};QLabel{font-size: 12pt;};QListWidget{font-size: 14pt;}")
     app.setStyle('Fusion')
@@ -695,6 +697,7 @@ def launch_GUI(*args, **kwargs):
     '''For launcher script'''
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     app = QtWidgets.QApplication(sys.argv)
+    set_app_icon(app, 'Sz', '#C2185B')
     app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling)
     app.setStyleSheet("QPushButton{font-size: 12pt;};QLabel{font-size: 12pt;};QListWidget{font-size: 14pt;}")
     app.setStyle('Fusion')

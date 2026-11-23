@@ -7,8 +7,9 @@ os.environ.setdefault('OPENCV_LOG_LEVEL', 'ERROR')
 from Video.MotionWatcher import watch
 
 '''
-Pulls the motion energy trace of new Pinnacle EDF files, so the seizure GUIs show it without waiting.
-Keep it running in a console; it scans the folders every interval_min minutes.
+Queues the motion energy trace of new Pinnacle EDF files on the job queue, so the seizure GUIs show it without
+waiting. Runs as a scheduled task on the analysis server (JobQueue/README.md); it scans the folders every interval_min
+minutes.
 '''
 
 eeg_dirs = [r'D:\Shares\Data\_Processed\EEG']  # searched recursively for .edf files

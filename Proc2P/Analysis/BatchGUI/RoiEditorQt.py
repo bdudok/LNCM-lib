@@ -22,6 +22,7 @@ from shapely.geometry import Polygon, Point
 import matplotlib.path as mplpath
 import cv2
 from subprocess import Popen
+from Proc2P.AppIcon import set_app_icon
 
 '''
 Gui for manually drawing ROIs and editing ROI sets.
@@ -679,6 +680,7 @@ class FreehandPolygonWidget(QtWidgets.QDialog):
 
 def main():
     app = QtWidgets.QApplication()
+    set_app_icon(app, 'Roi', '#1E90FF')
     app.setStyle('Fusion')
     font = QtGui.QFont()
     app.setFont(font)

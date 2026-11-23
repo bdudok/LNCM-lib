@@ -1,21 +1,17 @@
-import os
-import traceback
+'''
+BatchGUI's connection to the lab job queue (JobQueue). Jobs run in the user's runner process, not in BatchGUI.
+The handlers of the job types are in JobQueue/handlers.py.
+'''
+import json
 from enum import Enum
 from dataclasses import dataclass
-from collections.abc import Callable
-from multiprocessing import Queue, Process, freeze_support, set_start_method
-from queue import Empty
-#import worker functions
-from Proc2P.Analysis.GEVIReg.Register import Worker as GEVIReg_Worker
-from Proc2P.Analysis.NormalizeVm import Worker as PullVM_Worker
-from Proc2P.Analysis.RoiEditor import Worker as SIMA_Worker
-from Proc2P.Analysis.PullSignals import Worker as Pull_Worker
-from Proc2P.Analysis.CaTrace import CaTrace
-from Proc2P.Analysis.CaTrace import Worker as Process_Cell_Worker
-from Proc2P.Analysis.Ripples import Ripples, RippleConfig, legacy_channel_from_config
-from Proc2P.Bruker.PreProc import SessionInfo
+
+from JobQueue.client import QueueClient
+from JobQueue.common import QueueError, encode
+
 
 class JobType(Enum):
+    # names are the job types in JobQueue.common.JOB_TYPES
     TEST = 0
     GEVIReg = 1
     PullVM = 2
@@ -24,203 +20,56 @@ class JobType(Enum):
     ProcessROIs = 5
     Ripples = 6
 
+
 @dataclass
 class Job:
     type: JobType
-    data: tuple
+    data: tuple  # for all BatchGUI jobs, data[1] is the prefix
 
-@dataclass
-class Worker:
-    task: Callable
-    max_n: int
 
 @dataclass
 class WorkerError:
-    '''Put in the result queue instead of a result when a job raises'''
+    '''Passed to the result handler instead of a result when a job failed'''
     traceback: str
 
-class ReportingWorker(Process):
-    '''
-    Runs a worker in this process. If a job raises, the traceback is printed and sent to the result queue as a
-    WorkerError, and the worker continues with the next job (instead of the process exiting).
-    '''
 
-    def __init__(self, task, queue, res_queue, n=0):
-        super(ReportingWorker, self).__init__()
-        self.task = task
-        self.queue = queue
-        self.res_queue = res_queue
-        self.n = n
-
-    def run(self):
-        worker = self.task(self.queue, self.res_queue, n=self.n)
-        while True:
-            try:
-                worker.run()  # returns when the queue sends None
-                break
-            except Exception:
-                traceback.print_exc()
-                self.res_queue.put((worker.__name__ + str(self.n), WorkerError(traceback.format_exc())))
-
-class testworker(Process):
-    __name__ = 'Test-Worker'
-
-    def __init__(self, queue, res_queue, n=0):
-        super(testworker, self).__init__()
-        self.queue = queue
-        self.res_queue = res_queue
-        self.n = n
-
-    def run(self):
-        for data in iter(self.queue.get, None):
-            print(data)
-            self.res_queue.put((self.__name__ + str(self.n), data))
-
-class RippleWorker(Process):
-    __name__ = 'Ripple-Worker'
-
-    def __init__(self, queue, res_queue, n=0):
-        super(RippleWorker, self).__init__()
-        self.queue = queue
-        self.res_queue = res_queue
-        self.n = n
-
-    def run(self):
-        for data in iter(self.queue.get, None):
-            wdir, prefix, kwargs = data
-            cfg={}
-            for key in ('tr1', 'tr2', 'y_scale', 'require_3_cycles'):
-                cfg[key] = kwargs[key]
-            fs = SessionInfo(os.path.join(wdir, prefix), prefix).load(must_exist=True)['fs']
-            r = Ripples(wdir, prefix, fs=fs, config=cfg, force=kwargs['overwrite_existing'],
-                        ephys_channel=kwargs['channel'], tag=kwargs['tag'],
-                        ask_legacy_channel=legacy_channel_from_config(RippleConfig(**kwargs)))
-            self.res_queue.put((self.__name__ + str(self.n), f'{prefix}: {r.count_included()} events saved.'))
-
-
-class ProcessSessionWorker(Process):
-    __name__ = 'Process-Session-Worker'
-
-    def __init__(self, queue, res_queue, n=0, worker_number=24):
-        super(ProcessSessionWorker, self).__init__()
-        self.session_queue = queue
-        self.session_res_queue = res_queue
-        self.queue = Queue()
-        self.result_queue = Queue()
-        self.ncpu = worker_number
-        self.nworker = 0
-        self.n = n
-
-    def run(self):
-        '''This process spawns and starts workers for single-cell traces to process a session.
-        Run is called with a config dataclass, and this worker parses it into CaTrace args'''
-        for data in iter(self.session_queue.get, None):
-            path, prefix, tag, config = data
-            #parse args
-            if config.polynom_baseline:
-                bsltype = 'poly'
-            else:
-                bsltype = 'original'
-            peakdet = False
-            last_bg =config.last_ROI_is_background
-            invert = [config.invert_first_channel_G, config.invert_second_channel_R]
-            excl = (config.exclude_from_frame, config.exclude_until_frame)
-            sz_mode = config.seizure_mode
-
-            #process cells
-            for ch in (0, 1):
-                session = CaTrace(path, prefix, bsltype=bsltype, exclude=excl, peakdet=peakdet, ch=ch, tag=tag,
-                            invert=invert[ch], last_bg=last_bg, ignore_saturation=sz_mode)
-                if session.open_raw() == -1:
-                    continue
-                if os.path.exists(session.pf):
-                    print(f'{session.pf} folder exists, skipping')
-                    continue
-                print('Processing', session.pf)
-                if sz_mode:
-                    session.ol_index = []
-                for c in range(session.cells):
-                    if self.ncpu and c >= self.nworker:
-                        Process_Cell_Worker(self.queue, self.result_queue).start()
-                        self.nworker += 1
-                        self.ncpu -= 1
-                    self.queue.put(session.pack_data(c))
-                for cell_data in iter(self.result_queue.get, None):
-                    finished = session.unpack_data(cell_data)
-                    if finished:
-                        break
-
-            self.session_res_queue.put((self.__name__, prefix))
-
-class QManager:
-    '''
-    This class routes batch jobs to the correct worker type
-    Usage:
-        Set up freeze_support and spawn method, then init this from main
-        call register_worker once with each job type to set the callable and the max worker count
-        then pass Job objects to run_job
-    '''
+class BatchGUIQueue:
+    '''Queues BatchGUI jobs and hands back results as (worker name, result message or WorkerError).'''
 
     def __init__(self):
-       self.Q_job = {}
-       self.Q_result = Queue()
-       self.n_worker = {}
-       self.worker_config = {}
+        self.client = QueueClient()
 
-    def register_worker(self, jobtype:JobType, task:Callable, max_n:int):
-        '''
-        Define a worker fucntion
-        :param jobtype: name of the job type
-        :param task: Worker function, init needs to take a job Q and a result Q, needs to have a run method
-        :param max_n: max number of workers of this type to spawn
-        :return:
-        '''
-        self.worker_config[jobtype] = Worker(task=task, max_n=max_n)
+    @property
+    def manager_up(self) -> bool:
+        return self.client.manager_up
 
-    def _lazy_register_worker(self, jobtype:JobType,):
-        self.Q_job[jobtype] = Queue()
-        self.n_worker[jobtype] = self.worker_config[jobtype].max_n
-
-    def run_job(self, job:Job):
-        '''
-        Checks if workers are initialized and queues the job
-        '''
-        if job.type not in self.worker_config:
-            raise ValueError(f'Use register_worker to define job type {job.type}')
-        if job.type not in self.n_worker:
-            self._lazy_register_worker(job.type)
-        if self.n_worker[job.type]:
-            ReportingWorker(self.worker_config[job.type].task, self.Q_job[job.type], self.Q_result,
-                            n=self.n_worker[job.type]-self.worker_config[job.type].max_n).start()
-            self.n_worker[job.type] -= 1
-        self.Q_job[job.type].put(job.data)
+    def run_job(self, job: Job):
+        try:
+            # only a job with the same data counts as a duplicate
+            self.client.submit(job.type.name, job.data, label=job.data[1], key=json.dumps(encode(job.data)))
+        except QueueError as e:
+            print(f'{job.type.name} {job.data[1]} not queued. {e}')
 
     def poll_result(self, handler_function):
-        while True:
-            try:
-                item = self.Q_result.get_nowait()  # non-blocking
-            except Empty:
-                break
+        try:
+            results = self.client.results()
+        except QueueError:
+            return
+        for r in results:
+            name = r['worker'] or r['job_type']
+            if r['status'] == 'done':
+                handler_function((name, r['result']))
             else:
-                handler_function(item)
+                handler_function((name, WorkerError(f'{r["label"]}: {r["error"]}')))
+
+    def check_manager(self) -> bool:
+        '''Checks that the manager is running and restarts this user's runner if it stopped.'''
+        try:
+            self.client.ensure_runner()
+        except QueueError:
+            pass
+        return self.client.manager_up
+
 
 def BatchGUI_Q():
-    Q = QManager()
-    Q.register_worker(JobType.TEST, testworker, 3)
-    Q.register_worker(JobType.GEVIReg, GEVIReg_Worker, 5)
-    Q.register_worker(JobType.PullVM, PullVM_Worker, 24)
-    Q.register_worker(JobType.SIMA, SIMA_Worker, 2)
-    Q.register_worker(JobType.PullSignals, Pull_Worker, 1)
-    Q.register_worker(JobType.ProcessROIs, ProcessSessionWorker, 1)
-    Q.register_worker(JobType.Ripples, RippleWorker, 3)
-    return Q
-
-if __name__ == '__main__':
-    freeze_support()
-    try:
-        set_start_method('spawn')
-    except Exception:
-        pass
-    Q = BatchGUI_Q()
-    for i in range(5):
-        Q.run_job(Job(JobType.TEST, str(i)))
+    return BatchGUIQueue()

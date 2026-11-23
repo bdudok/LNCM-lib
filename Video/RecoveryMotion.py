@@ -12,27 +12,24 @@ The files of a video <_RawData>/MonitorCam/<subfolders>/<stem>.mkv are in the sa
     <stem>_racine.xlsx               the marks exported with the GUI's Save button, escalating marks merged,
                                      with a Length(s) column
 
-queue_motion starts a background process (python -m Video.RecoveryMotion <video>) that keeps running when the GUI is
-closed. The processes of a PC compute one video at a time: each waits for the queue lock in the temp folder.
+queue_motion queues the computation on the job queue (RecoveryMotion jobs, one video at a time for all users). It
+runs in a worker process that keeps running when the GUI is closed.
 """
 import datetime
 import json
 import os
 import re
-import subprocess
-import sys
-import tempfile
 import time
 import traceback
 from pathlib import Path
 
 import numpy
 
+from JobQueue import client as job_queue
+from JobQueue.common import QueueError
 from Proc2P.utils import lprint
 
 LOCK_MAX_AGE_S = 3 * 3600  # an older lock file is left over from a process that was killed
-QUEUE_LOCK = Path(tempfile.gettempdir()) / 'lncm_recovery_motion.lock'
-QUEUE_POLL_S = 10
 EVENT_COLUMNS = ['Start(s)', 'End(s)', 'Racine', 'Start time']
 STAGES = ('1', '2', '3', '4', '5', '5+')  # Racine stages, from mild to severe
 MERGE_GAP_S = 30  # escalating marks closer than this are merged into one seizure
@@ -173,55 +170,33 @@ def start_time(video):
 
 
 def queue_motion(video):
-    """Start computing the trace in a background process, unless it exists, is queued, or there is no ROI.
-    Returns True if it was started."""
+    """Queue computing the trace on the job queue, unless it exists, is queued, or there is no ROI.
+    Returns True if it was queued."""
     if trace_fn(video).exists() or is_queued(video) or load_roi(video) is None:
         return False
-    lock_fn(video).touch()  # before starting, so a second call doesn't start another process
+    lock_fn(video).touch()  # before queueing, so a second call doesn't queue it again
     error_fn(video).unlink(missing_ok=True)
-    root = Path(__file__).resolve().parents[1]  # LNCM-lib
-    env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(root), os.environ.get('PYTHONPATH', '')]),
-               OPENCV_LOG_LEVEL='ERROR')  # OpenCV warns on every frame when reading the luma plane
-    # Windows: CREATE_NO_WINDOW gives the process a hidden console, which the base interpreter that the venv's
-    # python.exe starts also uses (with DETACHED_PROCESS, that child opens a console window).
-    # CREATE_NEW_PROCESS_GROUP: Ctrl+C or closing the GUI's console doesn't stop it.
-    subprocess.Popen([sys.executable, '-m', 'Video.RecoveryMotion', str(video)], env=env, cwd=root,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
-                     | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0))
+    try:
+        job_queue.submit('RecoveryMotion', str(video), label=Path(video).name, key=str(trace_fn(video)))
+    except QueueError as e:
+        lock_fn(video).unlink(missing_ok=True)
+        lprint(None, f'Motion energy of {Path(video).name} not queued: {e}')
+        return False
     lprint(None, f'Queued the motion energy of {Path(video).name}')
     return True
 
 
-def _take_queue_lock(video):
-    """Wait until no other video is being computed on this PC. Keeps the video's own lock fresh while waiting."""
-    while True:
-        if QUEUE_LOCK.exists() and time.time() - QUEUE_LOCK.stat().st_mtime > LOCK_MAX_AGE_S:
-            QUEUE_LOCK.unlink(missing_ok=True)
-        try:
-            os.close(os.open(QUEUE_LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-            return
-        except FileExistsError:
-            lock_fn(video).touch()
-            time.sleep(QUEUE_POLL_S)
-
-
 def compute_motion(video):
-    """Compute and save the trace in the saved ROI (waits for the queue lock)"""
+    """Compute and save the trace in the saved ROI"""
     from Video.MotionEnergy import _save, motion_energy  # imports cv2; not needed by the GUI's file functions
-    _take_queue_lock(video)
-    try:
-        roi = load_roi(video)
-        lprint(None, f'Motion energy: {Path(video).name}, ROI {roi}')
-        me, t = motion_energy(video, crop=roi, return_times=True)
-        _save(numpy.array([t, me]), trace_fn(video))
-    finally:
-        QUEUE_LOCK.unlink(missing_ok=True)
+    roi = load_roi(video)
+    lprint(None, f'Motion energy: {Path(video).name}, ROI {roi}')
+    me, t = motion_energy(video, crop=roi, return_times=True)
+    _save(numpy.array([t, me]), trace_fn(video))
 
 
-if __name__ == '__main__':
-    # python -m Video.RecoveryMotion <video>, started by queue_motion
-    video = sys.argv[1]
+def run_job(video):
+    """Job queue handler of RecoveryMotion jobs, queued by queue_motion"""
     try:
         compute_motion(video)
     except Exception:
@@ -229,3 +204,4 @@ if __name__ == '__main__':
         raise
     finally:
         lock_fn(video).unlink(missing_ok=True)
+    return Path(video).name

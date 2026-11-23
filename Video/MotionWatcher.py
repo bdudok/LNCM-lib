@@ -1,12 +1,14 @@
-"""Watch the EEG folders and pull the motion energy trace of new Pinnacle EDF files, so the seizure detection and
-curation GUIs show it the first time a recording is opened. Run it with Video/launch_MotionEnergyWatcher.py.
+"""Watch the EEG folders and queue the motion energy trace of new Pinnacle EDF files on the job queue, so the seizure
+detection and curation GUIs show it the first time a recording is opened. Run it with
+Video/launch_MotionEnergyWatcher.py (on the analysis server, as a scheduled task: see JobQueue/README.md).
 
 Each .edf in the EEG folders (searched recursively) without <prefix>_motion_energy.npy is processed once it has not
 been modified for settle_h hours: the video files rotate every hour, so by then the file covering the end of the EDF
 is closed. The EDF's video map is saved as well.
 Only EDFs modified in the last max_age_days and recorded (EDF header start) after recorded_after are considered, so
 old recordings are not read again at each start, and recordings from before a recorder fix can be left out.
-EDFs without a matching video, or that fail, are reported and skipped until the watcher restarts.
+EDFs without a matching video, or that failed, have a <prefix>_motion_energy.error.txt and are skipped until it is
+deleted. Opening the recording in a GUI queues it again.
 2P sessions are not watched: their trace needs a motion crop, and saving the crop starts the computation.
 """
 import os
@@ -17,7 +19,7 @@ from pyedflib import highlevel
 
 from LFP.Setup import Setup
 from Proc2P.utils import lprint
-from Video.MotionEnergy import N_WORKERS, is_running, pull_motion, trace_fn
+from Video.MotionEnergy import error_fn, is_running, pull_in_background, trace_fn
 
 
 def pinnacle_jobs(eeg_dirs, settle_s, max_age_s):
@@ -37,18 +39,17 @@ def edf_start(path, prefix):
     return highlevel.read_edf_header(os.path.join(path, prefix + '.edf'), read_annotations=False)['startdate']
 
 
-def watch(eeg_dirs, video_dir=None, recorded_after=None, interval_min=10, settle_h=1.5, max_age_days=3,
-          n_workers=N_WORKERS):
+def watch(eeg_dirs, video_dir=None, recorded_after=None, interval_min=10, settle_h=1.5, max_age_days=3):
     """
     eeg_dirs: folders of Pinnacle EDF files
     video_dir: folder of the vEEG recordings, default: each EDF's folder in _RawData (as in the curation GUI)
     recorded_after: datetime; EDFs that start earlier are skipped. None: no limit
     interval_min: time between scans of the folders
     """
-    skipped = set()
+    skipped = set()  # recorded before recorded_after
     while True:
         for job in list(pinnacle_jobs(eeg_dirs, settle_h * 3600, max_age_days * 86400)):
-            if job in skipped or is_running(*job):  # running: started from a GUI, check again at the next scan
+            if job in skipped or is_running(*job) or error_fn(*job).exists():
                 continue
             setup, path, prefix = job
             try:
@@ -56,12 +57,10 @@ def watch(eeg_dirs, video_dir=None, recorded_after=None, interval_min=10, settle
                     lprint(None, f'{prefix} was recorded before {recorded_after}, skipping')
                     skipped.add(job)
                     continue
-                lprint(None, f'Pulling motion energy: {setup} {prefix}')
-                if pull_motion(setup, path, prefix, video_dir, n_workers) is None:
-                    lprint(None, f'No video found for {prefix}, skipping')
-                    skipped.add(job)
             except Exception:
                 traceback.print_exc()
-                lprint(None, f'Failed: {prefix}, skipping')
+                lprint(None, f'Could not read the EDF header of {prefix}, skipping')
                 skipped.add(job)
+                continue
+            pull_in_background(setup, path, prefix, video_dir)  # not queued again while queued or running
         time.sleep(interval_min * 60)

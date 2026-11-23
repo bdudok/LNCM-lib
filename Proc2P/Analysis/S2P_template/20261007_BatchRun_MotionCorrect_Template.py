@@ -6,7 +6,6 @@ import pandas
 # To limit threads, set OMP_NUM_THREADS, MKL_NUM_THREADS and NUMBA_NUM_THREADS to the same value here,
 # otherwise numba resets torch to use all cores.
 os.environ["MKL_DISABLE_FAST_MM"] = "1"
-import suite2p
 from Proc2P import GetSessions
 from Proc2P.Bruker import MotionCorrect
 
@@ -14,7 +13,9 @@ from Proc2P.Bruker import MotionCorrect
 '''
 Template for pre-processing and motion correction.
 Specify the search criteria and settings below, then run using the suite2p interpreter.
-Confirm the list of sessions by hitting Enter after it's displayed. 
+Confirm the list of sessions by hitting Enter after it's displayed.
+The sessions are queued on the job queue (dashboard: http://SVR-LNCM-01:8766). The script waits and prints each result;
+if you stop it, the sessions are still processed.
 '''
 
 '''
@@ -56,38 +57,9 @@ assert len(session_df)
 
 
 '''Below are general settings, only change if you know what you're doing'''
-# pipeline settings (suite2p 1.x: nested dict)
-settings = suite2p.default_settings()
-reg = settings['registration']
-
-# specific settings
-reg['do_bidiphase'] = True  # whether or not to compute and correct bidirectional phase offset
-reg['two_step_registration'] = True  # run registration twice
-
-# sensor specific settings
-if preset is None:
-    pass
-elif preset == 'Calcium':
-    reg['nonrigid'] = True
-    # full-height blocks, 16 px wide. 511 instead of 512, because suite2p 1.x fails with a single block along a
-    # dimension (github.com/MouseLand/suite2p/issues/1211). Movies must have more than 511 lines; for 256x48 movies use Voltage.
-    reg['block_size'] = [511, 16]
-    reg['batch_size'] = 500
-elif preset == 'Voltage':
-    reg['snr_thresh'] = 1.5  # increased, so that low snr frames don't get corrected
-    reg['nonrigid'] = False  # no movement expected within frame
-    reg['block_size'] = [512, 48]  # power of 2 and/or 3 (e.g. 128, 256, 384, etc) #use full frame as one block
-    reg['batch_size'] = 5000  # use full rec as one batch
-    reg['maxregshift'] = 0.05  # reduced, because fow is small
-else:
-    input(f"No preset specified for {preset}, press Enter to continue with defaults")
-
-# general settings
-settings['io']['delete_bin'] = False
-settings['io']['move_bin'] = True
-
-if mc_only:
-    settings['run']['do_detection'] = False  # also skips extraction and deconvolution
+# pipeline settings (suite2p 1.x: nested dict): the lab's settings with the sensor preset, see MotionCorrect.preset_settings
+settings = MotionCorrect.preset_settings(preset, mc_only)
+reg = settings['registration']  # to change a setting, e.g.: reg['batch_size'] = 1000
 
 switches = {'pre_only': pre_only, 'overwrite_previous': overwrite_previous, 'overwrite_preproc': overwrite_preproc,
             'ref_ch': ref_ch, }

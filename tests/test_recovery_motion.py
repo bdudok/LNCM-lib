@@ -34,8 +34,7 @@ def test_start_time(tmp_path):
     assert RecoveryMotion.start_time(other) is None
 
 
-def test_compute_motion_in_roi(tmp_path, monkeypatch):
-    monkeypatch.setattr(RecoveryMotion, 'QUEUE_LOCK', tmp_path / 'queue.lock')
+def test_compute_motion_in_roi(tmp_path):
     video = tmp_path / '_RawData' / 'MonitorCam' / 'mouse1.avi'
     video.parent.mkdir(parents=True)
     # a square moves in the right half during frames 100-200; the left half flickers all the time
@@ -56,7 +55,6 @@ def test_compute_motion_in_roi(tmp_path, monkeypatch):
     numpy.testing.assert_allclose(t, numpy.arange(300) / 30, atol=0.002)
     # the flicker outside the ROI is not measured
     assert numpy.median(me[110:190]) > 5 * numpy.median(me[220:290])
-    assert not RecoveryMotion.QUEUE_LOCK.exists()
     # a new ROI deletes the trace
     RecoveryMotion.save_roi(video, [0, 160, 0, 120])
     assert RecoveryMotion.load_trace(video) is None

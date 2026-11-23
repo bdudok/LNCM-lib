@@ -21,5 +21,10 @@
   "scratch_disk": "E:/tmp/",
   "nwb_scratch": "E:/NWB_scratch",
   "uv_env_dir": "N:/envs",
-  "lab_identifier": "BCM_LNCM_Dudoklab"
+  "lab_identifier": "BCM_LNCM_Dudoklab",
+  "job_queue": {
+    "api_port": 8765,
+    "dashboard_port": 8766,
+    "data_dir": "N:/jobqueue"
+  }
 }
