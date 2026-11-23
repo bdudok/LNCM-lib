@@ -70,3 +70,19 @@ def test_gui_does_not_load_suite2p():
     code = 'import sys; import Proc2P.Bruker.MotionCorrectGUI; print("torch" in sys.modules or "suite2p" in sys.modules)'
     out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, check=True)
     assert out.stdout.strip().endswith('False')
+
+
+def test_existing_registered_movie_fails_before_suite2p(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from Proc2P.Bruker import MotionCorrect
+    prefix = 'mouse_2026-01-01_x_001'
+    procpath = tmp_path / prefix
+    procpath.mkdir()
+    (procpath / f'{prefix}_registered_Ch2.bin').touch()
+    monkeypatch.setattr('Proc2P.Bruker.PreProc.PreProc',
+                        lambda *args, **kwargs: SimpleNamespace(procpath=procpath, channelnames=['Ch2']))
+    monkeypatch.setattr('suite2p.run_s2p', lambda **kwargs: pytest.fail('suite2p should not run'))
+    item = {'Raw.Path': str(tmp_path), 'Processed.Path': str(tmp_path), 'Image.ID': prefix + '-000'}
+    with pytest.raises(FileExistsError, match='already motion corrected.*overwrite_previous'):
+        MotionCorrect.process_session({}, item, pre_only=False, overwrite_previous=False, overwrite_preproc=False,
+                                      ref_ch='Ch2', fast_disk=str(tmp_path / 'scratch'))

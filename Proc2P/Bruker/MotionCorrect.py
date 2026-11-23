@@ -197,6 +197,14 @@ def process_session(settings, item, pre_only, overwrite_previous, overwrite_prep
             ofn = os.path.join(s.procpath, prefix + suffix)
             if os.path.exists(ofn):
                 os.remove(ofn)
+    else:
+        # checked before running suite2p: its output can't replace an existing registered movie
+        existing = [s.procpath / f'{prefix}_registered_{ch}.bin' for ch in s.channelnames]
+        existing = [str(fn) for fn in existing if fn.exists()]
+        if existing:
+            raise FileExistsError(f'{prefix} is already motion corrected: {", ".join(existing)} exists. To redo it, '
+                                  f'queue it with overwrite_previous, which deletes the previous motion corrected '
+                                  f'movie, ROIs and traces.')
 
     filelist = [fn for fn in os.listdir(s.dpath) if ((prefix in fn) and ('.ome.tif' in fn))]
 
