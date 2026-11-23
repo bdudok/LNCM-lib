@@ -198,3 +198,18 @@ def test_set_task_changes_only_a_task_in_the_expected_state(monkeypatch):
     row['Task'] = {'value': 'Done'}
     assert 'not changed' in BaserowRequests.SetTask().advance(7, 'MotionCorr', 'Segment')
     assert len(patched) == 1
+
+
+def test_batchgui_hooks_find_the_session_by_prefix(monkeypatch):
+    import pandas
+    from JobQueue import hooks
+    from BaserowAPI import BaserowRequests
+    advanced = []
+    rows = pandas.DataFrame([{'id': 5, 'Image.ID': 'm_001-000'}, {'id': 6, 'Image.ID': 'm_0012-000'}])
+    monkeypatch.setattr(BaserowRequests, 'GetSessions', lambda **kw: type('G', (), {'get_session': lambda s, p: rows})())
+    monkeypatch.setattr(BaserowRequests, 'SetTask',
+                        lambda: type('S', (), {'advance': lambda s, *a: advanced.append(a) or 'ok'})())
+    assert hooks.signals_pulled(['path', 'm_001', 'Auto', 'All', False, False, {}]) == 'ok'
+    assert hooks.rois_processed(['path', 'm_001', '1', {}]) == 'ok'
+    assert advanced == [(5, 'Segment', 'Process'), (5, 'Process', 'Done')]  # not m_0012, which contains m_001
+    assert 'not changed: 0 sessions' in hooks.signals_pulled(['path', 'm_002', 'Auto'])

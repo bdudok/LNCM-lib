@@ -18,8 +18,8 @@ baserow_logger_token = os.environ.get('BASEROW_LOGGER_TOKEN') or baserow_logger_
 # setx BASEROW_SURGERY_TOKEN "<token>"
 baserow_surgery_token = os.environ.get('BASEROW_SURGERY_TOKEN', '')
 
-# Token that may edit the Task field of the sessions table. Only SetTask uses it, run by the job queue manager to set
-# Task from MotionCorr to Segment when motion correction is done. In a terminal of the manager's account, run:
+# Token that may edit the Task field of the sessions table. Only SetTask uses it, run by the job queue manager to move
+# Task forward after MotionCorrect, PullSignals and ProcessROIs jobs. In a terminal of the manager's account, run:
 # setx BASEROW_TASK_TOKEN "<token>"
 baserow_task_token = os.environ.get('BASEROW_TASK_TOKEN', '')
 
