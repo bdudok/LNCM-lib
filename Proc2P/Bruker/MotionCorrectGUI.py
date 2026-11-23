@@ -119,10 +119,15 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)  # Shift and Ctrl
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
+        self.table.setWordWrap(False)  # a long prefix is shortened instead of wrapped,
+        self.table.setTextElideMode(QtCore.Qt.ElideMiddle)  # in the middle, so the session number stays visible
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QtWidgets.QHeaderView.Interactive)  # columns can be resized by dragging
-        header.setStretchLastSection(True)
-        self.table.resizeColumnsToContents()  # fits the titles until there are rows
+        # Prefix takes the free width; the others fit their content and title, so they don't get squeezed
+        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(COLUMNS.index('Prefix'), QtWidgets.QHeaderView.Stretch)
+        status = COLUMNS.index('Status')
+        header.setSectionResizeMode(status, QtWidgets.QHeaderView.Fixed)
+        header.resizeSection(status, header.fontMetrics().horizontalAdvance('starting') + 24)
         self.table.itemSelectionChanged.connect(self.update_selection_label)
         return self.table
 
@@ -254,7 +259,6 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
                       select_value(item.get('LFP')), select_value(item.get('Opto')), self.status.get(prefix, ''))
             for j, v in enumerate(values):
                 self.table.setItem(i, j, QtWidgets.QTableWidgetItem(v))
-        self.table.resizeColumnsToContents()  # fits the content and the titles
         self.update_selection_label()
 
     def selected_rows(self):
