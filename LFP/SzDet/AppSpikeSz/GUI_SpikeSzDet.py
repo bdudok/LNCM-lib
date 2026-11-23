@@ -2,9 +2,8 @@ import os
 import json
 from subprocess import Popen
 from pathlib import Path
-import argparse
 #plotting
-import PySide6  # import before matplotlib so it uses PySide6
+import PySide6  # noqa: F401 - import before matplotlib so it uses PySide6
 import matplotlib
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -15,7 +14,7 @@ import numpy
 
 #GUI
 import sys
-from PySide6 import QtGui, QtCore, QtWidgets
+from PySide6 import QtGui, QtWidgets
 from PySide6.QtWidgets import (QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QGroupBox, QListWidget,
 QAbstractItemView, QLineEdit, QCheckBox)
 
@@ -37,7 +36,7 @@ class GUI_main(QtWidgets.QMainWindow):
                  defaults=None, set_prefix=None):
         super().__init__()
 
-        self.setWindowTitle(f'Detect spikes and seizures')
+        self.setWindowTitle('Detect spikes and seizures')
         self.setGeometry(30, 60, 3200, 1600) # Left, top, width, height.
         self.app = app
         if defaults == 'hippocampus':
@@ -301,7 +300,6 @@ class GUI_main(QtWidgets.QMainWindow):
             suffix = '_ephys.npy'
             self.dirpaths = {}
             prefix_list = []
-            available_pf = []
             for fn in flist:
                 dirpath = self.wdir+fn
                 if os.path.isdir(dirpath):
@@ -566,7 +564,7 @@ def main(*args, **kwargs):
 
     # SzProcGUI(self.wdir, Setup.LNCM, 'hippocampus', self.active_prefix[0])
     path, setup_ID, defaults, prefix = sys.argv[1:]
-    gui_main = GUI_main(app, path=path, setupID=setup_ID, defaults=defaults, set_prefix=prefix)
+    gui_main = GUI_main(app, path=path, setupID=setup_ID, defaults=defaults, set_prefix=prefix)  # noqa: F841 - keeps the window referenced while the app runs
     sys.exit(app.exec())
 
 gui_defaults = { #aiming to detect ripples and HFOs
@@ -601,7 +599,7 @@ def launch_GUI(*args, **kwargs):
     app.setStyle('Fusion')
     font = QtGui.QFont()
     app.setFont(font)
-    gui_main = GUI_main(app, *args, **kwargs)
+    gui_main = GUI_main(app, *args, **kwargs)  # noqa: F841 - keeps the window referenced while the app runs
     sys.exit(app.exec())
 
 if __name__ == '__main__':
