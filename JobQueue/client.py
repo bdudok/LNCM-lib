@@ -97,7 +97,9 @@ def start_runner():
               'stderr': open(user_state_dir() / 'runner-start.log', 'a'), 'close_fds': True}
     cmd = [sys.executable, '-m', 'JobQueue.runner']
     if os.name == 'nt':
-        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+        # CREATE_NO_WINDOW, not DETACHED_PROCESS: the venv's python.exe starts the base interpreter, which would open a
+        # console window if it had no (hidden) console to share
+        flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
         try:
             # leave the job object of the parent (e.g. PyCharm's), which would kill the runner when the parent exits
             subprocess.Popen(cmd, creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, **kwargs)
