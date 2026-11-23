@@ -31,7 +31,7 @@ Settings are in `envs/site_config.json` (`job_queue`: ports, `data_dir`). Names 
    Register-ScheduledTask -TaskName "LNCM motion energy watcher" -Action $action -Trigger $trigger -Settings $settings -User $cred.UserName -Password $cred.GetNetworkCredential().Password -RunLevel Limited
    Start-ScheduledTask -TaskName "LNCM motion energy watcher"
    ```
-4. Give the manager the Baserow token that moves a session's Task forward after a job: MotionCorrect sets MotionCorr → Segment, PullSignals Segment → Process, ProcessROIs Process → Done. A Task in any other state is left as it is.
+4. Give the manager the Baserow token that moves a session's Task forward after a job: MotionCorrect sets MotionCorr → Segment, PullSignals Segment or Pull → Process, ProcessROIs Process → Done. A Task in any other state is left as it is.
    1. In Baserow, create a database token with only *Update* permission, on the sessions table.
    2. In a terminal of the manager's account, run `setx BASEROW_TASK_TOKEN "<token>"`.
    3. Restart the manager task. Without the token, the jobs still run, and their result on the dashboard says the Task was not set.

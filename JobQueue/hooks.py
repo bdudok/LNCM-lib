@@ -15,7 +15,7 @@ def motion_corrected(data):
 
 
 def _advance_by_prefix(prefix, from_task, to_task):
-    '''Set Task of the session named prefix (Image.ID without the -000 tag) if it is from_task.'''
+    '''Set Task of the session named prefix (Image.ID without the -000 tag) if it is from_task (str or tuple).'''
     from BaserowAPI.BaserowRequests import GetSessions, SetTask
     setter = SetTask()  # raises first if the manager has no token
     rows = GetSessions(timeout=30).get_session(prefix)
@@ -27,8 +27,8 @@ def _advance_by_prefix(prefix, from_task, to_task):
 
 
 def signals_pulled(data):
-    '''After PullSignals (BatchGUI): set the session's Baserow Task from Segment to Process.'''
-    return _advance_by_prefix(data[1], 'Segment', 'Process')
+    '''After PullSignals (BatchGUI): set the session's Baserow Task from Segment or Pull to Process.'''
+    return _advance_by_prefix(data[1], ('Segment', 'Pull'), 'Process')
 
 
 def rois_processed(data):

@@ -16,7 +16,7 @@ from JobQueue.client import QueueClient
 from Proc2P.AppIcon import set_app_icon
 from Proc2P.Bruker import MotionCorrect
 
-TASKS = ('MotionCorr', 'Segment', 'Process', 'Done', 'Broken')
+TASKS = ('PreProc', 'MotionCorr', 'Segment', 'Pull', 'Process', 'Curate', 'Done', 'Broken')  # Baserow Task values
 ANY = '(any)'
 COLUMNS = ('Prefix', 'Date', 'Channels', 'LFP', 'Opto', 'Status')
 STATUS_POLL_MS = 5000

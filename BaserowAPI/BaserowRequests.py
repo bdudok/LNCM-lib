@@ -407,14 +407,16 @@ class SetTask:
         '''
         Set Task to to_task if it is from_task now. Returns a message saying what was done.
         :param row_id: 'id' of the session in the sessions table
+        :param from_task: a Task value, or a tuple of values
         '''
+        from_tasks = (from_task,) if isinstance(from_task, str) else tuple(from_task)
         resp = requests.get(self._row_url(row_id), headers={"Authorization": f"Token {config['api_token']}"},
                             timeout=self.timeout)
         resp.raise_for_status()
         row = resp.json()
         current = row['Task']['value'] if row.get('Task') else None
-        if current != from_task:
-            return f'Baserow Task of {row["Image.ID"]} is {current}, not {from_task}: not changed'
+        if current not in from_tasks:
+            return f'Baserow Task of {row["Image.ID"]} is {current}, not {" or ".join(from_tasks)}: not changed'
         resp = requests.patch(self._row_url(row_id),
                               headers={"Authorization": self.auth_string, "Content-Type": "application/json"},
                               json={'Task': to_task}, timeout=self.timeout)
