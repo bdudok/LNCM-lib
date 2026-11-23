@@ -119,7 +119,10 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)  # Shift and Ctrl
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QtWidgets.QHeaderView.Interactive)  # columns can be resized by dragging
+        header.setStretchLastSection(True)
+        self.table.resizeColumnsToContents()  # fits the titles until there are rows
         self.table.itemSelectionChanged.connect(self.update_selection_label)
         return self.table
 
@@ -251,8 +254,7 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
                       select_value(item.get('LFP')), select_value(item.get('Opto')), self.status.get(prefix, ''))
             for j, v in enumerate(values):
                 self.table.setItem(i, j, QtWidgets.QTableWidgetItem(v))
-        self.table.resizeColumnsToContents()
-        self.table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        self.table.resizeColumnsToContents()  # fits the content and the titles
         self.update_selection_label()
 
     def selected_rows(self):
