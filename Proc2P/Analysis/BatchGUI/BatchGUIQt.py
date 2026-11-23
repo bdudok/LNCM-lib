@@ -18,6 +18,7 @@ from enum import Enum
 import os
 import shutil
 from Proc2P.Analysis.BatchGUI.Config import GuiConfig, State
+from Proc2P.AppIcon import set_app_icon
 from Proc2P.Analysis.AssetFinder import AssetFinder, get_processed_tags
 # from Proc2P.Analysis.BatchGUI.RoiEditorQt import GUI_main as RoiEditorGUI
 from Proc2P.Analysis.BatchGUI.RoiEditorQt import launch_in_subprocess as RoiEditorGUI
@@ -766,6 +767,7 @@ class StdRedirector:
 
 def launch_GUI(*args, **kwargs):
     app = QtWidgets.QApplication(sys.argv)
+    set_app_icon(app, 'B', GuiConfig.RunColor)
     app.setStyle('Fusion')
     font = QtGui.QFont()
     app.setFont(font)

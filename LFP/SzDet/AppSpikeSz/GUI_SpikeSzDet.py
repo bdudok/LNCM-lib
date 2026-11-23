@@ -27,6 +27,7 @@ from Proc2P.Bruker import LoadEphys
 from LFP.Pinnacle import ReadEDF
 from Video import MotionEnergy
 from LFP.Setup import Setup
+from Proc2P.AppIcon import set_app_icon
 
 #for processing in background
 # from multiprocessing import Process
@@ -558,6 +559,7 @@ class SubplotsCanvas(FigureCanvasQTAgg):
 def main(*args, **kwargs):
     '''for launching in a subprocess'''
     app = QtWidgets.QApplication()
+    set_app_icon(app, 'Sp', '#D24604')
     app.setStyle('Fusion')
     font = QtGui.QFont()
     app.setFont(font)
@@ -596,6 +598,7 @@ def launch_in_subprocess(*args, **kwargs):
 def launch_GUI(*args, **kwargs):
     '''For launcher script'''
     app = QtWidgets.QApplication(sys.argv)
+    set_app_icon(app, 'Sp', '#D24604')
     app.setStyle('Fusion')
     font = QtGui.QFont()
     app.setFont(font)
