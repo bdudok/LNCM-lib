@@ -71,7 +71,7 @@ def test_crop(tmp_path):
 def test_bruker_crop_and_background_start(tmp_path, monkeypatch):
     prefix = 'mouse_2026-10-14_test_001'
     started = []
-    monkeypatch.setattr(MotionEnergy.subprocess, 'Popen', lambda args, **kwargs: started.append(args))
+    monkeypatch.setattr(MotionEnergy.job_queue, 'submit', lambda job_type, data, **kwargs: started.append(data))
     (tmp_path / prefix / '_face').mkdir(parents=True)
     assert MotionEnergy.bruker_crop(tmp_path, prefix) is None
     MotionEnergy.pull_in_background(Setup.LNCM, tmp_path, prefix)
@@ -80,4 +80,4 @@ def test_bruker_crop_and_background_start(tmp_path, monkeypatch):
     (tmp_path / prefix / '_face' / '_motion-crop.json').write_text('[300.4, 100.6, 250.2, 50.9]')
     assert MotionEnergy.bruker_crop(tmp_path, prefix) == [100, 301, 50, 251]
     MotionEnergy.pull_in_background(Setup.LNCM, tmp_path, prefix)
-    assert len(started) == 1 and started[0][-3:] == ['LNCM', str(tmp_path), prefix]
+    assert started == [(Setup.LNCM, tmp_path, prefix, None)]

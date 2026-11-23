@@ -12,13 +12,11 @@ Values are on a different scale than traces from pull_motion_energy (luma range,
 Output of the pull_ functions: <prefix>_motion_energy.npy in the processed folder, shape (2, n_frames):
 row 0 is the time of each video frame in EEG seconds (from the start of the EDF or of the Bruker voltage recording),
 row 1 is the motion energy.
-The GUIs start pull_in_background when the file is missing. Video/MotionWatcher.py pulls new vEEG recordings ahead of
+The GUIs call pull_in_background, which queues the computation on the job queue, when the file is missing. Video/MotionWatcher.py pulls new vEEG recordings ahead of
 time; for 2P sessions, FaceVideo.CropVideo starts it when the motion crop is saved.
 """
 import json
 import os
-import subprocess
-import sys
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -31,6 +29,8 @@ from LFP.Pinnacle import ReadEDF
 from LFP.Setup import Setup
 from Proc2P.Bruker.LoadMovie import alt_raw_locations
 from Proc2P.Bruker.PreProc import SessionInfo
+from JobQueue import client as job_queue
+from JobQueue.common import QueueError
 from Proc2P.utils import lprint
 from Video import LoadVEEG
 
@@ -262,30 +262,39 @@ def pull_motion(setup, path, prefix, video_dir=None, n_workers=N_WORKERS):
         lock.unlink(missing_ok=True)
 
 
+def error_fn(setup, path, prefix):
+    """Traceback of a failed computation, or the reason it was skipped (no video)"""
+    return trace_fn(Setup(setup), path, prefix).with_suffix('.error.txt')
+
+
 def pull_in_background(setup, path, prefix, video_dir=None):
-    """Start pull_motion in a separate process that keeps running when the GUI is closed, unless the trace exists or
-    is being computed. Errors are written to <prefix>_motion_energy.error.txt next to the trace file."""
+    """Queue pull_motion on the job queue, unless the trace exists or is being computed. The job runs in a worker
+    process that keeps running when the GUI is closed. Errors are written to error_fn."""
     if trace_fn(setup, path, prefix).exists() or is_running(setup, path, prefix):
         return
     if setup == Setup.LNCM and bruker_crop(path, prefix) is None:
         return
-    root = Path(__file__).resolve().parents[1]  # LNCM-lib
-    env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(root), os.environ.get('PYTHONPATH', '')]))
-    args = [sys.executable, '-m', 'Video.MotionEnergy', str(setup), str(path), prefix]
-    if video_dir is not None:
-        args.append(str(video_dir))
-    # DETACHED_PROCESS (Windows only): no console, and closing the GUI's console doesn't stop it
-    subprocess.Popen(args, env=env, cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     creationflags=getattr(subprocess, 'DETACHED_PROCESS', 0))
-    lprint(None, f'Computing the motion energy of {prefix} in the background')
-
-
-if __name__ == '__main__':
-    # python -m Video.MotionEnergy <setup> <path> <prefix> [<video_dir>], started by pull_in_background
-    setup, path, prefix = sys.argv[1:4]
     try:
-        pull_motion(setup, path, prefix, *sys.argv[4:5])
+        job_queue.submit('MotionEnergy', (Setup(setup), path, prefix, video_dir), label=prefix,
+                         key=str(trace_fn(setup, path, prefix)))
+    except QueueError as e:
+        lprint(None, f'Motion energy of {prefix} not queued: {e}')
+        return
+    lprint(None, f'Queued the motion energy of {prefix}')
+
+
+def run_job(data):
+    """Job queue handler of MotionEnergy jobs, queued by pull_in_background"""
+    setup, path, prefix, video_dir = data
+    err = error_fn(setup, path, prefix)
+    err.unlink(missing_ok=True)
+    try:
+        if is_running(setup, path, prefix):
+            return f'{prefix}: being computed by another process'
+        if pull_motion(setup, path, prefix, video_dir) is None:
+            err.write_text('No video matches this recording.')
+            return f'{prefix}: no video'
     except Exception:
-        error_fn = trace_fn(Setup(setup), path, prefix).with_suffix('.error.txt')
-        error_fn.write_text(traceback.format_exc())
+        err.write_text(traceback.format_exc())
         raise
+    return prefix
