@@ -1,11 +1,9 @@
 from pathlib import Path
 import matplotlib.path as mplpath
-import matplotlib.pyplot as plt
 import numpy
 import scipy
-import cv2
 import os
-import copy, math
+import math
 import tifffile
 
 from Proc2P.Bruker.LoadRegistered import LoadRegistered, Source
