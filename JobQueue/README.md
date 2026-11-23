@@ -13,11 +13,14 @@ Settings are in `envs/site_config.json` (`job_queue`: ports, `data_dir`). Names 
 
 ## One-time setup on the server
 1. Create the `data_dir` folder (`N:\jobqueue`) and remove write access for other users from it.
-2. Register the manager as a task that runs whether you're logged on or not. In PowerShell, with the paths of your env and LNCM-lib checkout:
+2. Register the manager as a task that runs whether you're logged on or not. In PowerShell, enter your password when asked:
+   ```powershell
+   $cred = Get-Credential "$env:USERDOMAIN\$env:USERNAME"
+   ```
+   Then, in the same window, with the paths of your env and LNCM-lib checkout:
    ```powershell
    $py = "N:\envs\u247640\lncm\Scripts\python.exe"
    $lib = "C:\Users\u247640\PycharmProjects\LNCM-lib"
-   $cred = Get-Credential "$env:USERDOMAIN\$env:USERNAME"
    $action = New-ScheduledTaskAction -Execute $py -Argument "-m JobQueue.manager" -WorkingDirectory $lib
    $trigger = New-ScheduledTaskTrigger -AtStartup
    $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit 0 -MultipleInstances IgnoreNew
