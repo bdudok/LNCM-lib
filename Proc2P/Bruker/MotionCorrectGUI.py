@@ -13,6 +13,7 @@ from BaserowAPI.BaserowRequests import GetSessions
 from BaserowAPI.config import config
 from JobQueue.common import QueueError, dashboard_port
 from JobQueue.client import QueueClient
+from Proc2P.AppIcon import set_app_icon
 from Proc2P.Bruker import MotionCorrect
 
 TASKS = ('MotionCorr', 'Segment', 'Process', 'Done', 'Broken')
@@ -22,6 +23,13 @@ STATUS_POLL_MS = 5000
 # registration settings set by the form; the presets fill them in
 REG_FIELDS = ('do_bidiphase', 'two_step_registration', 'nonrigid', 'block_size', 'batch_size', 'snr_thresh',
               'maxregshift')
+# suite2p 1.1.0 defaults of the form fields that the presets don't set, so the GUI doesn't need to load suite2p.
+# After a suite2p update, tests/test_motion_correct_queue.py says if they changed.
+SUITE2P_REG_DEFAULTS = {'snr_thresh': 1.2, 'maxregshift': 0.1}
+FORM_PRESETS = {p: {**SUITE2P_REG_DEFAULTS, **MotionCorrect.LAB_SETTINGS['registration'], **values}
+                for p, values in MotionCorrect.PRESETS.items()}
+GREEN, RED = '#04D246', '#D24604'
+MANAGER_POLL_MS = 5000
 
 
 def project_names():
@@ -56,7 +64,6 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
         self.sessions = None  # DataFrame of the search result
         self.jobs = {}  # job id: prefix, of jobs queued from this window that haven't finished
         self.status = {}  # prefix: status of the jobs queued from this window
-        self.presets = {p: MotionCorrect.preset_settings(p)['registration'] for p in MotionCorrect.PRESETS}
 
         central = QtWidgets.QWidget(self)
         layout = QtWidgets.QVBoxLayout(central)
@@ -73,8 +80,14 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
         self.timer.setInterval(STATUS_POLL_MS)
         self.timer.timeout.connect(self.update_status)
         self.timer.start()
+        self.manager_timer = QtCore.QTimer(self)
+        self.manager_timer.setInterval(MANAGER_POLL_MS)
+        self.manager_timer.timeout.connect(self.check_manager)
+        self.manager_timer.start()
+        self.check_manager()
         self.resize(1300, 750)
         self.show()
+        QtCore.QTimer.singleShot(0, self.load_projects)  # after the window is shown
 
     # --- layout
     def make_filters(self):
@@ -82,11 +95,6 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
         self.project = QtWidgets.QComboBox()
         self.project.setEditable(True)
         self.project.setMinimumWidth(180)
-        try:
-            self.project.addItems(project_names())
-        except requests.RequestException as e:
-            print('Could not read the projects from Baserow:', e)
-        self.project.setCurrentText('')
         self.task = QtWidgets.QComboBox()
         self.task.addItems((ANY, *TASKS))
         self.task.setCurrentText('MotionCorr')
@@ -119,7 +127,7 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
         box = QtWidgets.QGroupBox('Parameters')
         form = QtWidgets.QFormLayout(box)
         presets = QtWidgets.QHBoxLayout()
-        for p in MotionCorrect.PRESETS:
+        for p in FORM_PRESETS:
             button = QtWidgets.QPushButton(p)
             button.clicked.connect(lambda checked=False, p=p: self.apply_preset(p))
             presets.addWidget(button)
@@ -140,7 +148,7 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
             form.addRow(name, self.switches[name])
         self.reg = {}
         for name in REG_FIELDS:
-            if isinstance(self.presets['Calcium'][name], bool):
+            if isinstance(FORM_PRESETS['Calcium'][name], bool):
                 self.reg[name] = QtWidgets.QCheckBox()
             else:
                 self.reg[name] = QtWidgets.QLineEdit()
@@ -152,19 +160,38 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
         self.selection_label = QtWidgets.QLabel('No sessions')
         row.addWidget(self.selection_label)
         row.addStretch()
-        dashboard = QtWidgets.QPushButton('Dashboard')
-        dashboard.clicked.connect(
+        self.manager_dot = QtWidgets.QPushButton('\u25CF Queue')  # opens the job queue dashboard
+        self.manager_dot.setFlat(True)
+        self.manager_dot.clicked.connect(
             lambda: QtGui.QDesktopServices.openUrl(QtCore.QUrl(f'http://localhost:{dashboard_port()}')))
-        row.addWidget(dashboard)
+        row.addWidget(self.manager_dot)
         queue = QtWidgets.QPushButton('Queue selected')
         queue.clicked.connect(self.queue_selected)
         row.addWidget(queue)
         return row
 
+    def load_projects(self):
+        text = self.project.currentText()
+        try:
+            self.project.addItems(project_names())
+        except requests.RequestException as e:
+            print('Could not read the projects from Baserow:', e)
+        self.project.setCurrentText(text)
+
+    def check_manager(self):
+        try:
+            self.client.ensure_runner()  # restarts the runner if jobs are waiting for it
+        except QueueError:
+            pass
+        up = self.client.manager_up
+        self.manager_dot.setStyleSheet(f'color: {GREEN if up else RED}')
+        state = 'is running' if up else 'is not running: sessions can not be queued'
+        self.manager_dot.setToolTip(f'Job queue manager {state}. Click to open the dashboard.')
+
     # --- parameters
     def apply_preset(self, preset):
         for name, widget in self.reg.items():
-            value = self.presets[preset][name]
+            value = FORM_PRESETS[preset][name]
             if isinstance(widget, QtWidgets.QCheckBox):
                 widget.setChecked(bool(value))
             elif isinstance(value, (list, tuple)):
@@ -173,15 +200,15 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
                 widget.setText(str(value))
 
     def get_settings(self):
-        '''suite2p settings from the form. Raises ValueError if a field can't be parsed.'''
-        settings = MotionCorrect.preset_settings(None, self.switches['mc_only'].isChecked())
-        reg = settings['registration']
+        '''suite2p settings that differ from the defaults, from the form. Raises ValueError if a field can't be
+        parsed.'''
+        reg = {}
         for name, widget in self.reg.items():
             if isinstance(widget, QtWidgets.QCheckBox):
                 reg[name] = widget.isChecked()
                 continue
             text = widget.text().strip()
-            default = self.presets['Calcium'][name]
+            default = FORM_PRESETS['Calcium'][name]
             try:
                 if isinstance(default, (list, tuple)):
                     reg[name] = [int(x) for x in text.split(',')]
@@ -191,7 +218,8 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
                     reg[name] = float(text)
             except ValueError:
                 raise ValueError(f'{name}: can not read "{text}"') from None
-        return settings
+        # the worker adds the suite2p defaults of the other settings (MotionCorrect.with_defaults)
+        return MotionCorrect.lab_settings(None, self.switches['mc_only'].isChecked(), registration=reg)
 
     # --- sessions
     def search(self):
@@ -290,6 +318,7 @@ class MotionCorrectGUI(QtWidgets.QMainWindow):
 
 def launch_GUI():
     app = QtWidgets.QApplication(sys.argv)
+    set_app_icon(app, 'MC', '#00897B')
     app.setStyle('Fusion')
     gui = MotionCorrectGUI()  # noqa: F841 - keeps the window referenced while the app runs
     sys.exit(app.exec())

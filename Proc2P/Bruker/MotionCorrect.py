@@ -3,15 +3,11 @@ import json
 import os, shutil
 import time
 import warnings
-# set before suite2p (torch) is imported, also in the job queue workers that import this module first
+# set before suite2p (torch) is imported
 os.environ.setdefault("MKL_DISABLE_FAST_MM", "1")
 import numpy
 import pandas
-import suite2p
-# run using suite2p conda env but s2p package, not source
 
-from Proc2P.Bruker import Bidiphase, PreProc
-from tifffile import imwrite
 from Proc2P.utils import lprint
 from JobQueue.client import QueueClient
 
@@ -26,39 +22,72 @@ See: Proc2P/Analysis/S2P_template/20261007_BatchRun_MotionCorrect_Template.py
 
 
 POLL_S = 10  # run checks the queued jobs this often
-PRESETS = ('Calcium', 'Voltage')
-
-
-def preset_settings(preset='Calcium', mc_only=True):
-    '''
-    suite2p settings for lab recordings.
-    :param preset: 'Calcium', 'Voltage', or None for the suite2p defaults (with the lab's general settings)
-    :param mc_only: only motion correct, skip detection, extraction and deconvolution
-    '''
-    settings = suite2p.default_settings()
-    reg = settings['registration']
-    reg['do_bidiphase'] = True  # whether or not to compute and correct bidirectional phase offset
-    reg['two_step_registration'] = True  # run registration twice
-    if preset == 'Calcium':
-        reg['nonrigid'] = True
+# lab settings that differ from the suite2p defaults (suite2p 1.x nested dict)
+LAB_SETTINGS = {
+    'registration': {
+        'do_bidiphase': True,  # whether or not to compute and correct bidirectional phase offset
+        'two_step_registration': True,  # run registration twice
+    },
+    'io': {'delete_bin': False, 'move_bin': True},
+}
+# registration settings of each sensor
+PRESETS = {
+    'Calcium': {
+        'nonrigid': True,
         # full-height blocks, 16 px wide. 511 instead of 512, because suite2p 1.x fails with a single block along a
         # dimension (github.com/MouseLand/suite2p/issues/1211). Movies must have more than 511 lines; for 256x48
         # movies use Voltage.
-        reg['block_size'] = [511, 16]
-        reg['batch_size'] = 500
-    elif preset == 'Voltage':
-        reg['snr_thresh'] = 1.5  # increased, so that low snr frames don't get corrected
-        reg['nonrigid'] = False  # no movement expected within frame
-        reg['block_size'] = [512, 48]  # power of 2 and/or 3 (e.g. 128, 256, 384, etc) #use full frame as one block
-        reg['batch_size'] = 5000  # use full rec as one batch
-        reg['maxregshift'] = 0.05  # reduced, because fow is small
-    elif preset is not None:
-        raise ValueError(f'Unknown preset {preset}, use one of {PRESETS} or None')
-    settings['io']['delete_bin'] = False
-    settings['io']['move_bin'] = True
+        'block_size': [511, 16],
+        'batch_size': 500,
+    },
+    'Voltage': {
+        'snr_thresh': 1.5,  # increased, so that low snr frames don't get corrected
+        'nonrigid': False,  # no movement expected within frame
+        'block_size': [512, 48],  # power of 2 and/or 3 (e.g. 128, 256, 384, etc) #use full frame as one block
+        'batch_size': 5000,  # use full rec as one batch
+        'maxregshift': 0.05,  # reduced, because fow is small
+    },
+}
+
+
+def lab_settings(preset='Calcium', mc_only=True, registration=None):
+    '''
+    The settings that differ from the suite2p defaults. Doesn't need suite2p; with_defaults adds the rest.
+    :param preset: 'Calcium', 'Voltage', or None for the suite2p registration defaults
+    :param mc_only: only motion correct, skip detection, extraction and deconvolution
+    :param registration: dict of registration settings that override the preset
+    '''
+    if preset is not None and preset not in PRESETS:
+        raise ValueError(f'Unknown preset {preset}, use one of {tuple(PRESETS)} or None')
+    settings = copy.deepcopy(LAB_SETTINGS)
+    settings['registration'].update(PRESETS.get(preset, {}))
+    settings['registration'].update(registration or {})
     if mc_only:
-        settings['run']['do_detection'] = False  # also skips extraction and deconvolution
+        settings['run'] = {'do_detection': False}  # also skips extraction and deconvolution
     return settings
+
+
+def with_defaults(settings):
+    '''Full suite2p settings: the suite2p defaults, with the given (nested) settings replacing them. Raises
+    ValueError for a setting that suite2p doesn't have, e.g. after a suite2p update renamed it.'''
+    import suite2p
+    full = suite2p.default_settings()
+    for section, values in settings.items():
+        if not isinstance(values, dict):
+            full[section] = values
+            continue
+        if section not in full:
+            raise ValueError(f'suite2p {suite2p.version} has no settings section {section}')
+        unknown = set(values) - set(full[section])
+        if unknown:
+            raise ValueError(f'suite2p {suite2p.version} has no setting {section}.{", ".join(sorted(unknown))}')
+        full[section].update(values)
+    return full
+
+
+def preset_settings(preset='Calcium', mc_only=True):
+    '''Full suite2p settings for lab recordings (see lab_settings)'''
+    return with_defaults(lab_settings(preset, mc_only))
 
 
 def queue_sessions(settings, session_df, pre_only, overwrite_previous, overwrite_preproc, ref_ch, fast_disk=None,
@@ -116,7 +145,7 @@ def run_job(data):
 def process_session(settings, item, pre_only, overwrite_previous, overwrite_preproc, ref_ch, fast_disk=None):
     '''
     Pre-process and motion correct one session. Returns a result message.
-    :param settings: suite2p settings dict (from suite2p.default_settings()).
+    :param settings: suite2p settings (nested dict). Missing settings are the suite2p defaults (with_defaults).
         Bidiphase: with settings['registration']['do_bidiphase'] False, the movie is not corrected. With True, the
         offset is settings['registration']['bidiphase'] if nonzero, otherwise estimated from the reference channel
         (Bidiphase.estimate_file) and rounded, or 0 if the estimate is under 1 px. A nonzero offset is corrected in
@@ -126,6 +155,10 @@ def process_session(settings, item, pre_only, overwrite_previous, overwrite_prep
     :param item: the session's Baserow row (Image.ID, Raw.Path, Processed.Path, and fields for PreProc.parse_notes)
     :param fast_disk: folder for suite2p scratch files, in a subfolder per session. Default: E:/S2P/<username>/
     '''
+    import suite2p  # here, so queueing (the GUI, run) doesn't load suite2p, torch and PreProc
+    from tifffile import imwrite
+    from Proc2P.Bruker import Bidiphase, PreProc
+    settings = with_defaults(settings)
     username = os.environ.get('USERNAME')
     print(f'Running suite2p version {suite2p.version} as {username}')
     if fast_disk is None:
