@@ -274,9 +274,12 @@ def pull_in_background(setup, path, prefix, video_dir=None):
     args = [sys.executable, '-m', 'Video.MotionEnergy', str(setup), str(path), prefix]
     if video_dir is not None:
         args.append(str(video_dir))
-    # DETACHED_PROCESS (Windows only): no console, and closing the GUI's console doesn't stop it
+    # Windows: CREATE_NO_WINDOW gives the process a hidden console, which the base interpreter that the venv's
+    # python.exe starts also uses (with DETACHED_PROCESS, that child opens a console window).
+    # CREATE_NEW_PROCESS_GROUP: Ctrl+C or closing the GUI's console doesn't stop it.
     subprocess.Popen(args, env=env, cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     creationflags=getattr(subprocess, 'DETACHED_PROCESS', 0))
+                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                     | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0))
     lprint(None, f'Computing the motion energy of {prefix} in the background')
 
 

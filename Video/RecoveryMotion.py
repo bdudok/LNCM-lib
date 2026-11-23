@@ -182,10 +182,13 @@ def queue_motion(video):
     root = Path(__file__).resolve().parents[1]  # LNCM-lib
     env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(root), os.environ.get('PYTHONPATH', '')]),
                OPENCV_LOG_LEVEL='ERROR')  # OpenCV warns on every frame when reading the luma plane
-    # DETACHED_PROCESS (Windows only): no console, and closing the GUI's console doesn't stop it
+    # Windows: CREATE_NO_WINDOW gives the process a hidden console, which the base interpreter that the venv's
+    # python.exe starts also uses (with DETACHED_PROCESS, that child opens a console window).
+    # CREATE_NEW_PROCESS_GROUP: Ctrl+C or closing the GUI's console doesn't stop it.
     subprocess.Popen([sys.executable, '-m', 'Video.RecoveryMotion', str(video)], env=env, cwd=root,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     creationflags=getattr(subprocess, 'DETACHED_PROCESS', 0))
+                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                     | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0))
     lprint(None, f'Queued the motion energy of {Path(video).name}')
     return True
 
