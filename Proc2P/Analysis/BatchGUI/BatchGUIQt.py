@@ -26,6 +26,7 @@ from LFP.SzDet.AppSpikeSz.GUI_SpikeSzDet import launch_in_subprocess as SzProcGU
 from LFP.SzDet.AppSpikeSz.SzViewGUI import launch_in_subprocess as SzViewGUI
 
 from Proc2P.Analysis.BatchGUI.QueueManager import Job, JobType, WorkerError
+from JobQueue.common import dashboard_port
 from Proc2P.Analysis.GEVIReg.Register import RegConfig
 from Proc2P.Analysis.NormalizeVm import PullVmConfig
 from Proc2P.Analysis.RoiEditor import SIMAConfig
@@ -138,6 +139,12 @@ class GUI_main(QtWidgets.QMainWindow):
         self._queue_timer.setInterval(1000)
         self._queue_timer.timeout.connect(self.poll_result)
         self._queue_timer.start()
+        # timer to show whether the job queue manager is running
+        self._manager_timer = QtCore.QTimer(self)
+        self._manager_timer.setInterval(5000)
+        self._manager_timer.timeout.connect(self.check_manager)
+        self._manager_timer.start()
+        self.check_manager()
         self.show()
 
     def make_session_bar(self):
@@ -167,6 +174,11 @@ class GUI_main(QtWidgets.QMainWindow):
         open_button = QtWidgets.QPushButton('View')
         open_button.clicked.connect(self.open_viewer_callback)
         self.session_bar.layout.addWidget(open_button)
+
+        self.manager_dot = QtWidgets.QPushButton('\u25CF Queue')  # opens the job queue dashboard
+        self.manager_dot.setFlat(True)
+        self.manager_dot.clicked.connect(self.open_dashboard)
+        self.session_bar.layout.addWidget(self.manager_dot)
 
     def make_console_widget(self):
         self.console_widget.setFixedHeight(self.config.ConsoleWidgetHeight)
@@ -684,6 +696,16 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.Q is not None:
             # empties the q and calls the handler function with each item. called by a timer, non_blocking.
             self.Q.poll_result(self._handle_item_from_worker)
+
+    def open_dashboard(self):
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl(f'http://localhost:{dashboard_port()}'))
+
+    def check_manager(self):
+        up = self.Q is not None and self.Q.check_manager()
+        color = self.config.GreenColor if up else self.config.RedColor
+        self.manager_dot.setStyleSheet(f'color: {color}')
+        state = 'is running' if up else 'is not running: jobs can not be queued'
+        self.manager_dot.setToolTip(f'Job queue manager {state}. Click to open the dashboard.')
 
     def _handle_item_from_worker(self, item):
         worker_name, prefix = item
