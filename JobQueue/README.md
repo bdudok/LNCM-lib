@@ -9,7 +9,7 @@ One manager on the analysis server schedules the processing jobs of all users. J
 | `client.py` | BatchGUI, scripts | Queues jobs, receives results |
 | `handlers.py` | inside the workers | One function per job type |
 
-Settings are in `envs/site_config.json`: `job_queue` (ports, `data_dir`) and `user_names` (Windows user name → name on the dashboard).
+Settings are in `envs/site_config.json` (`job_queue`: ports, `data_dir`). Names on the dashboard come from `envs/user_names.json`, which git ignores because it is personal info: `{"u123456": "First name"}`, one entry per lab member. Users missing from it are shown by their Windows user name. Keep the file in the manager's checkout, and restart the manager after editing it.
 
 ## One-time setup on the server
 1. Create the `data_dir` folder (`N:\jobqueue`) and remove write access for other users from it.
@@ -37,7 +37,7 @@ Settings are in `envs/site_config.json`: `job_queue` (ports, `data_dir`) and `us
    ```
 5. Open `http://SVR-LNCM-01:8766` from another lab computer.
 
-After pulling changes to `JobQueue` or `envs/site_config.json`, restart the manager, and after changes to `Video/MotionWatcher.py` the watcher: `Stop-ScheduledTask` then `Start-ScheduledTask` with the task name.
+After pulling changes to `JobQueue` or `envs/site_config.json`, or editing `envs/user_names.json`, restart the manager, and after changes to `Video/MotionWatcher.py` the watcher: `Stop-ScheduledTask` then `Start-ScheduledTask` with the task name.
 
 ## Logs
 - Manager: `<data_dir>\manager.log`

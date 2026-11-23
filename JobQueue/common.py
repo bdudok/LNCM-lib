@@ -72,8 +72,17 @@ def current_user() -> str:
     return getpass.getuser().lower()
 
 
+def _load_user_names() -> dict:
+    '''envs/user_names.json: {"<windows user name>": "<name>"}, kept out of git (personal info)'''
+    fn = lib_root() / 'envs' / 'user_names.json'
+    return {k.lower(): v for k, v in json.loads(fn.read_text()).items()} if fn.exists() else {}
+
+
+USER_NAMES = _load_user_names()
+
+
 def display_name(user: str) -> str:
-    return CONFIG.user_names.get(user, user)
+    return USER_NAMES.get(user, user)
 
 
 def user_token() -> str:

@@ -1,6 +1,8 @@
 #repo specifics
 /Proc2P/scratch_path.txt
 /BaserowAPI/LG_API_token.py
+# Windows user name -> name of lab members, for the job queue dashboard (personal info, not in the public repo)
+/envs/user_names.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
