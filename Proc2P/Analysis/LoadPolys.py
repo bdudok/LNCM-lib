@@ -68,6 +68,11 @@ class LoadImage(object):
         if not len(self.imdat.channel_keys):
             # before reading the size: GEVIReg movies only get it from the movie file
             self.imdat.find_alt_path()
+        if source == Source.GEVIReg and not len(self.imdat.channel_keys):
+            raise FileNotFoundError(
+                f'No GEVIReg movie of {prefix}: {prefix}_registered*.npy is not in {self.opPath / "GEVIReg"}, nor '
+                f'in the GEVIReg folder of this session in the alt_processed_paths (envs/site_config.json). '
+                f'Run GEVIReg on the session first, or use the S2P movie.')
         self.info = {'sz': (self.imdat.Ly, self.imdat.Lx)}
         self.nframes = self.imdat.n_frames
         self.nplanes = 1
