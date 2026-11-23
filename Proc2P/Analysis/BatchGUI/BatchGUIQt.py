@@ -297,7 +297,9 @@ class GUI_main(QtWidgets.QMainWindow):
         self.n_tabs += 1
 
     def update_editor_callback(self):
-        RoiEditorGUI(self.wdir, self.active_prefix[0], self.tag_label.text())
+        prefix, tag = self.active_prefix[0], self.tag_label.text()
+        self.cprint(f'opening RoiEditor for {prefix} with default tag {tag}')
+        RoiEditorGUI(self.wdir, prefix, tag)
 
     def copy_roi_callback(self):
         in_tag = self.copy_roi_input.text().strip()
@@ -632,8 +634,6 @@ class GUI_main(QtWidgets.QMainWindow):
         self.active_tab = Tabs(self.tabs.tabText(index))
         if self.active_tab == Tabs.Preview:
             self.update_preview_session()
-        elif self.active_tab == Tabs.ROI:
-            self.update_editor_callback()
 
     def select_path_callback(self):
         start_dir = self.wdir
