@@ -59,6 +59,10 @@ class GUI_main(QtWidgets.QMainWindow):
         self.state = State.SETUP
         self.session = ImagingSession(procpath, prefix, tag, ch='Both')
         self.player = None  # made when Play is first clicked, so the movie is not opened on load
+        self.lfp_artists = []
+        if self.session.has_ephys:
+            self.session.map_seizuretimes()
+            self.select_lfp_channel(self.pick_lfp_channel())
 
         self.make_control_widget()
         self.make_traces_widget()
@@ -78,20 +82,7 @@ class GUI_main(QtWidgets.QMainWindow):
         self.lines = []
 
         if self.session.has_ephys:
-            ca = self.TraceCanvas.ax[2]
-            self.session.map_seizuretimes()
-            lfp_ch = self.pick_lfp_channel()
-            if lfp_ch != self.session.lfp_ch:
-                self.session.lfp_ch = lfp_ch
-                self.session.map_phys()
-            sztimes = self.session.sztimes[self.session.sztime_channels.index(lfp_ch)]
-            for start, stop in zip(*sztimes):
-                for ai in (0, 2):
-                    self.TraceCanvas.ax[ai].axvspan(self.X[start], self.X[stop], facecolor=self.config.SzColor,
-                                                    edgecolor=None, alpha=0.4)
-            Y = butter_bandpass_filter(self.session.ephys.trace, 1, 500, self.session.si['fs'])
-            ca.plot(numpy.linspace(0, self.X[-1], len(Y)), Y, color='black')
-            ca.set_ylabel(f'LFP{lfp_ch} (mV)')
+            self.draw_lfp()
 
         if self.session.opto is not None:
             # line: masked frames; vertical lines: start and end of each train (also when stim is between frames)
@@ -131,15 +122,43 @@ class GUI_main(QtWidgets.QMainWindow):
         return super().eventFilter(obj, event)
 
     def pick_lfp_channel(self):
-        '''config.LFPChannel if set, else the first channel with seizure times, else the channel with the largest
-        signal (unconnected inputs are flat). Call after session.map_seizuretimes.'''
-        if self.config.LFPChannel is not None:
-            return self.config.LFPChannel
+        '''the first LFP channel with seizure times, else the channel with the largest signal (unconnected inputs
+        are flat). Call after session.map_seizuretimes.'''
         for ch, (starts, _) in zip(self.session.sztime_channels, self.session.sztimes):
             if len(starts):
                 return ch
         sd = self.session.ephys.edat[1:, ::50].std(axis=1)
         return int(numpy.argmax(sd)) + 1
+
+    def select_lfp_channel(self, ch):
+        if ch != self.session.lfp_ch:
+            self.session.lfp_ch = ch
+            self.session.map_phys()
+
+    def draw_lfp(self):
+        '''LFP trace of the selected channel in the bottom panel, its seizures in the top and bottom panels'''
+        for artist in self.lfp_artists:
+            artist.remove()
+        self.lfp_artists = []
+        ch = self.session.lfp_ch
+        ca = self.TraceCanvas.ax[2]
+        sztimes = self.session.sztimes[self.session.sztime_channels.index(ch)]
+        for start, stop in zip(*sztimes):
+            for ai in (0, 2):
+                self.lfp_artists.append(self.TraceCanvas.ax[ai].axvspan(
+                    self.X[start], self.X[stop], facecolor=self.config.SzColor, edgecolor=None, alpha=0.4))
+        Y = butter_bandpass_filter(self.session.ephys.trace, 1, 500, self.session.si['fs'])
+        self.lfp_artists.extend(ca.plot(numpy.linspace(0, self.X[-1], len(Y)), Y, color='black'))
+        ca.set_ylabel(f'LFP{ch} (mV)')
+        ca.relim()
+        ca.autoscale_view(scalex=False)
+
+    def lfp_update(self):
+        if self.state != State.LIVE:
+            return
+        self.select_lfp_channel(self.lfp_selector.currentData())
+        self.draw_lfp()
+        self.TraceCanvas.draw_idle()
 
     def make_control_widget(self):
         #top row for ROI preview and controls
@@ -206,6 +225,25 @@ class GUI_main(QtWidgets.QMainWindow):
 
         apply_layout(widget)
         self.control_window.layout.addWidget(widget)
+
+        #LFP channel selector
+        n_lfp = self.session.ephys.edat.shape[0] - 1 if self.session.has_ephys else 0
+        if n_lfp > 1:
+            widget = QtWidgets.QWidget()
+            widget.layout = QtWidgets.QVBoxLayout()
+            widget.setFixedWidth(self.config.ButtonLabelWidth * 2)
+            widget.setFixedHeight(self.config.TextWidgetHeight * 2)
+            label = QtWidgets.QLabel('LFP:')
+            label.setFixedHeight(self.config.TextWidgetHeight)
+            widget.layout.addWidget(label)
+            self.lfp_selector = QtWidgets.QComboBox(self)
+            for ch in range(1, n_lfp + 1):
+                self.lfp_selector.addItem(f'LFP{ch}', ch)
+            self.lfp_selector.setCurrentIndex(self.session.lfp_ch - 1)
+            self.lfp_selector.currentIndexChanged.connect(self.lfp_update)
+            widget.layout.addWidget(self.lfp_selector)
+            apply_layout(widget)
+            self.control_window.layout.addWidget(widget)
 
         #movie
         widget = QtWidgets.QWidget()
