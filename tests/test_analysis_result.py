@@ -344,3 +344,22 @@ def test_report_tables_cap_long_text():
     assert f'{cells[:80]}… ({len(cells)} characters)' in out
     assert '>s1<' in out and '>3<' in out
     assert df['Cells.R.Incl'].iloc[0] == cells  # the table itself is not changed
+
+
+def test_mouse_table_without_baserow_uses_only_the_dataset(tmp_path, monkeypatch, capsys):
+    import dataclasses
+
+    from Proc2P.Analysis.AnalysisClasses import AnalysisResult as module
+
+    def read_mouse_db(animals, prefixes):
+        raise AssertionError('Baserow is read')
+
+    monkeypatch.setattr(module, 'read_mouse_db', read_mouse_db)
+    monkeypatch.setattr(module, 'CONFIG', dataclasses.replace(module.CONFIG, use_baserow=False))
+    ds = make_ds(tmp_path)
+    ds.set_field('s1', 'Sex', 'F')
+    ds.save_df()
+    res = AnalysisResult(tmp_path, 'Fig1', script=__file__)
+    res.set_sessions(['s1', 's2', 's3'], dataset=ds)
+    assert res.mice_error is None and res.mice.set_index('Animal').loc['m1', 'Sex'] == 'F'
+    assert 'Baserow' not in capsys.readouterr().out

@@ -23,6 +23,7 @@ class SiteConfig:
     lab_identifier: str #name of the lab, for generating dataset identifiers
     uv_env_dir: str #envs/update_env.bat builds each user's lncm env in <uv_env_dir>/<username>/lncm
     job_queue: dict #job queue manager: api_port (localhost), dashboard_port (lab network), data_dir (manager's database)
+    use_baserow: bool = False #False: code that can run without Baserow skips it silently (job queue Task updates, animal info of AnalysisResult)
 
 def _load_config(fname) -> SiteConfig:
     this_package = Path(__file__).resolve().parent

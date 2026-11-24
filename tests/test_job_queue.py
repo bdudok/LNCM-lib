@@ -182,6 +182,39 @@ def test_on_done_hook_adds_its_message_to_the_result(tmp_path, monkeypatch):
     assert jobs[ids[0]]['result'] == 'ann1. Task set'
 
 
+def test_failing_hook_leaves_the_job_done(tmp_path, monkeypatch):
+    from JobQueue import manager as manager_module
+    monkeypatch.setitem(manager_module.JOB_TYPES, 'TEST',
+                        common.JobTypeSpec('JobQueue.common:echo_job', 3, on_done='JobQueue.hooks:motion_corrected'))
+
+    def unreachable(data):
+        raise ConnectionError('Baserow not reachable')
+    monkeypatch.setattr('JobQueue.hooks.motion_corrected', unreachable)
+    m = Manager(tmp_path / 'jobs.sqlite')
+    job_id = m.submit(job('ann'))['job_id']
+    sync(m, 'ann')
+    sync(m, 'ann', started=[job_id], finished=[{'job_id': job_id, 'ok': True, 'result': 'ann1', 'worker': 'w'}])
+    for t in m.hook_threads:
+        t.join()
+    out = m.jobs({'user': 'ann', 'token': 'ann-token', 'job_ids': [job_id]})['jobs'][0]
+    assert out['status'] == 'done' and out['result'].startswith('ann1. motion_corrected failed: ConnectionError')
+
+
+def test_hooks_do_nothing_without_baserow(monkeypatch):
+    import dataclasses
+    from JobQueue import hooks
+    from BaserowAPI import BaserowRequests
+
+    def no_baserow(*args, **kwargs):
+        raise AssertionError('Baserow is used')
+    monkeypatch.setattr(hooks, 'CONFIG', dataclasses.replace(hooks.CONFIG, use_baserow=False))
+    monkeypatch.setattr(BaserowRequests, 'SetTask', no_baserow)
+    monkeypatch.setattr(BaserowRequests, 'GetSessions', no_baserow)
+    assert hooks.motion_corrected([{}, {'id': 1}, False]) is None
+    assert hooks.signals_pulled(['path', 'm_001', 'Auto']) is None
+    assert hooks.rois_processed(['path', 'm_001', '1', {}]) is None
+
+
 def test_set_task_changes_only_a_task_in_the_expected_state(monkeypatch):
     from types import SimpleNamespace
     from BaserowAPI import BaserowRequests

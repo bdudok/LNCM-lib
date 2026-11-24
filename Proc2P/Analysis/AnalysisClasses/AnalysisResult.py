@@ -19,6 +19,7 @@ import requests
 
 from BaserowAPI.BaserowRequests import GetSessions
 from BaserowAPI.config import config as baserow_config
+from envs.site_config import CONFIG
 
 LIB_ROOT = Path(__file__).resolve().parents[3]
 CONFIRMED_ENV = 'LNCM_UNCOMMITTED_CONFIRMED'  # set for the plot script that save() runs: already confirmed
@@ -372,7 +373,8 @@ class AnalysisResult:
         '''
         One row per animal of the sessions. The DataSet is the pin on the metadata: Sex, Strain, DOB and FirstSurgery
         of an animal and Date of a session are taken from its columns of these names. Baserow is read only for the
-        animals and sessions that have no value there. FirstSession is the
+        animals and sessions that have no value there, and only with use_baserow in site_config (otherwise those
+        values are empty). FirstSession is the
         date of the first session of the animal used in this result, nSessions the number of its sessions used.
         AgeFirstSession and AgeFirstSurgery are in days.
         '''
@@ -390,7 +392,7 @@ class AnalysisResult:
         look_up_animals = [animal for animal in animals if any(pins[animal][key] is None for key in MOUSE_FIELDS)]
         look_up_prefixes = sessions.loc[session_dates.isna(), 'Prefix']
         entries, dates = {}, {}
-        if look_up_animals or len(look_up_prefixes):
+        if CONFIG.use_baserow and (look_up_animals or len(look_up_prefixes)):
             entries, dates = read_mouse_db(look_up_animals, look_up_prefixes)
         session_dates = session_dates.fillna(pandas.to_datetime(sessions['Prefix'].map(dates)))
         rows = []

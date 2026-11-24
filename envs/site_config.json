@@ -22,6 +22,7 @@
   "nwb_scratch": "E:/NWB_scratch",
   "uv_env_dir": "N:/envs",
   "lab_identifier": "BCM_LNCM_Dudoklab",
+  "use_baserow": true,
   "job_queue": {
     "api_port": 8765,
     "dashboard_port": 8766,
