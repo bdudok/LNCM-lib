@@ -121,7 +121,7 @@ class GUI_main(QtWidgets.QMainWindow):
 
         # add everything to main window layout
         self.main_widget = QtWidgets.QWidget(self)  # central widget
-        self.main_widget.layout = QtWidgets.QVBoxLayout(self.table_widget)
+        self.main_widget.layout = QtWidgets.QVBoxLayout(self.main_widget)
         self.main_widget.layout.addWidget(self.session_bar)
         self.main_widget.layout.addWidget(self.separator)
         self.main_widget.layout.addWidget(self.table_widget)
