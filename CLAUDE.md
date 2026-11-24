@@ -25,6 +25,7 @@ You are an expert Python programmer and data scientist working for a neurophysio
 - By default, keep all necessary code in the script file. If a helper would likely be reused, ask whether it should go into LNCM-lib.
 - New scripts that make a figure or a statistical result save it with `AnalysisResult` (`Proc2P/Analysis/AnalysisClasses/AnalysisResult.py`): the figures, the tables behind them, the stats, the sessions used (`set_sessions`, with the DataSet), and the scripts that have to run before (`steps`). Scripts that only process or pull data don't need it.
 - Scripts that save or load an `AnalysisResult` import explicitly (no `import *`) and only from LNCM-lib and installed packages, never from 2p_code (e.g. `_LNCM_Analysis`), so others can run them with LNCM-lib alone. Set the figure font (`plt.rcParams` Arial 12 pt) in the script after the imports, because importing `PlotTools` sets it to 8 pt.
+- Scripts that loop over sessions save their output after each session and skip sessions already in it, so a rerun after an error continues where it stopped.
 - No extra features, refactors, or abstractions beyond the task. No error handling for cases that can't happen; validate only at boundaries (user input, files, external data).
 - If I'm describing a problem, asking a question, or thinking out loud, give your assessment and stop — don't apply a fix until I ask.
 
