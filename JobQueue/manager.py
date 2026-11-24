@@ -6,6 +6,8 @@ Job queue manager. One instance runs on the analysis server (scheduled task, see
 - Free slots of a job type go to the user with the fewest running jobs of that type, so one user's batch doesn't
   hold up the others.
 - The dashboard (read-only) is served on the lab network.
+- On other computers, clients start a local manager (--local) when none is running: its database is in the user's
+  profile, the dashboard is only on localhost, and it exits after MANAGER_IDLE_S without requests and jobs.
 Run: python -m JobQueue.manager (from the LNCM-lib folder)
 '''
 import sys
@@ -19,7 +21,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-from JobQueue.common import (JOB_TYPES, RUNNER_LOST_S, ASSIGN_TIMEOUT_S, api_port, dashboard_port,
+from JobQueue.common import (JOB_TYPES, RUNNER_LOST_S, ASSIGN_TIMEOUT_S, MANAGER_IDLE_S, api_port, dashboard_port,
                              manager_data_dir, display_name, resolve)
 
 ACTIVE = ('assigned', 'running')
@@ -74,6 +76,7 @@ class Manager:
         self.runners = {}  # runner_id: dict(user, lib_root, pid, last_seen, workers)
         self.hook_threads = []  # running on_done hooks
         self.started = time.time()
+        self.last_request = time.time()
 
     # --- identity
     def _check_token(self, user: str, token: str):
@@ -256,6 +259,14 @@ class Manager:
                 n_user[user] = n_user.get(user, 0) + 1
                 free -= 1
 
+    def idle(self) -> bool:
+        '''No API request for MANAGER_IDLE_S and no job waiting or running.'''
+        if time.time() - self.last_request < MANAGER_IDLE_S:
+            return False
+        with self.lock:
+            n = self.db.execute(f"SELECT COUNT(*) FROM jobs WHERE status IN {('pending', *ACTIVE)}").fetchone()[0]
+        return n == 0
+
     def housekeeping(self):
         '''Called periodically so jobs of stopped runners fail even if no runner reports.'''
         with self.lock:
@@ -321,6 +332,7 @@ def make_api_handler(manager: Manager):
             self.wfile.write(body)
 
         def do_GET(self):
+            manager.last_request = time.time()
             url = urlparse(self.path)
             if url.path == '/health':
                 self._reply(200, manager.health({k: v[0] for k, v in parse_qs(url.query).items()}))
@@ -328,6 +340,7 @@ def make_api_handler(manager: Manager):
                 self._reply(404, {'error': 'not found'})
 
         def do_POST(self):
+            manager.last_request = time.time()
             func = posts.get(self.path)
             if func is None:
                 return self._reply(404, {'error': 'not found'})
@@ -370,31 +383,37 @@ def make_dashboard_handler(manager: Manager):
     return DashboardHandler
 
 
-def serve(api_port_n: int, dashboard_port_n: int, data_dir: Path):
+def serve(api_port_n: int, dashboard_port_n: int, data_dir: Path, local=False):
+    '''
+    :param local: dashboard only on localhost (no firewall prompt), and exit when idle
+    '''
     manager = Manager(data_dir / 'jobs.sqlite')
     api = ThreadingHTTPServer(('127.0.0.1', api_port_n), make_api_handler(manager))
-    dash = ThreadingHTTPServer(('0.0.0.0', dashboard_port_n), make_dashboard_handler(manager))
+    dash = ThreadingHTTPServer(('127.0.0.1' if local else '0.0.0.0', dashboard_port_n),
+                               make_dashboard_handler(manager))
     for server in (api, dash):
         threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f'Job queue manager: API on 127.0.0.1:{api_port_n}, dashboard on port {dashboard_port_n}, '
           f'database in {data_dir}', flush=True)
     try:
-        while True:
+        while not (local and manager.idle()):
             time.sleep(5)
             manager.housekeeping()
+        print(time.strftime('%Y-%m-%d %H:%M:%S'), 'idle, exiting', flush=True)
     finally:
         api.shutdown()
         dash.shutdown()
 
 
 def main():
+    local = '--local' in sys.argv[1:]
     data_dir = manager_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
     log = open(data_dir / 'manager.log', 'a', buffering=1)
     sys.stdout = sys.stderr = log
     print(time.strftime('%Y-%m-%d %H:%M:%S'), 'starting', flush=True)
     try:
-        serve(api_port(), dashboard_port(), data_dir)
+        serve(api_port(), dashboard_port(), data_dir, local=local)
     except OSError as e:
         print(f'Could not open the ports ({e}). Is another manager running?', flush=True)
         raise

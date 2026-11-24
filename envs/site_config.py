@@ -22,7 +22,7 @@ class SiteConfig:
     nwb_scratch: str #temporary processed folders of NWBImagingSession (on a data drive, not the boot drive)
     lab_identifier: str #name of the lab, for generating dataset identifiers
     uv_env_dir: str #envs/update_env.bat builds each user's lncm env in <uv_env_dir>/<username>/lncm
-    job_queue: dict #job queue manager: api_port (localhost), dashboard_port (lab network), data_dir (manager's database)
+    job_queue: dict #job queue manager: api_port (localhost), dashboard_port (lab network), data_dir (manager's database), server (host name of the shared manager; other computers start a local one)
     use_baserow: bool = False #False: code that can run without Baserow skips it silently (job queue Task updates, animal info of AnalysisResult)
 
 def _load_config(fname) -> SiteConfig:

@@ -5,6 +5,7 @@ the JSON codec for job data and the HTTP helper.
 import os
 import json
 import time
+import socket
 import getpass
 import secrets
 import importlib
@@ -43,6 +44,7 @@ RUNNER_LOST_S = 30.0  # a runner that hasn't reported for this long is considere
 ASSIGN_TIMEOUT_S = 30.0  # an assigned job that the runner hasn't started by then goes back to pending
 WORKER_IDLE_S = 600.0  # runners stop workers that had no job for this long
 RUNNER_IDLE_S = 1800.0  # runners exit after this long with no workers and no jobs
+MANAGER_IDLE_S = 1800.0  # a local manager (not on the server) exits after this long with no requests and no jobs
 
 
 def api_port() -> int:
@@ -55,6 +57,12 @@ def dashboard_port() -> int:
 
 def manager_data_dir() -> Path:
     return Path(os.environ.get('LNCM_JOBQUEUE_DATA_DIR', CONFIG.job_queue['data_dir']))
+
+
+def is_server() -> bool:
+    '''True on the computer that runs the shared manager (job_queue server in site_config).'''
+    server = CONFIG.job_queue.get('server')
+    return bool(server) and socket.gethostname().lower() == server.lower()
 
 
 def user_state_dir() -> Path:

@@ -5,6 +5,8 @@ Scripts that only queue jobs:
     job_id = submit('GEVIReg', (processed_path, prefix, RegConfig()), label=prefix)
 GUIs that want the results back keep a QueueClient and call results() periodically.
 Jobs run in the user's own account, in a runner process that this module starts when needed.
+On a computer other than the server (job_queue server in site_config), the client starts a local manager when none
+is running.
 '''
 import os
 import sys
@@ -14,9 +16,11 @@ import subprocess
 from urllib.parse import urlencode
 
 from JobQueue.common import (JOB_TYPES, ManagerUnavailable, ManagerRefused, call, encode, current_user, user_token,
-                             lib_root, user_state_dir)
+                             lib_root, user_state_dir, is_server)
 
 RUNNER_START_WAIT_S = 20.0  # don't start another runner within this time after starting one
+MANAGER_START_TIMEOUT_S = 15.0  # wait this long for a local manager to answer
+MANAGER_RETRY_S = 60.0  # after starting a local manager, don't start another within this time
 
 
 class QueueClient:
@@ -31,6 +35,7 @@ class QueueClient:
         self.token = user_token()
         self.lib_root = str(lib_root())
         self._runner_started = 0.0
+        self._manager_started = 0.0
         self.manager_up = False
 
     def submit(self, job_type: str, data, label: str = '', key: str | None = None) -> str:
@@ -80,7 +85,12 @@ class QueueClient:
 
     def _call(self, path, data=None, timeout=2.0):
         try:
-            resp = call(path, data, timeout=timeout)
+            try:
+                resp = call(path, data, timeout=timeout)
+            except ManagerUnavailable:
+                if not self._start_local_manager():
+                    raise
+                resp = call(path, data, timeout=timeout)
         except ManagerRefused:
             self.manager_up = True
             raise
@@ -90,18 +100,47 @@ class QueueClient:
         self.manager_up = True
         return resp
 
+    def _start_local_manager(self) -> bool:
+        '''Start a local manager unless this is the server or one was started recently. True if it answers.'''
+        if is_server() or time.time() - self._manager_started < MANAGER_RETRY_S:
+            return False
+        self._manager_started = time.time()
+        return start_local_manager()
+
+
+def start_local_manager() -> bool:
+    '''
+    Start a manager for this computer in the background and wait until it answers. True if it does.
+    Its database and log are in <user state dir>/manager. It exits when idle (see JobQueue.manager).
+    '''
+    env = {**os.environ}
+    env.setdefault('LNCM_JOBQUEUE_DATA_DIR', str(user_state_dir() / 'manager'))
+    _start_detached([sys.executable, '-m', 'JobQueue.manager', '--local'], 'manager-start.log', env)
+    deadline = time.time() + MANAGER_START_TIMEOUT_S
+    while time.time() < deadline:
+        try:
+            call('/health', timeout=0.5)
+            return True
+        except ManagerUnavailable:
+            time.sleep(0.2)
+    return False
+
 
 def start_runner():
     '''Start a runner in the background, detached so it keeps running after this process exits.'''
+    _start_detached([sys.executable, '-m', 'JobQueue.runner'], 'runner-start.log')
+
+
+def _start_detached(cmd, log_name, env=None):
+    '''Start cmd from the LNCM-lib folder, detached so it keeps running after this process exits.'''
     kwargs = {'cwd': str(lib_root()), 'stdin': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL,
-              'stderr': open(user_state_dir() / 'runner-start.log', 'a'), 'close_fds': True}
-    cmd = [sys.executable, '-m', 'JobQueue.runner']
+              'stderr': open(user_state_dir() / log_name, 'a'), 'close_fds': True, 'env': env}
     if os.name == 'nt':
         # CREATE_NO_WINDOW, not DETACHED_PROCESS: the venv's python.exe starts the base interpreter, which would open a
         # console window if it had no (hidden) console to share
         flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
         try:
-            # leave the job object of the parent (e.g. PyCharm's), which would kill the runner when the parent exits
+            # leave the job object of the parent (e.g. PyCharm's), which would kill the process when the parent exits
             subprocess.Popen(cmd, creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, **kwargs)
         except OSError:  # the parent's job object does not allow breaking away
             subprocess.Popen(cmd, creationflags=flags, **kwargs)

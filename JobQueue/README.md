@@ -9,7 +9,10 @@ One manager on the analysis server schedules the processing jobs of all users. J
 | `client.py` | BatchGUI, scripts | Queues jobs, receives results |
 | `handlers.py` | inside the workers | One function per job type |
 
-Settings are in `envs/site_config.json` (`job_queue`: ports, `data_dir`). Names on the dashboard come from `envs/user_names.json`, which git ignores because it is personal info: `{"u123456": "First name"}`, one entry per lab member. Users missing from it are shown by their Windows user name. Keep the file in the manager's checkout, and restart the manager after editing it.
+Settings are in `envs/site_config.json` (`job_queue`: ports, `data_dir`, `server`). Names on the dashboard come from `envs/user_names.json`, which git ignores because it is personal info: `{"u123456": "First name"}`, one entry per lab member. Users missing from it are shown by their Windows user name. Keep the file in the manager's checkout, and restart the manager after editing it.
+
+## Other computers
+On a computer whose name is not `job_queue` `server` in `envs/site_config.json`, the client starts a local manager when none is running. Nothing needs to be set up. Its database and log are in `%USERPROFILE%\.lncm_jobqueue\manager`, the dashboard is at `http://localhost:8766`, and it exits after 30 min without jobs. Set `use_baserow` to `false` in `envs/site_config.json` if you don't use Baserow.
 
 ## One-time setup on the server
 1. Create the `data_dir` folder (`N:\jobqueue`) and remove write access for other users from it.

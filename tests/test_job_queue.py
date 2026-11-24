@@ -215,6 +215,39 @@ def test_hooks_do_nothing_without_baserow(monkeypatch):
     assert hooks.rois_processed(['path', 'm_001', '1', {}]) is None
 
 
+def test_local_manager_is_idle_without_requests_and_jobs(tmp_path, monkeypatch):
+    m = Manager(tmp_path / 'jobs.sqlite')
+    assert not m.idle()
+    job_id = m.submit(job('ann'))['job_id']
+    m.last_request -= common.MANAGER_IDLE_S + 1
+    assert not m.idle()  # a job is waiting
+    sync(m, 'ann')
+    sync(m, 'ann', started=[job_id], finished=[{'job_id': job_id, 'ok': True, 'result': 'ann1', 'worker': 'w'}])
+    m.last_request -= common.MANAGER_IDLE_S + 1
+    assert m.idle()
+
+
+def test_client_starts_a_local_manager_except_on_the_server(tmp_path, monkeypatch):
+    from JobQueue import client as client_module
+    monkeypatch.setenv('LNCM_JOBQUEUE_API_PORT', str(free_port()))
+    monkeypatch.setenv('LNCM_JOBQUEUE_DASHBOARD_PORT', str(free_port()))
+    monkeypatch.setenv('LNCM_JOBQUEUE_STATE_DIR', str(tmp_path / 'state'))
+    monkeypatch.setattr(client_module, 'is_server', lambda: True)
+    with pytest.raises(common.ManagerUnavailable):
+        QueueClient().job_status([])
+    monkeypatch.setattr(client_module, 'is_server', lambda: False)
+    before = {p.pid for p in psutil.Process().children()}
+    try:
+        client = QueueClient()
+        assert client.is_up()
+        assert client.job_status([]) == []
+        assert (tmp_path / 'state' / 'manager' / 'jobs.sqlite').exists()
+    finally:
+        for p in psutil.Process().children():
+            if p.pid not in before:
+                p.kill()
+
+
 def test_set_task_changes_only_a_task_in_the_expected_state(monkeypatch):
     from types import SimpleNamespace
     from BaserowAPI import BaserowRequests

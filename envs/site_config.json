@@ -26,6 +26,7 @@
   "job_queue": {
     "api_port": 8765,
     "dashboard_port": 8766,
-    "data_dir": "N:/jobqueue"
+    "data_dir": "N:/jobqueue",
+    "server": "SVR-LNCM-01"
   }
 }
