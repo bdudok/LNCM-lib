@@ -80,14 +80,18 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.session.has_ephys:
             ca = self.TraceCanvas.ax[2]
             self.session.map_seizuretimes()
-            sztimes = self.session.sztimes[self.session.sztime_channels.index(1)]
+            lfp_ch = self.pick_lfp_channel()
+            if lfp_ch != self.session.lfp_ch:
+                self.session.lfp_ch = lfp_ch
+                self.session.map_phys()
+            sztimes = self.session.sztimes[self.session.sztime_channels.index(lfp_ch)]
             for start, stop in zip(*sztimes):
                 for ai in (0, 2):
                     self.TraceCanvas.ax[ai].axvspan(self.X[start], self.X[stop], facecolor=self.config.SzColor,
                                                     edgecolor=None, alpha=0.4)
             Y = butter_bandpass_filter(self.session.ephys.trace, 1, 500, self.session.si['fs'])
             ca.plot(numpy.linspace(0, self.X[-1], len(Y)), Y, color='black')
-            ca.set_ylabel('LFP (mV)')
+            ca.set_ylabel(f'LFP{lfp_ch} (mV)')
 
         if self.session.opto is not None:
             # line: masked frames; vertical lines: start and end of each train (also when stim is between frames)
@@ -125,6 +129,17 @@ class GUI_main(QtWidgets.QMainWindow):
                         self.pick(child_pos, widget=obj)
                     return True
         return super().eventFilter(obj, event)
+
+    def pick_lfp_channel(self):
+        '''config.LFPChannel if set, else the first channel with seizure times, else the channel with the largest
+        signal (unconnected inputs are flat). Call after session.map_seizuretimes.'''
+        if self.config.LFPChannel is not None:
+            return self.config.LFPChannel
+        for ch, (starts, _) in zip(self.session.sztime_channels, self.session.sztimes):
+            if len(starts):
+                return ch
+        sd = self.session.ephys.edat[1:, ::50].std(axis=1)
+        return int(numpy.argmax(sd)) + 1
 
     def make_control_widget(self):
         #top row for ROI preview and controls

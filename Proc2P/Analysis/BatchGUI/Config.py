@@ -21,6 +21,9 @@ class GuiConfig:
     RedColor = '#D24604'
     SzColor = '#FC9564'
     OptoColor= '#1E90FF'
+    # LFP channel the session viewer shows (row of _ephys.npy, from 1). None: the first channel with seizure times,
+    # else the channel with the largest signal
+    LFPChannel = None
 
 
 class State(Enum):

@@ -459,7 +459,7 @@ class ImagingSession(object):
         fs = self.si.info['fs']
         for suffix, stfield, do_filter in zip(('_seizure_times_curated.xlsx', '_seizure_times.xlsx'),
                                    (('Start', 'Stop'), ('Sz.Start(s)', 'Sz.Stop(s)')), (True, False)):
-            found_any = False
+            found_files = []
             self.sztime_channels = []
             self.sztimes = []
             for i in range(n_channels):
@@ -471,7 +471,7 @@ class ImagingSession(object):
                 self.sztime_channels.append(i + 1)
                 if os.path.exists(fname): #this is not supposed to be case sensitive on Windows (confirmed). if it fails to open,
                     # fix ch vs Ch in name.
-                    found_any = True
+                    found_files.append(fname)
                     stdat = read_excel(fname)
                     if do_filter:
                         stdat = stdat.loc[~stdat['Included'].eq(False)]
@@ -479,8 +479,8 @@ class ImagingSession(object):
                     self.sztimes.append(sztimes)
                 else:
                     self.sztimes.append([[], []])
-            if found_any:
-                print(f'using seizures from {fname}')
+            if found_files:
+                print('using seizures from', ', '.join(str(f) for f in found_files))
                 break
 
     def map_instrate(self):
