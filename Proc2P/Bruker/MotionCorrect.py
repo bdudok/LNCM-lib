@@ -122,6 +122,7 @@ def run(settings, session_df, pre_only, overwrite_previous, overwrite_preproc, r
     failed = []
     while jobs:
         time.sleep(POLL_S)
+        client.ensure_runner()  # restarts the runner if it stopped while jobs are waiting
         for job in client.job_status(list(jobs)):
             if job['status'] == 'done':
                 lprint(None, 'Done:', job['result'])
