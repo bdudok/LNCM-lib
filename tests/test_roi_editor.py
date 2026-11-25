@@ -10,7 +10,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import numpy  # noqa: E402
 import tifffile  # noqa: E402
-from PySide6 import QtCore, QtTest, QtWidgets  # noqa: E402
+from PySide6 import QtCore, QtGui, QtTest, QtWidgets  # noqa: E402
 
 from Proc2P.Analysis.BatchGUI import RoiEditorQt  # noqa: E402
 from Proc2P.Analysis.RoiEditor import RoiEditor  # noqa: E402
@@ -90,16 +90,30 @@ def test_remembers_input_set(editor, tmp_path):
 
 
 def test_draw_with_mouse(editor):
-    '''A stroke drawn with the mouse starts at the first point (not at 0, 0), and the tool ends after it'''
+    '''Left clicks add vertices, a drag adds points, right click closes the polygon; then the tool ends.
+    The line on the screen starts at the first vertex (not at 0, 0).'''
     view = editor.output_view
+    port = view.viewport()
     editor.on_click(view, QtCore.QPointF(50, 50), QtCore.Qt.RightButton)  # right click on the output: draw
     assert editor.tool == RoiEditorQt.Tool.DRAW
-    points = [view.mapFromScene(QtCore.QPointF(x, y)) for x, y in ((20, 20), (40, 20), (40, 40), (20, 40), (15, 30))]
-    QtTest.QTest.mousePress(view.viewport(), QtCore.Qt.LeftButton, pos=points[0])
-    for point in points[1:]:
-        QtTest.QTest.mouseMove(view.viewport(), point)
-    shown = view._stroke_item.path().elementAt(0)  # the line on the screen
+    to_view = [view.mapFromScene(QtCore.QPointF(x, y)) for x, y in ((20, 20), (40, 20), (40, 40), (20, 40))]
+    for point in to_view[:2]:
+        QtTest.QTest.mouseClick(port, QtCore.Qt.LeftButton, pos=point)
+    shown = view._stroke_item.path().elementAt(0)
     assert abs(shown.x - 20) < 2 and abs(shown.y - 20) < 2
-    QtTest.QTest.mouseRelease(view.viewport(), QtCore.Qt.LeftButton, pos=points[-1])
+    # drag with the left button held from the 3rd to the 4th vertex
+    QtTest.QTest.mousePress(port, QtCore.Qt.LeftButton, pos=to_view[2])
+    move = QtGui.QMouseEvent(QtCore.QEvent.MouseMove, QtCore.QPointF(to_view[3]), QtCore.QPointF(to_view[3]),
+                             QtCore.Qt.NoButton, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier)
+    QtWidgets.QApplication.sendEvent(port, move)
+    QtTest.QTest.mouseRelease(port, QtCore.Qt.LeftButton, pos=to_view[3])
+    assert len(view._stroke) == 4 and not editor.output_polys  # releasing does not close the polygon
+    QtTest.QTest.mouseClick(port, QtCore.Qt.RightButton, pos=to_view[3])
     assert len(editor.output_polys) == 1
     assert editor.tool == RoiEditorQt.Tool.NONE
+    # right click toggles the tool when no polygon is started
+    QtTest.QTest.mouseClick(port, QtCore.Qt.RightButton, pos=to_view[0])
+    assert editor.tool == RoiEditorQt.Tool.DRAW
+    QtTest.QTest.mouseClick(port, QtCore.Qt.RightButton, pos=to_view[0])
+    assert editor.tool == RoiEditorQt.Tool.NONE
+    assert len(editor.output_polys) == 1

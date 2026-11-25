@@ -22,7 +22,8 @@ Left pane: the input ROI set on the preview image. Right pane: the output ROIs. 
         (i: dilated by 3 pixels). Only these stay selected (yellow), so a right click adds only these, until a size
         slider is moved.
     g: draw ROIs. r: lasso that removes the output ROIs whose centroid is inside.
-        Each tool takes one stroke (left button held), then ends; Esc cancels it.
+        Left click adds a vertex (drag with the left button to add more), right click closes the polygon.
+        Each tool takes one polygon, then ends. Right click with no polygon started, or Esc, ends the tool.
     d: dilate all output ROIs by 1 pixel. c: clear the output. e: save.
 Only the selected input ROI set is loaded; the image size is taken from the preview.
 Open from another Qt app with open_editor (non-modal, in the same process), or run this file with the processed
@@ -106,12 +107,39 @@ class ImageView(QtWidgets.QGraphicsView):
             self._pan_start = event.position()
             self.setCursor(QtCore.Qt.ClosedHandCursor)
         elif self.drawing and event.button() == QtCore.Qt.LeftButton:
-            self._stroke = [(pos.x(), pos.y())]
-            self._stroke_path = QtGui.QPainterPath()
-            self._stroke_path.moveTo(pos)
-            self._stroke_item = self.scene().addPath(self._stroke_path, make_pen(COLORS['stroke']))
+            # left click adds a vertex (dragging adds more), right click closes the polygon
+            if self._stroke_item is None:
+                self._stroke = [(pos.x(), pos.y())]
+                self._stroke_path = QtGui.QPainterPath()
+                self._stroke_path.moveTo(pos)
+                self._stroke_item = self.scene().addPath(self._stroke_path, make_pen(COLORS['stroke']))
+            else:
+                self.add_stroke_point(pos)
+        elif self.drawing and event.button() == QtCore.Qt.RightButton and self._stroke_item is not None:
+            self.finish_stroke()
         else:
             self.clicked.emit(self, pos, event.button())
+
+    def add_stroke_point(self, pos):
+        last = self._stroke[-1]
+        if max(abs(pos.x() - last[0]), abs(pos.y() - last[1])) >= 1:  # one point per image pixel at most
+            self._stroke.append((pos.x(), pos.y()))
+            self._stroke_path.lineTo(pos)
+            self._stroke_item.setPath(self._stroke_path)
+
+    def finish_stroke(self):
+        '''Close the polygon. With 3 points or fewer it is discarded, and the tool stays on.'''
+        if self._stroke_item is None:
+            return
+        self.cancel_stroke()
+        stroke, self._stroke = self._stroke, []
+        if len(stroke) > 3:
+            self.stroke_done.emit(self, stroke)
+
+    def cancel_stroke(self):
+        if self._stroke_item is not None:
+            self.scene().removeItem(self._stroke_item)
+        self._stroke_item, self._stroke_path = None, None
 
     def mouseMoveEvent(self, event):
         if self._pan_start is not None:
@@ -119,24 +147,13 @@ class ImageView(QtWidgets.QGraphicsView):
             self._pan_start = event.position()
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - int(delta.x()))
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - int(delta.y()))
-        elif self._stroke_item is not None:
-            pos = self.mapToScene(event.position().toPoint())
-            last = self._stroke[-1]
-            if max(abs(pos.x() - last[0]), abs(pos.y() - last[1])) >= 1:  # one point per image pixel at most
-                self._stroke.append((pos.x(), pos.y()))
-                self._stroke_path.lineTo(pos)
-                self._stroke_item.setPath(self._stroke_path)
+        elif self._stroke_item is not None and event.buttons() & QtCore.Qt.LeftButton:
+            self.add_stroke_point(self.mapToScene(event.position().toPoint()))
 
     def mouseReleaseEvent(self, event):
         if event.button() == QtCore.Qt.MiddleButton and self._pan_start is not None:
             self._pan_start = None
             self.unsetCursor() if not self.drawing else self.setCursor(QtCore.Qt.CrossCursor)
-        elif event.button() == QtCore.Qt.LeftButton and self._stroke_item is not None:
-            self.scene().removeItem(self._stroke_item)
-            self._stroke_item, self._stroke_path = None, None
-            stroke, self._stroke = self._stroke, []
-            if len(stroke) > 3:
-                self.stroke_done.emit(self, stroke)
 
     def keyPressEvent(self, event):
         # keys are handled by the window's shortcuts, not by scrolling the view
@@ -202,7 +219,6 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
             self.channel_boxes[channel] = box
             controls.addWidget(box)
         controls.addStretch()
-        layout.addLayout(controls)
 
         panes = QtWidgets.QHBoxLayout()
         buttons = QtWidgets.QVBoxLayout()
@@ -215,15 +231,17 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
                    ('Save [e]', 'E', self.save),
                    ('Reset view [f]', 'F', self.fit),
                    ('End tool [Esc]', 'Esc', lambda: self.set_tool(Tool.NONE)))
+        top_row = ('Reset view [f]', 'End tool [Esc]')  # right end of the top row, the others in the left column
         for label, key, callback in actions:
             button = QtWidgets.QPushButton(label)
             button.setFocusPolicy(QtCore.Qt.NoFocus)
             button.clicked.connect(callback)
-            buttons.addWidget(button)
+            (controls if label in top_row else buttons).addWidget(button)
             action = QtGui.QAction(label, self)
             action.setShortcut(QtGui.QKeySequence(key))
             action.triggered.connect(callback)
             self.addAction(action)
+        layout.addLayout(controls)
         buttons.addWidget(QtWidgets.QLabel('Add mode:'))
         self.mode_group = QtWidgets.QButtonGroup(self)
         for mode in AddModes:
@@ -261,7 +279,7 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
         slider.setFocusPolicy(QtCore.Qt.NoFocus)
         slider.valueChanged.connect(lambda v: label.setText(f'{name}: {v}'))
         label.setText(f'{name}: {value}')
-        label.setMinimumWidth(60)
+        label.setMinimumWidth(label.fontMetrics().horizontalAdvance(f"{name}: 000") + 4)
         layout.addWidget(label)
         layout.addWidget(slider)
         return slider
@@ -445,12 +463,20 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
         for view in (self.input_view, self.output_view):
             view.drawing = drawing
             view.setCursor(QtCore.Qt.CrossCursor) if drawing else view.unsetCursor()
+            if not drawing:
+                view.cancel_stroke()
         messages = {Tool.NONE: '', Tool.LASSO: 'Lasso: draw around input ROIs to add',
                     Tool.LASSO_DILATE: 'Lasso: draw around input ROIs to add, dilated by 3 pixels',
                     Tool.DRAW: 'Draw: each stroke is a new ROI', Tool.REMOVE: 'Remove: draw around output ROIs'}
-        self.statusBar().showMessage(messages[tool] + ('. Esc ends the tool.' if drawing else ''))
+        self.statusBar().showMessage(messages[tool] + ('. Left click: add a vertex, right click: close the polygon; '
+                                                       'right click before drawing or Esc: end the tool.' if drawing else ''))
 
     def on_click(self, view, pos, button):
+        if self.tool != Tool.NONE:
+            # a tool is on and no polygon is being drawn: right click ends the tool
+            if button == QtCore.Qt.RightButton:
+                self.set_tool(Tool.NONE)
+            return
         if view is self.input_view:
             if button == QtCore.Qt.LeftButton:
                 hit = [i for i, path in enumerate(self.input_paths) if path.contains(pos)]
