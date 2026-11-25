@@ -16,7 +16,8 @@ SYNCED_LOCK = 'lncm_synced_uv.lock'  # name of the copy in the env folder
 def env_is_current(env, env_dir, repo_lock=REPO_LOCK):
     '''False if env is under env_dir and was not synced from the current repo_lock; True otherwise.'''
     env, env_dir = Path(env), Path(env_dir)
-    if not env.is_relative_to(env_dir) or not repo_lock.is_file():
+    # not Path.is_relative_to (Python 3.9+): the SIMA worker imports this in Python 3.6
+    if not (env == env_dir or env_dir in env.parents) or not repo_lock.is_file():
         return True
     synced = env / SYNCED_LOCK
     return synced.is_file() and synced.read_bytes() == repo_lock.read_bytes()
