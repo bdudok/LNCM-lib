@@ -10,7 +10,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import numpy  # noqa: E402
 import tifffile  # noqa: E402
-from PySide6 import QtCore, QtWidgets  # noqa: E402
+from PySide6 import QtCore, QtTest, QtWidgets  # noqa: E402
 
 from Proc2P.Analysis.BatchGUI import RoiEditorQt  # noqa: E402
 from Proc2P.Analysis.RoiEditor import RoiEditor  # noqa: E402
@@ -59,10 +59,10 @@ def test_click_lasso_and_save(editor, tmp_path):
     assert len(editor.output_polys) == 2
     # only the lassoed ROIs stay selected: right click adds only these
     assert editor.included.tolist() == [True, True, False, False]
+    assert editor.tool == RoiEditorQt.Tool.NONE  # a tool ends after one stroke
     editor.clear_output()
     editor.on_click(editor.input_view, QtCore.QPointF(1, 1), QtCore.Qt.RightButton)
     assert len(editor.output_polys) == 2
-    editor.set_tool(RoiEditorQt.Tool.NONE)
 
     # moving a size slider resets the selection; right click then adds the large ROIs
     editor.min_size.setValue(8)
@@ -87,3 +87,19 @@ def test_remembers_input_set(editor, tmp_path):
     window = RoiEditorQt.open_editor(tmp_path, PREFIX, 'out')
     assert window.roi_list.currentText() == 'other'
     window.close()
+
+
+def test_draw_with_mouse(editor):
+    '''A stroke drawn with the mouse starts at the first point (not at 0, 0), and the tool ends after it'''
+    view = editor.output_view
+    editor.on_click(view, QtCore.QPointF(50, 50), QtCore.Qt.RightButton)  # right click on the output: draw
+    assert editor.tool == RoiEditorQt.Tool.DRAW
+    points = [view.mapFromScene(QtCore.QPointF(x, y)) for x, y in ((20, 20), (40, 20), (40, 40), (20, 40), (15, 30))]
+    QtTest.QTest.mousePress(view.viewport(), QtCore.Qt.LeftButton, pos=points[0])
+    for point in points[1:]:
+        QtTest.QTest.mouseMove(view.viewport(), point)
+    shown = view._stroke_item.path().elementAt(0)  # the line on the screen
+    assert abs(shown.x - 20) < 2 and abs(shown.y - 20) < 2
+    QtTest.QTest.mouseRelease(view.viewport(), QtCore.Qt.LeftButton, pos=points[-1])
+    assert len(editor.output_polys) == 1
+    assert editor.tool == RoiEditorQt.Tool.NONE

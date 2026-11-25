@@ -15,14 +15,14 @@ from Proc2P.utils import logger, lprint
 '''
 Gui for selecting ROIs from ROI sets (e.g. SIMA output), drawing ROIs, and saving them as a new ROI set.
 Left pane: the input ROI set on the preview image. Right pane: the output ROIs. The panes zoom and pan together.
-    Mouse wheel: zoom. Middle button drag: pan. f: fit the image.
+    Mouse wheel: zoom. Middle button drag: pan. f (Reset view): fit the whole image.
     Input pane: left click adds the ROI under the cursor, right click adds all ROIs within the size range.
     Output pane: left click removes the ROI under the cursor, right click starts drawing a ROI (as g).
     l / i: lasso on either pane, adds the input ROIs within the size range whose centroid is inside
         (i: dilated by 3 pixels). Only these stay selected (yellow), so a right click adds only these, until a size
         slider is moved.
     g: draw ROIs. r: lasso that removes the output ROIs whose centroid is inside.
-        In these modes each stroke (left button held) makes one polygon; Esc or another key ends the mode.
+        Each tool takes one stroke (left button held), then ends; Esc cancels it.
     d: dilate all output ROIs by 1 pixel. c: clear the output. e: save.
 Only the selected input ROI set is loaded; the image size is taken from the preview.
 Open from another Qt app with open_editor (non-modal, in the same process), or run this file with the processed
@@ -81,6 +81,7 @@ class ImageView(QtWidgets.QGraphicsView):
         self.pixmap_item.setZValue(-1)
         self.drawing = False  # set by the window when a stroke tool is active
         self._stroke = []
+        self._stroke_path = None  # kept here: a path item drops a path that has only its start point
         self._stroke_item = None
         self._pan_start = None
         for bar in (self.horizontalScrollBar(), self.verticalScrollBar()):
@@ -106,8 +107,9 @@ class ImageView(QtWidgets.QGraphicsView):
             self.setCursor(QtCore.Qt.ClosedHandCursor)
         elif self.drawing and event.button() == QtCore.Qt.LeftButton:
             self._stroke = [(pos.x(), pos.y())]
-            path = QtGui.QPainterPath(pos)
-            self._stroke_item = self.scene().addPath(path, make_pen(COLORS['stroke']))
+            self._stroke_path = QtGui.QPainterPath()
+            self._stroke_path.moveTo(pos)
+            self._stroke_item = self.scene().addPath(self._stroke_path, make_pen(COLORS['stroke']))
         else:
             self.clicked.emit(self, pos, event.button())
 
@@ -122,9 +124,8 @@ class ImageView(QtWidgets.QGraphicsView):
             last = self._stroke[-1]
             if max(abs(pos.x() - last[0]), abs(pos.y() - last[1])) >= 1:  # one point per image pixel at most
                 self._stroke.append((pos.x(), pos.y()))
-                path = self._stroke_item.path()
-                path.lineTo(pos)
-                self._stroke_item.setPath(path)
+                self._stroke_path.lineTo(pos)
+                self._stroke_item.setPath(self._stroke_path)
 
     def mouseReleaseEvent(self, event):
         if event.button() == QtCore.Qt.MiddleButton and self._pan_start is not None:
@@ -132,7 +133,7 @@ class ImageView(QtWidgets.QGraphicsView):
             self.unsetCursor() if not self.drawing else self.setCursor(QtCore.Qt.CrossCursor)
         elif event.button() == QtCore.Qt.LeftButton and self._stroke_item is not None:
             self.scene().removeItem(self._stroke_item)
-            self._stroke_item = None
+            self._stroke_item, self._stroke_path = None, None
             stroke, self._stroke = self._stroke, []
             if len(stroke) > 3:
                 self.stroke_done.emit(self, stroke)
@@ -212,7 +213,7 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
                    ('Dilate [d]', 'D', self.dilate_output),
                    ('Clear output [c]', 'C', self.clear_output),
                    ('Save [e]', 'E', self.save),
-                   ('Fit image [f]', 'F', self.fit),
+                   ('Reset view [f]', 'F', self.fit),
                    ('End tool [Esc]', 'Esc', lambda: self.set_tool(Tool.NONE)))
         for label, key, callback in actions:
             button = QtWidgets.QPushButton(label)
@@ -468,6 +469,7 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
                 self.set_tool(Tool.DRAW)
 
     def on_stroke(self, view, points):
+        '''Apply the stroke with the current tool, then end the tool'''
         lasso = to_qpolygon(points)
         if self.tool in (Tool.LASSO, Tool.LASSO_DILATE):
             inside = [i for i, poly in enumerate(self.input_polys)
@@ -484,6 +486,7 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
         elif self.tool == Tool.REMOVE:
             self.remove_output([i for i, poly in enumerate(self.output_polys)
                                 if lasso.containsPoint(QtCore.QPointF(*centroid(poly)), QtCore.Qt.OddEvenFill)])
+        self.set_tool(Tool.NONE)
 
     # ----- save
     def output_name(self):
