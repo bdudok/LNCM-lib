@@ -164,12 +164,18 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
     __name__ = 'ROIEditor'  # for lprint
     settings = QtCore.QSettings('LNCM', 'RoiEditor')  # remembers the last input ROI set and preview
 
-    def __init__(self, procpath, prefix, preferred_tag='1', parent=None):
+    def __init__(self, procpath, prefix, preferred_tag='1', input_tag=None, preview=None, parent=None):
+        '''
+        :param preferred_tag: tag of the saved ROI set (the next free number if it exists)
+        :param input_tag: input ROI set to select at start (e.g. 'iPC-R20-100-200'). Default: the one used last time
+        :param preview: preview to select at start (e.g. 'avgmax'). Default: the one used last time
+        '''
         super().__init__(parent)
         self.procpath = Path(procpath)
         self.prefix = prefix
         self.opPath = self.procpath / prefix
         self.preferred_tag = preferred_tag
+        self.start_selection = {'preview': preview, 'input_tag': input_tag}
         self.log = logger()
         self.log.set_handle(self.procpath, prefix)
         self.setWindowTitle(f'RoiEditor: {prefix}')
@@ -286,7 +292,7 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
 
     # ----- files
     def find_files(self):
-        '''List the previews and ROI sets of the session; select the ones used last time if present.'''
+        '''List the previews and ROI sets of the session; select the ones given, or else the ones used last time.'''
         roi_files, previews = [], []
         for fn in sorted(os.listdir(self.opPath)):
             if fn.startswith(f'{self.prefix}_saved_roi_') and fn.endswith('.npy'):
@@ -301,7 +307,7 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
         for fn in roi_files:
             self.roi_list.addItem(fn[len(f'{self.prefix}_saved_roi_'):-4], fn)
         for combo, key, default in ((self.preview_list, 'preview', 'avgmax'), (self.roi_list, 'input_tag', None)):
-            name = self.settings.value(key, default)
+            name = self.start_selection[key] or self.settings.value(key, default)
             index = combo.findText(name) if name else -1
             if index < 0 and combo is self.preview_list:
                 index = next((i for i in range(combo.count()) if 'avgmax' in combo.itemText(i)), 0)
@@ -559,9 +565,9 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
 _open_windows = []  # references keep the windows open when opened from another app
 
 
-def open_editor(procpath, prefix, preferred_tag='1'):
-    '''Open the editor as a non-modal window in the running Qt app'''
-    window = RoiEditorWindow(procpath, prefix, preferred_tag)
+def open_editor(procpath, prefix, preferred_tag='1', input_tag=None, preview=None):
+    '''Open the editor as a non-modal window in the running Qt app (arguments: see RoiEditorWindow)'''
+    window = RoiEditorWindow(procpath, prefix, preferred_tag, input_tag=input_tag, preview=preview)
     _open_windows.append(window)
     window.destroyed.connect(lambda: _open_windows.remove(window) if window in _open_windows else None)
     window.show()

@@ -119,3 +119,14 @@ def test_draw_with_mouse(editor):
     QtTest.QTest.mouseClick(port, QtCore.Qt.RightButton, pos=to_view[0])
     assert editor.tool == RoiEditorQt.Tool.DRAW
     assert len(editor.output_polys) == 1
+
+
+def test_start_selection(editor, tmp_path):
+    '''input_tag and preview select the input set and preview at start, instead of the ones used last time'''
+    RoiEditor.save_roi([square(5, 5, 5)], tmp_path / PREFIX / f'{PREFIX}_saved_roi_other', (100, 100))
+    tifffile.imwrite(tmp_path / PREFIX / f'{PREFIX}_preview.tif', numpy.zeros((100, 100, 3), dtype='uint8'))
+    editor.close()
+    window = RoiEditorQt.open_editor(tmp_path, PREFIX, 'out', input_tag='other', preview='preview')
+    assert window.roi_list.currentText() == 'other'
+    assert window.preview_list.currentText() == 'preview'
+    window.close()
