@@ -23,7 +23,7 @@ Left pane: the input ROI set on the preview image. Right pane: the output ROIs. 
         slider is moved.
     g: draw ROIs. r: lasso that removes the output ROIs whose centroid is inside.
         Left click adds a vertex (drag with the left button to add more), right click closes the polygon.
-        Each tool takes one polygon, then ends. Right click with no polygon started, or Esc, ends the tool.
+        The tool stays on for more polygons. Right click with no polygon started, or Esc, ends the tool.
     d: dilate all output ROIs by 1 pixel. c: clear the output. e: save.
 Only the selected input ROI set is loaded; the image size is taken from the preview.
 Open from another Qt app with open_editor (non-modal, in the same process), or run this file with the processed
@@ -495,7 +495,7 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
                 self.set_tool(Tool.DRAW)
 
     def on_stroke(self, view, points):
-        '''Apply the stroke with the current tool, then end the tool'''
+        '''Apply the stroke with the current tool. The tool stays on.'''
         lasso = to_qpolygon(points)
         if self.tool in (Tool.LASSO, Tool.LASSO_DILATE):
             inside = [i for i, poly in enumerate(self.input_polys)
@@ -512,7 +512,6 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
         elif self.tool == Tool.REMOVE:
             self.remove_output([i for i, poly in enumerate(self.output_polys)
                                 if lasso.containsPoint(QtCore.QPointF(*centroid(poly)), QtCore.Qt.OddEvenFill)])
-        self.set_tool(Tool.NONE)
 
     # ----- save
     def output_name(self):

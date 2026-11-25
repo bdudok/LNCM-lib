@@ -59,7 +59,8 @@ def test_click_lasso_and_save(editor, tmp_path):
     assert len(editor.output_polys) == 2
     # only the lassoed ROIs stay selected: right click adds only these
     assert editor.included.tolist() == [True, True, False, False]
-    assert editor.tool == RoiEditorQt.Tool.NONE  # a tool ends after one stroke
+    assert editor.tool == RoiEditorQt.Tool.LASSO  # the tool stays on
+    editor.set_tool(RoiEditorQt.Tool.NONE)
     editor.clear_output()
     editor.on_click(editor.input_view, QtCore.QPointF(1, 1), QtCore.Qt.RightButton)
     assert len(editor.output_polys) == 2
@@ -90,7 +91,8 @@ def test_remembers_input_set(editor, tmp_path):
 
 
 def test_draw_with_mouse(editor):
-    '''Left clicks add vertices, a drag adds points, right click closes the polygon; then the tool ends.
+    '''Left clicks add vertices, a drag adds points, right click closes the polygon; the tool stays on until a
+    right click with no polygon started.
     The line on the screen starts at the first vertex (not at 0, 0).'''
     view = editor.output_view
     port = view.viewport()
@@ -110,10 +112,10 @@ def test_draw_with_mouse(editor):
     assert len(view._stroke) == 4 and not editor.output_polys  # releasing does not close the polygon
     QtTest.QTest.mouseClick(port, QtCore.Qt.RightButton, pos=to_view[3])
     assert len(editor.output_polys) == 1
+    assert editor.tool == RoiEditorQt.Tool.DRAW
+    # right click with no polygon started ends the tool, and starts it again on the output pane
+    QtTest.QTest.mouseClick(port, QtCore.Qt.RightButton, pos=to_view[0])
     assert editor.tool == RoiEditorQt.Tool.NONE
-    # right click toggles the tool when no polygon is started
     QtTest.QTest.mouseClick(port, QtCore.Qt.RightButton, pos=to_view[0])
     assert editor.tool == RoiEditorQt.Tool.DRAW
-    QtTest.QTest.mouseClick(port, QtCore.Qt.RightButton, pos=to_view[0])
-    assert editor.tool == RoiEditorQt.Tool.NONE
     assert len(editor.output_polys) == 1
