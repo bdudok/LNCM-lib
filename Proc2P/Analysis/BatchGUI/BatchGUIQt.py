@@ -20,8 +20,7 @@ import shutil
 from Proc2P.Analysis.BatchGUI.Config import GuiConfig, State
 from Proc2P.AppIcon import set_app_icon
 from Proc2P.Analysis.AssetFinder import AssetFinder, get_processed_tags
-# from Proc2P.Analysis.BatchGUI.RoiEditorQt import GUI_main as RoiEditorGUI
-from Proc2P.Analysis.BatchGUI.RoiEditorQt import launch_in_subprocess as RoiEditorGUI
+from Proc2P.Analysis.BatchGUI.RoiEditorQt import open_editor as RoiEditorGUI  # non-modal window in this process
 from Proc2P.Analysis.BatchGUI.SessionGUIQt import launch_in_subprocess as SessionGUI
 from LFP.SzDet.AppSpikeSz.GUI_SpikeSzDet import launch_in_subprocess as SzProcGUI
 from LFP.SzDet.AppSpikeSz.SzViewGUI import launch_in_subprocess as SzViewGUI
