@@ -15,7 +15,8 @@ from Proc2P.utils import logger, lprint
 '''
 Gui for selecting ROIs from ROI sets (e.g. SIMA output), drawing ROIs, and saving them as a new ROI set.
 Left pane: the input ROI set on the preview image. Right pane: the output ROIs. The panes zoom and pan together.
-    Mouse wheel: zoom. Middle button drag: pan. f (Reset view): fit the whole image.
+    Mouse wheel: zoom; sideways wheel: scroll sideways. Left or middle button drag: pan.
+    f (Reset view): fit the whole image.
     Input pane: left click adds the ROI under the cursor, right click adds all ROIs within the size range.
     Output pane: left click removes the ROI under the cursor, right click starts drawing a ROI (as g).
     l / i: lasso on either pane, adds the input ROIs within the size range whose centroid is inside
@@ -30,7 +31,8 @@ Open from another Qt app with open_editor (non-modal, in the same process), or r
 path, prefix and tag as arguments.
 '''
 
-LINE_WIDTH = 1  # cosmetic pen width: pixels on the screen at any zoom
+LINE_WIDTH = 1.5  # cosmetic pen width: pixels on the screen at any zoom (as 1 pt lines in matplotlib)
+DRAG_PX = 4  # a left button press that moves more than this pans the view instead of clicking
 COLORS = {'excluded': QtGui.QColor('gray'), 'included': QtGui.QColor('yellow'), 'output': QtGui.QColor('magenta'),
           'stroke': QtGui.QColor('cyan')}
 
@@ -85,6 +87,7 @@ class ImageView(QtWidgets.QGraphicsView):
         self._stroke_path = None  # kept here: a path item drops a path that has only its start point
         self._stroke_item = None
         self._pan_start = None
+        self._left_press = None  # (view position, scene position) of a left press outside the drawing tools
         for bar in (self.horizontalScrollBar(), self.verticalScrollBar()):
             bar.valueChanged.connect(lambda _: self.view_changed.emit(self))
 
@@ -97,15 +100,21 @@ class ImageView(QtWidgets.QGraphicsView):
         self.view_changed.emit(self)
 
     def wheelEvent(self, event):
-        factor = 1.25 if event.angleDelta().y() > 0 else 1 / 1.25
-        self.scale(factor, factor)
+        dx, dy = event.angleDelta().x(), event.angleDelta().y()
+        if dy == 0:  # sideways wheel or tilt: scroll sideways
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - dx)
+        else:
+            factor = 1.25 if dy > 0 else 1 / 1.25
+            self.scale(factor, factor)
         self.view_changed.emit(self)
 
     def mousePressEvent(self, event):
         pos = self.mapToScene(event.position().toPoint())
         if event.button() == QtCore.Qt.MiddleButton:
-            self._pan_start = event.position()
-            self.setCursor(QtCore.Qt.ClosedHandCursor)
+            self.start_pan(event.position())
+        elif not self.drawing and event.button() == QtCore.Qt.LeftButton:
+            # a click (sent on release) unless the mouse is dragged: then pan
+            self._left_press = (event.position(), pos)
         elif self.drawing and event.button() == QtCore.Qt.LeftButton:
             # left click adds a vertex (dragging adds more), right click closes the polygon
             if self._stroke_item is None:
@@ -141,7 +150,19 @@ class ImageView(QtWidgets.QGraphicsView):
             self.scene().removeItem(self._stroke_item)
         self._stroke_item, self._stroke_path = None, None
 
+    def start_pan(self, view_pos):
+        self._pan_start = view_pos
+        self.setCursor(QtCore.Qt.ClosedHandCursor)
+
+    def end_pan(self):
+        self._pan_start = None
+        self.setCursor(QtCore.Qt.CrossCursor) if self.drawing else self.unsetCursor()
+
     def mouseMoveEvent(self, event):
+        if self._left_press is not None and self._pan_start is None:
+            moved = event.position() - self._left_press[0]
+            if max(abs(moved.x()), abs(moved.y())) > DRAG_PX:
+                self.start_pan(self._left_press[0])
         if self._pan_start is not None:
             delta = event.position() - self._pan_start
             self._pan_start = event.position()
@@ -152,8 +173,13 @@ class ImageView(QtWidgets.QGraphicsView):
 
     def mouseReleaseEvent(self, event):
         if event.button() == QtCore.Qt.MiddleButton and self._pan_start is not None:
-            self._pan_start = None
-            self.unsetCursor() if not self.drawing else self.setCursor(QtCore.Qt.CrossCursor)
+            self.end_pan()
+        elif event.button() == QtCore.Qt.LeftButton and self._left_press is not None:
+            if self._pan_start is not None:
+                self.end_pan()
+            else:
+                self.clicked.emit(self, self._left_press[1], QtCore.Qt.LeftButton)
+            self._left_press = None
 
     def keyPressEvent(self, event):
         # keys are handled by the window's shortcuts, not by scrolling the view

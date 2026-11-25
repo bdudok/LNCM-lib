@@ -130,3 +130,34 @@ def test_start_selection(editor, tmp_path):
     assert window.roi_list.currentText() == 'other'
     assert window.preview_list.currentText() == 'preview'
     window.close()
+
+
+def test_pan_and_wheel(editor):
+    '''Left drag pans the zoomed view without adding ROIs, a left click adds one; sideways wheel scrolls, not zoom'''
+    view = editor.input_view
+    port = view.viewport()
+    view.scale(8, 8)
+    view.centerOn(50, 50)
+    QtWidgets.QApplication.processEvents()
+    h0, scale0 = view.horizontalScrollBar().value(), view.transform().m11()
+
+    start = view.mapFromScene(QtCore.QPointF(13, 13))  # on the first input ROI
+    end = start + QtCore.QPoint(60, 0)
+    QtTest.QTest.mousePress(port, QtCore.Qt.LeftButton, pos=start)
+    move = QtGui.QMouseEvent(QtCore.QEvent.MouseMove, QtCore.QPointF(end), QtCore.QPointF(end),
+                             QtCore.Qt.NoButton, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier)
+    QtWidgets.QApplication.sendEvent(port, move)
+    QtTest.QTest.mouseRelease(port, QtCore.Qt.LeftButton, pos=end)
+    assert view.horizontalScrollBar().value() != h0
+    assert not editor.output_polys
+
+    QtTest.QTest.mouseClick(port, QtCore.Qt.LeftButton, pos=view.mapFromScene(QtCore.QPointF(13, 13)))
+    assert len(editor.output_polys) == 1
+
+    h1 = view.horizontalScrollBar().value()
+    pos = QtCore.QPointF(port.rect().center())
+    wheel = QtGui.QWheelEvent(pos, view.mapToGlobal(pos.toPoint()), QtCore.QPoint(), QtCore.QPoint(-120, 0),
+                              QtCore.Qt.NoButton, QtCore.Qt.NoModifier, QtCore.Qt.NoScrollPhase, False)
+    QtWidgets.QApplication.sendEvent(port, wheel)
+    assert view.transform().m11() == scale0
+    assert view.horizontalScrollBar().value() != h1
