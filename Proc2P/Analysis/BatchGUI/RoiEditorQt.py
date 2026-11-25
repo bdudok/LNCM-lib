@@ -19,7 +19,8 @@ Left pane: the input ROI set on the preview image. Right pane: the output ROIs. 
     Input pane: left click adds the ROI under the cursor, right click adds all ROIs within the size range.
     Output pane: left click removes the ROI under the cursor, right click starts drawing a ROI (as g).
     l / i: lasso on either pane, adds the input ROIs within the size range whose centroid is inside
-        (i: dilated by 3 pixels).
+        (i: dilated by 3 pixels). Only these stay selected (yellow), so a right click adds only these, until a size
+        slider is moved.
     g: draw ROIs. r: lasso that removes the output ROIs whose centroid is inside.
         In these modes each stroke (left button held) makes one polygon; Esc or another key ends the mode.
     d: dilate all output ROIs by 1 pixel. c: clear the output. e: save.
@@ -472,6 +473,10 @@ class RoiEditorWindow(QtWidgets.QMainWindow):
             inside = [i for i, poly in enumerate(self.input_polys)
                       if self.included[i] and lasso.containsPoint(QtCore.QPointF(*centroid(poly)),
                                                                   QtCore.Qt.OddEvenFill)]
+            # only the lassoed ROIs stay selected, until a size slider is moved
+            self.included[:] = False
+            self.included[inside] = True
+            self.color_input()
             self.add_inputs(inside, dilate=3 if self.tool == Tool.LASSO_DILATE else 0)
         elif self.tool == Tool.DRAW:
             h, w = self.image_shape

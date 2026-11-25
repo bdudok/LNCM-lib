@@ -57,9 +57,16 @@ def test_click_lasso_and_save(editor, tmp_path):
     editor.set_tool(RoiEditorQt.Tool.LASSO)
     editor.on_stroke(editor.input_view, [(0, 0), (100, 0), (100, 40), (0, 40)])
     assert len(editor.output_polys) == 2
+    # only the lassoed ROIs stay selected: right click adds only these
+    assert editor.included.tolist() == [True, True, False, False]
+    editor.clear_output()
+    editor.on_click(editor.input_view, QtCore.QPointF(1, 1), QtCore.Qt.RightButton)
+    assert len(editor.output_polys) == 2
+    editor.set_tool(RoiEditorQt.Tool.NONE)
 
-    # the size filter limits right click (add all) to the large ROIs
+    # moving a size slider resets the selection; right click then adds the large ROIs
     editor.min_size.setValue(8)
+    assert editor.included.tolist() == [False, True, False, True]
     editor.clear_output()
     editor.on_click(editor.input_view, QtCore.QPointF(1, 1), QtCore.Qt.RightButton)
     assert len(editor.output_polys) == 2
