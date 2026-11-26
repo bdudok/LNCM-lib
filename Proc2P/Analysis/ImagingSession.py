@@ -605,11 +605,13 @@ class ImagingSession(object):
         '''returns a bool mask for cells that pass qc
         trim: if >0, remove cells that are close to the top or bottom row to avoid artefacts
         With dual channel traces (ch='All'), a cell passes if it passes in any channel.
+        nnd: if given, the deconvolved trace (OASIS) also has to exceed this value in at least one frame.
         '''
         ntr = numpy.nan_to_num(self.getparam('ntr'))
         qc_pass = numpy.any(ntr > 3, axis=tuple(range(1, ntr.ndim)))
-        if hasattr(self.ca, 'nnd') and nnd is not None:
-            nnd_pass = numpy.any(self.ca.nnd > nnd, axis=1)
+        if nnd is not None:
+            nnd_trace = self.getparam('nnd')  # deconvolves if not done yet
+            nnd_pass = numpy.any(nnd_trace > nnd, axis=tuple(range(1, nnd_trace.ndim)))
             qc_pass = numpy.logical_and(nnd_pass, qc_pass)
         if trim:
             if not self.rois.image_loaded:
