@@ -280,10 +280,13 @@ class GUI_main(QtWidgets.QMainWindow):
         label.setFixedHeight(self.config.TextWidgetHeight)
         label.setFixedWidth(self.config.ButtonLabelWidth)
         widget.layout.addWidget(label)
-        self.cell_label = QtWidgets.QLabel('0')
-        self.cell_label.setFixedHeight(self.config.TextWidgetHeight)
-        self.cell_label.setFixedWidth(self.config.ButtonLabelWidth)
-        widget.layout.addWidget(self.cell_label)
+        # type the index and press Enter (or use the arrows); kept in sync with the slider
+        self.cell_box = QtWidgets.QSpinBox()
+        self.cell_box.setRange(0, self.session.ca.cells - 1)
+        self.cell_box.setKeyboardTracking(False)
+        self.cell_box.setFixedHeight(self.config.TextWidgetHeight)
+        self.cell_box.setFixedWidth(self.config.ButtonLabelWidth)
+        widget.layout.addWidget(self.cell_box)
         self.cell_selector = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.cell_selector.setMinimum(0)
         self.cell_selector.setMaximum(self.session.ca.cells-1)
@@ -291,6 +294,8 @@ class GUI_main(QtWidgets.QMainWindow):
         self.cell_selector.setTickPosition(QtWidgets.QSlider.TicksBelow)
         self.cell_selector.setMinimumWidth(self.config.ButtonLabelWidth * 2)
         self.cell_selector.valueChanged.connect(self.cell_update)
+        self.cell_selector.valueChanged.connect(self.cell_box.setValue)
+        self.cell_box.valueChanged.connect(self.cell_selector.setValue)
         widget.layout.addWidget(self.cell_selector)
         apply_layout(widget)
         column = QtWidgets.QWidget()
@@ -370,7 +375,6 @@ class GUI_main(QtWidgets.QMainWindow):
         if self.state != State.LIVE:
             return 0
         self.c = int(self.cell_selector.value())
-        self.cell_label.setText(str(self.c))
         self.paint_preview()
         self.trace_update()
 
