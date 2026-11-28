@@ -8,7 +8,9 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import types
+import weakref
 from datetime import datetime
 from pathlib import Path
 
@@ -20,9 +22,17 @@ import requests
 from BaserowAPI.BaserowRequests import GetSessions
 from BaserowAPI.config import config as baserow_config
 from envs.site_config import CONFIG
+from Proc2P.Analysis.AnalysisClasses.DataSet import DataSet
 
 LIB_ROOT = Path(__file__).resolve().parents[3]
 CONFIRMED_ENV = 'LNCM_UNCOMMITTED_CONFIRMED'  # set for the plot script that save() runs: already confirmed
+# Rerun of saved results (set by a rerun script, see AnalysisResult.session). The plot scripts that save() runs
+# inherit them.
+RESULTS_ROOT_ENV = 'LNCM_RESULTS_ROOT'  # results are saved in <root>/<name of the project folder>/Results
+SHARED_NWB_ENV = 'LNCM_SHARED_NWB'  # as use_nwb: run on the shared files in this folder
+RERUN_FOLDER = 'rerun'  # a shared result rerun with use_nwb is saved in <result>/rerun/Results/<identifier>
+PUBLICATION_MANIFEST = 'publication.json'  # in the folder above the shared results (Publication)
+SESSION_LOG_KEYS = ('tag', 'ch', 'lfp_ch', 'ripple_tag', 'spiketag')  # ImagingSession arguments logged by session()
 REPORT_MAX_ROWS = 50  # rows of a data table shown in the report; the file has all rows
 REPORT_MAX_CHARS = 80  # characters of a text cell shown in the report tables (e.g. the cell lists of the DataSet)
 
@@ -39,6 +49,78 @@ pre {background: #f4f4f4; padding: 0.5em; overflow-x: auto;}
 .note {color: #666; font-size: 0.85em;}
 .warn {color: #b00; font-weight: bold;}
 '''
+
+
+def shared_result_folder(script, identifier):
+    '''The result folder that holds script in its script/ folder (a shared result), if it is the result identifier'''
+    if script is None or Path(script).parent.name != 'script':
+        return None
+    folder = Path(script).resolve().parent.parent
+    fn = folder / 'manifest.json'
+    if not fn.exists():
+        return None
+    with open(fn, encoding='utf-8') as f:
+        return folder if json.load(f)['identifier'] == identifier else None
+
+
+def find_shared_result(script, identifier):
+    '''
+    Another result of the shared results that script is in: searched below the folder of the publication manifest.
+    Its rerun is used if there is one.
+    '''
+    folder = Path(script).resolve().parent
+    while not (folder / PUBLICATION_MANIFEST).exists():
+        if folder.parent == folder:
+            raise FileNotFoundError(f'Result {identifier}: {script} is not in a folder of shared results '
+                                    f'(no {PUBLICATION_MANIFEST} above it)')
+        folder = folder.parent
+    found = [fn.parent for fn in folder.rglob(f'{identifier}/manifest.json') if fn.parent.parent.name != 'Results']
+    if len(found) != 1:
+        raise FileNotFoundError(f'{len(found)} shared results {identifier} in {folder}')
+    rerun = found[0] / RERUN_FOLDER / 'Results' / identifier
+    return rerun if (rerun / 'manifest.json').exists() else found[0]
+
+
+def result_folder(project_folder, identifier, script, shared):
+    '''
+    Folder that the result is saved in (or loaded from):
+        <RESULTS_ROOT_ENV>/<name of the project folder>/Results/<identifier>, if that is set (rerun scripts)
+        on the shared files: <shared result>/rerun/Results/<identifier> for the result that holds the script;
+            another result is loaded from the shared results (find_shared_result)
+        otherwise <project_folder>/Results/<identifier>
+    '''
+    root = os.environ.get(RESULTS_ROOT_ENV)
+    if root:
+        return Path(root) / Path(project_folder).name / 'Results' / identifier
+    if shared:
+        own = shared_result_folder(script, identifier)
+        if own is not None:
+            return own / RERUN_FOLDER / 'Results' / identifier
+        if script is None:
+            raise ValueError('On the shared files, the script of the result has to be known')
+        return find_shared_result(script, identifier)
+    return Path(project_folder) / 'Results' / identifier
+
+
+NWB_FILES = {}  # folder: {session ID: NWB file}, filled by find_nwb_file
+
+
+def find_nwb_file(folder, prefix):
+    '''
+    The NWB file of a session in folder or its subfolders, with the file names as exported or as renamed by dandi
+    organize. Files are matched by their session ID: the prefix, or <lab>-<id>-<prefix> (NWBExporter).
+    '''
+    folder = Path(folder)
+    if folder not in NWB_FILES:
+        import h5py
+        NWB_FILES[folder] = {}
+        for fn in folder.rglob('*.nwb'):
+            with h5py.File(fn, 'r') as f:
+                NWB_FILES[folder][f['general/session_id'].asstr()[()]] = fn
+    matches = [fn for sid, fn in NWB_FILES[folder].items() if sid == prefix or sid.endswith(f'-{prefix}')]
+    if len(matches) != 1:
+        raise FileNotFoundError(f'{len(matches)} NWB files of {prefix} in {folder}')
+    return matches[0]
 
 
 def git_state(path):
@@ -233,6 +315,23 @@ class AnalysisResult:
             return responses
         responses = res.cached_data('responses', compute_responses)
 
+    Sessions are opened with res.session(path, prefix, **kwargs), and the DataSet with res.dataset(project_folder), so
+    that the same script runs on the processed folders, on NWB files in the lab (nwb_path), and on the shared files:
+        res = AnalysisResult(project_folder, 'Fig3_RunStop', nwb_path=None)
+        ds = res.dataset(project_folder)
+        session = res.session(row['Path.Processed'], prefix, tag='CellsRe', ch=0)  # ImagingSession or NWBImagingSession
+    Tables that the analysis reads besides the sessions are read with res.input_table(name, path), which saves a copy
+    in the result.
+    To rerun a shared result (the script in script/ of the result folder) on the shared files, add
+    use_nwb=<folder of the NWB files> to AnalysisResult(): the sessions are opened from the NWB files, dataset()
+    returns the DataSet rows saved with the result (sessions.feather), input_table() the saved tables, and the new
+    result is saved in <result>/rerun/Results/<identifier>. Other results that the script loads are read from the
+    shared results (their rerun, if there is one).
+    The arguments of each session() call are saved in the manifest ('session_log'): what an NWB export of the
+    sessions has to contain.
+    Rerun scripts set the same with environment variables, which the scripts they start inherit: LNCM_SHARED_NWB (as
+    use_nwb) and LNCM_RESULTS_ROOT (results saved in <root>/<name of the project folder>/Results).
+
     The figures can be made by a separate plot script, so that a plot can be changed without running the analysis
     again. The analysis script names it (plot_script='..._plot.py') and adds no figures; its save() runs the plot
     script. The plot script uses only what is stored in the result:
@@ -244,9 +343,12 @@ class AnalysisResult:
     __name__ = 'AnalysisResult'
 
     def __init__(self, project_folder, identifier, script=None, steps=None, title=None, description=None,
-                 plot_script=None, processing_steps=None):
+                 plot_script=None, processing_steps=None, nwb_path=None, use_nwb=None):
         '''
         :param project_folder: the project folder of the analysis (as for DataSet)
+        :param nwb_path: folder of NWB files in the lab: session() opens the sessions from them instead of the
+            processed folders (for sessions that exist only as NWB files); the DataSet is the lab's
+        :param use_nwb: folder of the shared NWB files: rerun the shared result on them (see the class docstring)
         :param identifier: unique name of the result within the project, used as the folder name
         :param script: path of the script that makes the result. Default: the script being run.
         :param plot_script: optional script that makes the figures from the saved result (see the class docstring).
@@ -257,12 +359,23 @@ class AnalysisResult:
             registration, pulling traces, cell screening), in run order. Recorded only; they are not shared.
         :param title, description: shown in the report
         '''
-        self.project_folder = Path(project_folder)
+        self.source_folder = Path(project_folder)
         self.identifier = identifier
-        self.folder = self.project_folder / 'Results' / identifier
+        if use_nwb is None:
+            use_nwb = os.environ.get(SHARED_NWB_ENV) or None
+        self.shared = use_nwb is not None
+        self.nwb_path = Path(use_nwb) if self.shared else (Path(nwb_path) if nwb_path is not None else None)
+        self.session_log = []
+        self.inputs = []
+        self.temp_folders = []
         if script is None:
             script = getattr(sys.modules['__main__'], '__file__', None)
         self.script = Path(script).resolve() if script is not None else None
+        if (self.shared and not os.environ.get(RESULTS_ROOT_ENV)
+                and shared_result_folder(self.script, identifier) is None):
+            raise ValueError(f'use_nwb reruns a shared result: run the script in the script folder of {identifier}')
+        self.folder = result_folder(project_folder, identifier, self.script, self.shared)
+        self.project_folder = self.folder.parent.parent
         if plot_script is not None and self.script is not None:
             plot_script = self.script.parent / plot_script  # stays as given if plot_script is an absolute path
         self.plot_script = Path(plot_script).resolve() if plot_script is not None else None
@@ -290,13 +403,26 @@ class AnalysisResult:
         the figures are the ones this script adds. save() then updates the figures and the report.
         :param script: path of the plot script. Default: the script being run.
         '''
-        fn = Path(project_folder) / 'Results' / identifier / 'manifest.json'
+        if script is None:
+            script = getattr(sys.modules['__main__'], '__file__', None)
+        shared = bool(os.environ.get(SHARED_NWB_ENV))
+        folder = result_folder(project_folder, identifier, script, shared)
+        fn = folder / 'manifest.json'
         if not fn.exists():
             raise FileNotFoundError(f'Result {identifier} is not saved: {fn} not found. Run its analysis script first.')
         with open(fn, encoding='utf-8') as f:
             m = json.load(f)
-        res = cls(project_folder, identifier, script=script, steps=m['steps'], title=m['title'],
-                  description=m['description'], processing_steps=m['processing_steps'])
+        if shared and shared_result_folder(script, identifier) is None and not os.environ.get(RESULTS_ROOT_ENV):
+            # another shared result, read only: opened as a result of its own folder
+            res = cls.__new__(cls)
+            res.identifier, res.folder, res.project_folder, res.source_folder = identifier, folder, None, None
+            res.script = res.plot_script = None
+            res.shared, res.nwb_path, res.temp_folders = True, None, []
+        else:
+            res = cls(project_folder, identifier, script=script, steps=m['steps'], title=m['title'],
+                      description=m['description'], processing_steps=m['processing_steps'])
+            res.steps, res.processing_steps, res.title, res.description = (m['steps'], m['processing_steps'],
+                                                                         m['title'], m['description'])
         res.loaded_manifest = m
         res.params = m['params']
         res.items = {'figures': [], 'data': m['data'], 'stats': m['stats']}
@@ -307,7 +433,69 @@ class AnalysisResult:
         res.upload_sessions = m['upload_sessions']
         res.dataset_info = m['dataset']
         res.cache_records = m.get('cache', {})
+        res.session_log = m.get('session_log', [])
+        res.inputs = m.get('inputs', [])
         return res
+
+    def session(self, path, prefix, **kwargs):
+        '''
+        Open a session: ImagingSession(path, prefix, **kwargs), or NWBImagingSession from the NWB file of the session
+        in nwb_path. The arguments in SESSION_LOG_KEYS are logged in the manifest.
+        NWB files store the LFP tables of one spike tag without the tag (NWBExporter, lfp.event_tags), so spiketag is
+        not passed to NWBImagingSession.
+        Can be passed to PSTH.set_session_kwargs(session_class=res.session).
+        '''
+        entry = {'prefix': prefix, **{key: kwargs[key] for key in SESSION_LOG_KEYS if key in kwargs}}
+        if entry not in self.session_log:
+            self.session_log.append(entry)
+        if self.nwb_path is None:
+            from Proc2P.Analysis.ImagingSession import ImagingSession
+            return ImagingSession(path, prefix, **kwargs)
+        from NWB_converter.NWBImagingSession import NWBImagingSession
+        fn = find_nwb_file(self.nwb_path, prefix)
+        kwargs.pop('spiketag', None)
+        return NWBImagingSession(fn.parent, prefix, nwb_filename=fn.name, **kwargs)
+
+    def saved_folder(self):
+        '''
+        Folder of the saved result that a shared rerun reproduces: the result folder that holds the script (script/
+        of a shared result), or the result of the same identifier in the project folder.
+        '''
+        own = shared_result_folder(self.script, self.identifier)
+        return own if own is not None else self.source_folder / 'Results' / self.identifier
+
+    def dataset(self, project_folder):
+        '''
+        The DataSet of the project folder. On the shared files (LNCM_SHARED_NWB), the DataSet rows saved with the
+        result (sessions.feather of saved_folder), opened as a DataSet.
+        '''
+        if not self.shared:
+            return DataSet(project_folder)
+        temp = Path(tempfile.mkdtemp(prefix='AnalysisResult_dataset_'))
+        self.temp_folders.append(weakref.finalize(self, shutil.rmtree, temp, ignore_errors=True))
+        shutil.copy2(self.saved_folder() / 'sessions.feather', temp / '_dataset00.feather')
+        return DataSet(temp)
+
+    def input_table(self, name, path, description=None, **read_kwargs):
+        '''
+        A table that the analysis reads besides the sessions and the DataSet (e.g. measurements or trigger tables).
+        Read from path (.xlsx, .csv or .feather; read_kwargs are passed to the pandas reader) and saved in the result
+        (inputs/<name>.feather). On the shared files, the saved table is returned.
+        '''
+        if self.shared:
+            return pandas.read_feather(self.saved_folder() / 'inputs' / f'{name}.feather')
+        path = Path(path)
+        readers = {'.xlsx': pandas.read_excel, '.xls': pandas.read_excel, '.csv': pandas.read_csv,
+                   '.feather': pandas.read_feather}
+        if path.suffix.lower() not in readers:
+            raise ValueError(f'{path}: input tables are read from {", ".join(readers)} files')
+        table = readers[path.suffix.lower()](path, **read_kwargs)
+        fn = self.get_fn('inputs', name, '.feather')
+        table.to_feather(fn)
+        self.inputs = [e for e in self.inputs if e['name'] != name]
+        self.inputs.append({'name': name, 'files': [fn.name], 'description': description, 'source': str(path),
+                            'rows': len(table), 'columns': [str(c) for c in table.columns]})
+        return table
 
     def confirm_uncommitted(self):
         '''Wait for enter if the script, the plot script or LNCM-lib has uncommitted changes.'''
@@ -320,7 +508,8 @@ class AnalysisResult:
 
     def get_fn(self, kind, name=None, ext=''):
         '''
-        :param kind: 'manifest', 'sessions', 'mice', 'report', or the folder of an item: 'figures', 'data', 'stats', 'script'
+        :param kind: 'manifest', 'sessions', 'mice', 'report', or the folder of an item: 'figures', 'data', 'stats',
+            'inputs', 'script'
         '''
         fixed = {'manifest': 'manifest.json', 'sessions': 'sessions.feather', 'mice': 'mice.feather',
                  'report': f'{self.identifier}.html'}
@@ -607,7 +796,10 @@ class AnalysisResult:
 
     def remove_old_items(self):
         '''Delete files in the item folders that were not added in this run.'''
-        for kind, entries in self.items.items():
+        kinds = dict(self.items)
+        if self.loaded_manifest is None:  # a plot script does not read the inputs
+            kinds['inputs'] = self.inputs
+        for kind, entries in kinds.items():
             keep = {fn for e in entries for fn in e['files']}
             folder = self.folder / kind
             if folder.exists():
@@ -642,6 +834,10 @@ class AnalysisResult:
                 'upload_sessions': self.upload_sessions,
                 'tests': self.tests,
                 'params': self.params,
+                'nwb_path': None if self.nwb_path is None else str(self.nwb_path),
+                'shared': self.shared,
+                'session_log': self.session_log,
+                'inputs': self.inputs,
                 **self.items,
             }
         else:
@@ -654,8 +850,10 @@ class AnalysisResult:
         print(f'AnalysisResult {self.identifier}: {len(self.sessions)} sessions, {len(self.items["figures"])} figures, '
               f'{len(self.items["data"])} data tables, {len(self.items["stats"])} stats saved in {self.folder}')
         if self.loaded_manifest is None and self.plot_script is not None:
-            subprocess.run([sys.executable, str(self.plot_script)], check=True, cwd=self.plot_script.parent,
-                           env={**os.environ, CONFIRMED_ENV: '1'})
+            env = {**os.environ, CONFIRMED_ENV: '1'}
+            if self.shared:  # the plot script opens the rerun
+                env[SHARED_NWB_ENV] = str(self.nwb_path)
+            subprocess.run([sys.executable, str(self.plot_script)], check=True, cwd=self.plot_script.parent, env=env)
 
     @staticmethod
     def table_html(df, max_rows=None):
@@ -723,6 +921,12 @@ class AnalysisResult:
             else:
                 out.append(self.table_html(self.get_data(entry['name']), REPORT_MAX_ROWS))
 
+        if m.get('inputs'):
+            out.append('<h2>Input tables</h2>')
+        for entry in m.get('inputs', []):
+            out.append(item_head(entry))
+            out.append(f'<p class="note">{entry["rows"]} rows, read from {esc(entry["source"])}</p>')
+
         if self.mice is not None:
             out.append(f'<h2>Animals ({len(self.mice)})</h2>')
             out.append(self.mice_html())
@@ -736,6 +940,11 @@ class AnalysisResult:
         if m['dataset'] is not None:
             out.append(f'<p class="note">DataSet version {m["dataset"]["version"]}, '
                        f'{esc(m["dataset"]["project_folder"])}</p>')
+        if m.get('shared'):
+            out.append(f'<p class="note">Rerun on the shared files: sessions from the NWB files in '
+                       f'{esc(m["nwb_path"])}, DataSet rows of the saved result.</p>')
+        elif m.get('nwb_path'):
+            out.append(f'<p class="note">Sessions opened from the NWB files in {esc(m["nwb_path"])}.</p>')
         # all-missing columns are left out of the report; sessions.feather has every column
         out.append(self.table_html(self.sessions.dropna(axis=1, how='all')))
 
