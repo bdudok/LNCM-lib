@@ -1,5 +1,6 @@
 import json
 import os.path
+from pathlib import Path
 
 import numpy
 import pandas
@@ -30,6 +31,34 @@ LFP_TABLES = (
 )
 # detection settings saved next to the LFP tables, stored in the notes json
 LFP_SETTINGS_FILES = ('_Ch{n}_SpikeSzDet.json',)
+# lfp.event_tags in the export config: the spike tag whose LFP tables were saved last
+LATEST_TAG = 'latest'
+
+
+def lfp_event_tag(path, prefix, n, event_tags):
+    '''
+    The spike tag of the LFP tables of channel n to export. File names as ImagingSession.map_spiketimes reads them:
+    <prefix>_<tag>_Ch<n><suffix>, or <prefix>_Ch<n><suffix> without a tag (see LFP_TABLES).
+    :param path: the session folder
+    :param event_tags: preferences in order: a tag, None (no tag), or LATEST_TAG (the tag, or no tag, whose tables
+        were saved last)
+    :return: the tag of the first preference that has tables (None: no tag), or False if none has
+    '''
+    saved = {}  # tag: time the last of its tables was saved
+    for suffix, _, _ in LFP_TABLES:
+        end = suffix.format(n=n)
+        for fn in Path(path).glob(f'{prefix}*{end}'):
+            infix = fn.name[len(prefix):-len(end)]
+            if infix and not infix.startswith('_'):  # another session whose prefix starts with this one
+                continue
+            tag = infix[1:] or None
+            saved[tag] = max(saved.get(tag, 0), fn.stat().st_mtime)
+    for tag in event_tags:
+        if tag == LATEST_TAG and saved:
+            return max(saved, key=saved.get)
+        if tag in saved:
+            return tag
+    return False
 
 
 def read_table_file(fn):
@@ -236,35 +265,47 @@ class ExportImagingSession(ImagingSession):
             events[tag] = data.reshape(-1, 2)
         return events
 
-    def export_lfp_tables(self, channels):
+    def export_lfp_tables(self, channels, event_tags=(None,)):
         '''
-        Spike and seizure tables of the LFP channels (see LFP_TABLES), for the files that exist.
+        Spike and seizure tables of the LFP channels (see LFP_TABLES), for the files that exist. Of each channel, the
+        tables of one spike tag are exported (see lfp_event_tag).
         :param channels: list of LFP channel numbers
+        :param event_tags: spike tag preferences, see lfp_event_tag. Default: the tables without a tag
         :return: list of dicts with keys:
-            'name': NWB table name, 'suffix': file suffix,
+            'name': NWB table name, 'suffix': file suffix without the tag (NWBImagingSession writes this file),
+            'source': name of the exported file, 'tag': its spike tag (None: no tag),
             'table': DataFrame, the file's contents. The file's first column (index) is in column 'xlsx_index'
             'time_columns': tuple of the columns that hold times in seconds from the first LFP sample
         '''
         tables = []
         for n in channels:
+            tag = lfp_event_tag(self.path, self.prefix, n, event_tags)
+            if tag is False:
+                continue
+            infix = '' if tag is None else f'_{tag}'
             for suffix, name, time_columns in LFP_TABLES:
-                fn = self.get_file_with_suffix(suffix.format(n=n))
+                fn = self.get_file_with_suffix(infix + suffix.format(n=n))
                 if not fn.exists():
                     continue
                 table = read_table_file(fn)
-                tables.append({'name': name.format(n=n), 'suffix': suffix.format(n=n),
+                tables.append({'name': name.format(n=n), 'suffix': suffix.format(n=n), 'source': fn.name, 'tag': tag,
                                'table': table, 'time_columns': time_columns})
         return tables
 
-    def export_settings(self, channels):
+    def export_settings(self, channels, event_tags=(None,)):
         '''
-        Detection settings files of the LFP channels (see LFP_SETTINGS_FILES), for the files that exist.
-        :return: dict of {file suffix: the file's json contents}
+        Detection settings files of the LFP channels (see LFP_SETTINGS_FILES), for the files that exist, of the spike
+        tag whose tables are exported (see export_lfp_tables). Tagged files are <prefix>_Ch<n>_SpikeSzDet_<tag>.json.
+        :return: dict of {file suffix without the tag: the file's json contents}
         '''
         settings = {}
         for n in channels:
+            tag = lfp_event_tag(self.path, self.prefix, n, event_tags)
+            if tag is False:
+                continue
             for suffix in LFP_SETTINGS_FILES:
-                fn = self.get_file_with_suffix(suffix.format(n=n))
+                stem, ext = os.path.splitext(suffix.format(n=n))
+                fn = self.get_file_with_suffix(stem + ('' if tag is None else f'_{tag}') + ext)
                 if fn.exists():
                     with open(fn, 'r') as f:
                         settings[suffix.format(n=n)] = json.load(f)

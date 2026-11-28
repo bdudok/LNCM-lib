@@ -14,7 +14,7 @@ from pynwb.ecephys import ElectricalSeries
 from pynwb.ogen import OptogeneticStimulusSite
 from pynwb.file import Subject
 from pynwb.image import ImageSeries, RGBImage, Images
-from pynwb.ophys import Fluorescence, ImageSegmentation, OpticalChannel, RoiResponseSeries, TwoPhotonSeries
+from pynwb.ophys import Fluorescence, ImageSegmentation, OpticalChannel, TwoPhotonSeries
 
 from BaserowAPI.BaserowRequests import GetSessions
 from NWB_converter.DandiUpload import write_upload_file
@@ -215,13 +215,18 @@ class NWBExporter:
         # tables without rows are not written in the NWB file, so the files and their columns are listed here
         lfp_tables = []
         if self.cfg('include', 'lfp_events', default=True):
-            for table in self.session.export_lfp_tables(lfp_channels):
-                lfp_tables.append({'name': table['name'], 'suffix': table['suffix'],
-                                   'columns': [str(c) for c in table['table'].columns]})
+            for table in self.session.export_lfp_tables(lfp_channels, self.event_tags()):
+                lfp_tables.append({'name': table['name'], 'suffix': table['suffix'], 'source': table['source'],
+                                   'tag': table['tag'], 'columns': [str(c) for c in table['table'].columns]})
         has_behavior_events = (self.cfg('include', 'behavior_events', default=True)
                                and self.session.export_behavior_events() is not None)
         return {'roi_sets': roi_sets, 'lfp_channels': lfp_channels, 'lfp_tables': lfp_tables,
-                'behavior_events': has_behavior_events, 'settings': self.session.export_settings(lfp_channels)}
+                'behavior_events': has_behavior_events,
+                'settings': self.session.export_settings(lfp_channels, self.event_tags())}
+
+    def event_tags(self):
+        '''lfp.event_tags of the config: spike tag preferences of the LFP tables (see lfp_event_tag). Default: no tag'''
+        return self.cfg('lfp', 'event_tags', default=[None])
 
     def get_subject(self):
         subject = self.session.export_subject()
@@ -507,7 +512,7 @@ class NWBExporter:
         if self.cfg('include', 'ripples', default=True):
             self.add_ripples()
         if self.cfg('include', 'lfp_events', default=True):
-            for table in self.session.export_lfp_tables(channels):
+            for table in self.session.export_lfp_tables(channels, self.event_tags()):
                 self.add_lfp_table(table)
 
     def lfp_time(self, seconds):
@@ -530,7 +535,7 @@ class NWBExporter:
     def add_lfp_table(self, table):
         '''spike (events) or seizure (intervals) table of an LFP channel, see ExportImagingSession.LFP_TABLES'''
         df, time_columns = table['table'], table['time_columns']
-        description = f"{table['name']}: contents of {table['suffix']}. Times in the columns {list(time_columns)} " \
+        description = f"{table['name']}: contents of {table['source']}. Times in the columns {list(time_columns)} " \
                       f"are seconds from the first LFP sample"
         if len(time_columns) == 1:
             self.add_table_events(table['name'], description, df, self.lfp_time(df[time_columns[0]].values))
