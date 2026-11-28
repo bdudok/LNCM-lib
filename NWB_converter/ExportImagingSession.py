@@ -252,25 +252,29 @@ class ExportImagingSession(ImagingSession):
                 'conversion': 1e-6,
                 'frames': ephys.frames}
 
-    def export_ripples(self, tags=None):
+    def export_ripples(self, channels, tags=None):
         '''
-        Ripple events of lfp_ch saved by Ripples (<tag>.ripples in ripple_folder), as start and stop LFP sample indices.
-        Filtered LFP and power traces are not exported; Ripples recomputes them from the LFP.
-        :param tags: list of ripple tags (file names without .ripples). None: all
-        :return: dict of {tag: numpy array, shape (n_events, 2), float, start and stop sample}
+        Ripple events saved by Ripples (<tag>.ripples in the ripple_folder of each LFP channel), as start and stop LFP
+        sample indices. Filtered LFP and power traces are not exported; Ripples recomputes them from the LFP.
+        :param channels: LFP channel numbers
+        :param tags: list of ripple tags (file names without .ripples). None: all. Tags a channel doesn't have are
+            skipped.
+        :return: dict of {channel: {tag: numpy array, shape (n_events, 2), float, start and stop sample}}, for the
+            channels that have ripple events
         '''
         if not (self.path / '_ripples').exists():
             return {}
         n_channels = numpy.load(self.path / f'{self.prefix}_ephys.npy', mmap_mode='r').shape[0] - 1
-        path = ripple_folder(self.path, self.lfp_ch, n_channels)
-        if not path.exists():
-            return {}
-        if tags is None:
-            tags = sorted(f.stem for f in path.glob('*.ripples'))
         events = {}
-        for tag in tags:
-            data = numpy.fromfile(path / f'{tag}.ripples')
-            events[tag] = data.reshape(-1, 2)
+        for channel in channels:
+            path = ripple_folder(self.path, channel, n_channels)
+            if not path.exists():
+                continue
+            found = sorted(f.stem for f in path.glob('*.ripples'))
+            channel_events = {tag: numpy.fromfile(path / f'{tag}.ripples').reshape(-1, 2) for tag in found
+                              if tags is None or tag in tags}
+            if channel_events:
+                events[channel] = channel_events
         return events
 
     def export_lfp_tables(self, channels, event_tags=(None,)):

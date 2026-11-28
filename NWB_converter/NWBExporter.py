@@ -50,14 +50,22 @@ File layout:
     events/<event_type>                 EventsTable with timestamp and frame columns
     intervals/RewardZones               start_frame and stop_frame columns
     intervals/OptoStim                  photostimulation pulses, with the columns of _StimFrames.xlsx
-    intervals/Ripples_<tag>             ripple events, with start_sample and stop_sample (LFP sample) columns
+    intervals/Ripples_Ch<n>_<tag>       ripple events of LFP channel n, with start_sample and stop_sample (LFP sample)
+                                        columns
     intervals/Seizures_Ch<n>, SeizuresCurated_Ch<n>   seizures of LFP channel n, with the columns of the files
     intervals/<event_type>              TimeIntervals with start_time and stop_time columns
     notes                               json: {'SessionInfo': session metadata, 'Baserow': the session's DB row,
                                         'Export': what NWBImagingSession needs to rebuild the processed files
-                                        (ROI set channels and trace info, LFP channels, detection settings)}
+                                        (format_version, ROI set channels and trace info, LFP channels, LFP tables,
+                                        ripple tables with their channel, detection settings)}
+    session_id                          the session prefix
     subject                             subject_id and sex from the DB, other fields from the config
 '''
+
+
+# version of the file layout and the notes 'Export' record that NWBImagingSession reads. Increase it when either
+# changes; NWBImagingSession reads only files of this version.
+NWB_FORMAT_VERSION = 1
 
 
 class VideoStorage(Enum):
@@ -79,12 +87,14 @@ class NWBExporter:
         self.prefix = prefix
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
+        self.check_config()
         if session is None:
             session = self.load_session()
         self.session = session
         self.video_storage = VideoStorage(self.cfg('video', 'storage', default='external'))
         self.nwbfile = None
         self.lfp = None
+        self.ripples = None
 
     def cfg(self, *keys, default=None):
         '''get a nested config value, or default if missing or null'''
@@ -94,6 +104,14 @@ class NWBExporter:
                 return default
             value = value[key]
         return value
+
+    def check_config(self):
+        '''options that are no longer used: the export does not depend on how the session is opened'''
+        if (self.config.get('session') or {}).get('imaging_session_kwargs') is not None:
+            raise ValueError('session.imaging_session_kwargs is not used: ROI sets come from roi_sets, and all LFP '
+                             'channels are exported. Remove it from the config.')
+        if (self.config.get('lfp') or {}).get('channels') is not None:
+            raise ValueError('lfp.channels is not used: all LFP channels are exported. Remove it from the config.')
 
     def load_session(self):
         procpath = self.cfg('session', 'procpath')
@@ -105,8 +123,8 @@ class NWBExporter:
             db_entry = results.iloc[0]
             if procpath is None:
                 procpath = db_entry['Processed.Path']
-        kwargs = self.cfg('session', 'imaging_session_kwargs', default={})
-        return ExportImagingSession(procpath, self.prefix, db_entry=db_entry, **kwargs)
+        # no traces are loaded: ROI sets are read by roi_sets, LFP and its events of all channels
+        return ExportImagingSession(procpath, self.prefix, db_entry=db_entry, tag='skip')
 
     def get_output_path(self):
         fn = self.cfg('output', 'filename', default='{prefix}.nwb').format(prefix=self.prefix)
@@ -171,7 +189,6 @@ class NWBExporter:
         session_id = self.prefix
         notes = {'SessionInfo': self.metadata, 'Export': self.get_export_record()}
         if db_entry is not None:
-            session_id = f'{lab}-{db_entry["id"]}-{self.prefix}'
             notes['Baserow'] = db_entry.to_dict()
         experimenter = list(self.cfg('nwbfile', 'experimenter', default=[]))
         for name in self.metadata.get('experimenter', []):
@@ -196,11 +213,11 @@ class NWBExporter:
             name='ophys', description='Processed 2P data converted from LNCM ImagingSession format')
 
     def get_lfp_channels(self):
-        '''LFP channels to export: lfp.channels from the config, or all channels of the session if not set'''
+        '''LFP channels to export: all channels of the session'''
         if not self.cfg('include', 'lfp', default=True):
             return []
         if self.lfp is None:
-            self.lfp = self.session.export_lfp(self.cfg('lfp', 'channels'))
+            self.lfp = self.session.export_lfp()
         return [] if self.lfp is None else self.lfp['channels']
 
     def get_export_record(self):
@@ -221,7 +238,11 @@ class NWBExporter:
                                    'tag': table['tag'], 'columns': [str(c) for c in table['table'].columns]})
         has_behavior_events = (self.cfg('include', 'behavior_events', default=True)
                                and self.session.export_behavior_events() is not None)
-        return {'roi_sets': roi_sets, 'lfp_channels': lfp_channels, 'lfp_tables': lfp_tables,
+        # the channel of each ripple table; tables without rows are listed too, so the files are written back
+        ripples = [{'name': self.ripple_table_name(channel, tag), 'channel': int(channel), 'tag': tag}
+                   for channel, channel_events in self.get_ripples().items() for tag in channel_events]
+        return {'format_version': NWB_FORMAT_VERSION, 'roi_sets': roi_sets, 'lfp_channels': lfp_channels,
+                'lfp_tables': lfp_tables, 'ripples': ripples,
                 'behavior_events': has_behavior_events,
                 'settings': self.session.export_settings(lfp_channels, self.event_tags())}
 
@@ -486,7 +507,7 @@ class NWBExporter:
         group = self.nwbfile.create_electrode_group(name='LFP_electrode', description=ecfg.get('description', ''),
                                                     location=ecfg.get('location', 'unknown'), device=device)
         self.nwbfile.add_electrode_column(name='ephys_channel', description='channel number in the LFP recording '
-                                                                            '(lfp_ch of ImagingSession)')
+                                                                            '(row of _ephys.npy, from 1)')
         for channel in channels:
             self.nwbfile.add_electrode(location=ecfg.get('location', 'unknown'), group=group,
                                        filtering=ecfg.get('filtering'), reference=ecfg.get('reference'),
@@ -522,18 +543,30 @@ class NWBExporter:
         '''seconds from the first LFP sample to session time'''
         return numpy.asarray(seconds, dtype='float64') + self.lfp['starting_time']
 
+    def get_ripples(self):
+        '''ripple events of the exported LFP channels, {channel: {tag: events}} (ExportImagingSession.export_ripples)'''
+        if self.ripples is None:
+            exported = self.cfg('include', 'lfp', default=True) and self.cfg('include', 'ripples', default=True)
+            channels = self.get_lfp_channels() if exported else []
+            self.ripples = self.session.export_ripples(channels, self.cfg('ripples', 'tags')) if channels else {}
+        return self.ripples
+
+    @staticmethod
+    def ripple_table_name(channel, tag):
+        return f'Ripples_Ch{channel}_{tag}'
+
     def add_ripples(self):
-        ripples = self.session.export_ripples(self.cfg('ripples', 'tags'))
-        for tag, events in ripples.items():
-            table = self.nwbfile.create_time_intervals(
-                name=f'Ripples_{tag}', description=f'Ripple events (Ripples tag {tag}). The detection runs on one '
-                                                   f'LFP channel (ImagingSession lfp_ch), which is not recorded')
-            table.add_column(name='start_sample', description='LFP sample index of the start')
-            table.add_column(name='stop_sample', description='LFP sample index of the stop')
-            times = self.lfp_time(events / self.lfp['rate'])
-            for (start, stop), (t0, t1) in zip(events, times):
-                table.add_interval(start_time=float(t0), stop_time=float(t1),
-                                   start_sample=float(start), stop_sample=float(stop))
+        for channel, channel_events in self.get_ripples().items():
+            for tag, events in channel_events.items():
+                table = self.nwbfile.create_time_intervals(
+                    name=self.ripple_table_name(channel, tag),
+                    description=f'Ripple events detected on LFP channel {channel} (Ripples tag {tag})')
+                table.add_column(name='start_sample', description='LFP sample index of the start')
+                table.add_column(name='stop_sample', description='LFP sample index of the stop')
+                times = self.lfp_time(events / self.lfp['rate'])
+                for (start, stop), (t0, t1) in zip(events, times):
+                    table.add_interval(start_time=float(t0), stop_time=float(t1),
+                                       start_sample=float(start), stop_sample=float(stop))
 
     def add_lfp_table(self, table):
         '''spike (events) or seizure (intervals) table of an LFP channel, see ExportImagingSession.LFP_TABLES'''

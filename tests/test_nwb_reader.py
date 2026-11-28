@@ -4,13 +4,14 @@ NWBImagingSession, and compare with ImagingSession loaded from the processed fol
 Sessions: Dag47 (behavior events), Sncg248 (opto, custom vm trace), BL6-47 (dual channel, LFP, seizures, ripples).
 Test data: see test_nwb_export.py. Skipped if the folder is missing.
 '''
+import json
 import os
 from pathlib import Path
 
 import numpy
 import pytest
 import yaml
-from pynwb import validate
+from pynwb import NWBHDF5IO, validate
 
 from NWB_converter.ExportImagingSession import ExportImagingSession
 from NWB_converter.NWBExporter import NWBExporter
@@ -50,7 +51,7 @@ def nwb_folder(tmp_path_factory):
         with open(LEAN_CONFIG, 'r') as f:
             config = yaml.safe_load(f)
         config['output'].update(directory=str(folder), filename='{prefix}.nwb')
-        config['session'].update(use_db=False, procpath=str(PROCPATH), imaging_session_kwargs={'tag': roi_set['tag']})
+        config['session'].update(use_db=False, procpath=str(PROCPATH))
         config['imaging']['channels'] = channels
         config['roi_sets'] = [roi_set]
         config['include']['lfp'] = True
@@ -58,7 +59,7 @@ def nwb_folder(tmp_path_factory):
         config_path = folder / f'{prefix}.yaml'
         with open(config_path, 'w') as f:
             yaml.safe_dump(config, f)
-        session = ExportImagingSession(PROCPATH, prefix, tag=roi_set['tag'])
+        session = ExportImagingSession(PROCPATH, prefix, tag='skip')  # the export does not depend on the tag
         # SessionInfo stores the raw data path of the machine that did the preprocessing
         session.si.info['dpath'] = str(DATA_DIR / '_RawData' / f'{prefix}-000')
         path = NWBExporter(prefix, config_path, session=session).run()
@@ -154,6 +155,10 @@ def test_lfp_events(nwb_folder):
 
 def test_ripples(nwb_folder):
     '''stored ripple events are loaded; filtered LFP and band power are recomputed'''
+    prefix = SESSIONS['lfp'][0]
+    with NWBHDF5IO(nwb_folder / f'{prefix}.nwb', 'r') as io:
+        export = json.loads(io.read().notes)['Export']
+    assert {r['channel'] for r in export['ripples']} == {1}  # the test session has ripples on channel 1 only
     a, b = load_pair(nwb_folder, 'lfp', norip=False)
     assert_same([e.p for e in a.ripples.events], [e.p for e in b.ripples.events])
     assert_same(a.ripple_frames, b.ripple_frames)
@@ -180,3 +185,29 @@ def test_psth(nwb_folder, tmp_path):
         results.append(e.get_data())
     assert len(results[0])
     numpy.testing.assert_array_equal(*results)
+
+
+def test_unpack(nwb_folder, tmp_path):
+    '''unpack keeps the processed folder; ImagingSession opens it as the original'''
+    prefix, _, roi_set = SESSIONS['lfp']
+    folder = NWBImagingSession.unpack(nwb_folder / f'{prefix}.nwb', tmp_path, prefix)
+    assert folder == tmp_path / prefix
+    original = ImagingSession(PROCPATH, prefix, tag=roi_set['tag'], norip=False)
+    unpacked = ImagingSession(tmp_path, prefix, tag=roi_set['tag'], norip=False)
+    assert_same(original.ca.rel, unpacked.ca.rel)
+    assert_same(original.ephys.trace, unpacked.ephys.trace)
+    assert_same(original.ripple_frames, unpacked.ripple_frames)
+    original.map_seizuretimes()
+    unpacked.map_seizuretimes()
+    for x, y in zip(original.sztimes, unpacked.sztimes, strict=True):
+        assert_same(x, y)
+    with pytest.raises(FileExistsError):
+        NWBImagingSession.unpack(nwb_folder / f'{prefix}.nwb', tmp_path, prefix)
+
+
+def test_other_format_version_is_rejected(nwb_folder, monkeypatch):
+    import NWB_converter.NWBImagingSession as reader
+    monkeypatch.setattr(reader, 'NWB_FORMAT_VERSION', reader.NWB_FORMAT_VERSION + 1)
+    prefix, _, roi_set = SESSIONS['lfp']
+    with pytest.raises(ValueError, match='format version'):
+        NWBImagingSession(nwb_folder, prefix, tag=roi_set['tag'])

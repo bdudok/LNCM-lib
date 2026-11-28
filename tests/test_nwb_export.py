@@ -17,7 +17,7 @@ from pynwb import NWBHDF5IO, validate
 
 from BaserowAPI.BaserowRequests import GetSessions
 from NWB_converter.ExportImagingSession import ExportImagingSession
-from NWB_converter.NWBExporter import NWBExporter
+from NWB_converter.NWBExporter import NWB_FORMAT_VERSION, NWBExporter
 from Proc2P.Analysis.LoadPolys import load_roi_file
 
 PREFIX = 'Dag47_2026-04-22_goal_128'
@@ -54,9 +54,7 @@ def session(db_entry, mouse):
     ExportImagingSession of the test data, with the raw data paths pointing to the test data folder,
     and the saved DB row and mice table result instead of DB requests
     '''
-    with open(LEAN_CONFIG, 'r') as f:
-        kwargs = yaml.safe_load(f)['session']['imaging_session_kwargs']
-    session = ExportImagingSession(str(PROCPATH) + os.sep, PREFIX, db_entry=db_entry, **kwargs)
+    session = ExportImagingSession(str(PROCPATH) + os.sep, PREFIX, db_entry=db_entry, tag='skip')
     # SessionInfo stores the absolute raw data paths of the machine that did the preprocessing
     session.si.info['dpath'] = str(RAWPATH)
     session.si.info['cam_file'] = str(RAWPATH / f'{PREFIX}.avi')
@@ -123,7 +121,8 @@ def test_notes(nwbfile, session, db_entry):
     assert notes['Export']['behavior_events']
     assert notes['SessionInfo']['framerate'] == session.si['framerate']
     assert notes['Baserow'] == json.loads(json.dumps(db_entry.to_dict(), default=str))
-    assert nwbfile.session_id == f'LNCM-{db_entry["id"]}-{PREFIX}'
+    assert nwbfile.session_id == PREFIX
+    assert notes['Export']['format_version'] == NWB_FORMAT_VERSION
 
 
 def test_frame_times(nwbfile, session):

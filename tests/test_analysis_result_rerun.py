@@ -62,11 +62,11 @@ def test_session_opens_processed_folder_and_logs(tmp_path, stub_sessions):
 
 def test_session_opens_nwb_file_by_session_id(tmp_path, stub_sessions):
     nwb = tmp_path / 'nwb'
-    write_nwb(nwb / 'sub-m1' / 'sub-m1_ses-LNCM-5-s-17_ophys.nwb', 'LNCM-5-s_17')
+    write_nwb(nwb / 'sub-m1' / 'sub-m1_ses-s-17_ophys.nwb', 's_17')
     write_nwb(nwb / 's_171.nwb', 's_171')
     res = AnalysisResult(tmp_path / 'project', 'Fig1', script=__file__, nwb_path=nwb)
     s = res.session('proc', 's_17', tag='R', spiketag='AE_2')
-    assert (s.path, s.kwargs) == (nwb / 'sub-m1', {'nwb_filename': 'sub-m1_ses-LNCM-5-s-17_ophys.nwb', 'tag': 'R'})
+    assert (s.path, s.kwargs) == (nwb / 'sub-m1', {'nwb_filename': 'sub-m1_ses-s-17_ophys.nwb', 'tag': 'R'})
     assert res.session('proc', 's_171').kwargs['nwb_filename'] == 's_171.nwb'
     with pytest.raises(FileNotFoundError):
         res.session('proc', 's_1')
@@ -114,7 +114,7 @@ def test_use_nwb_reruns_the_shared_result_next_to_it(tmp_path, stub_sessions):
     '''a reader adds use_nwb to the script in script/ of a shared result'''
     repo, shared, script = make_shared_repo(tmp_path)
     nwb = tmp_path / 'downloads'
-    write_nwb(nwb / 'sub-m1' / 'sub-m1_ses-s-17.nwb', 'LNCM-3-s_17')
+    write_nwb(nwb / 'sub-m1' / 'sub-m1_ses-s-17.nwb', 's_17')
     lab_folder = tmp_path / 'not_on_this_machine'
     res = AnalysisResult(lab_folder, 'Fig1', script=script, use_nwb=nwb)
     assert res.saved_folder() == shared

@@ -108,7 +108,7 @@ NWB_FILES = {}  # folder: {session ID: NWB file}, filled by find_nwb_file
 def find_nwb_file(folder, prefix):
     '''
     The NWB file of a session in folder or its subfolders, with the file names as exported or as renamed by dandi
-    organize. Files are matched by their session ID: the prefix, or <lab>-<id>-<prefix> (NWBExporter).
+    organize. Files are matched by their session ID, which is the prefix (NWBExporter).
     '''
     folder = Path(folder)
     if folder not in NWB_FILES:
@@ -117,7 +117,7 @@ def find_nwb_file(folder, prefix):
         for fn in folder.rglob('*.nwb'):
             with h5py.File(fn, 'r') as f:
                 NWB_FILES[folder][f['general/session_id'].asstr()[()]] = fn
-    matches = [fn for sid, fn in NWB_FILES[folder].items() if sid == prefix or sid.endswith(f'-{prefix}')]
+    matches = [fn for sid, fn in NWB_FILES[folder].items() if sid == prefix]
     if len(matches) != 1:
         raise FileNotFoundError(f'{len(matches)} NWB files of {prefix} in {folder}')
     return matches[0]

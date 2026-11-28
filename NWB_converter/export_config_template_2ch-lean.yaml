@@ -9,9 +9,6 @@ output:
 session:
   procpath: null             # null: look up Processed.Path in the DB
   use_db: true               # look up the session in the DB (for procpath and db_entry)
-  imaging_session_kwargs:    # passed to ImagingSession
-    tag: CellsRe             # there can be multiple tags exported, specify one here that we can use for exporting
-    lfp_ch: 1
 
 nwbfile:
   lab: LNCM
@@ -47,7 +44,6 @@ imaging:
       indicator: GCaMP8m
 
 lfp:
-  channels: null             # LFP channel numbers to export (rows of _ephys.npy, from 1, as lfp_ch); null: all
   location: CA1 (contralateral)
   description: LFP recording
   device_name: A-M Systems Model 300
