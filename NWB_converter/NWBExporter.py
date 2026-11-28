@@ -17,8 +17,9 @@ from pynwb.image import ImageSeries, RGBImage, Images
 from pynwb.ophys import Fluorescence, ImageSegmentation, OpticalChannel, TwoPhotonSeries
 
 from BaserowAPI.BaserowRequests import GetSessions
+from envs.site_config import CONFIG
 from NWB_converter.DandiUpload import write_upload_file
-from NWB_converter.ExportImagingSession import ExportImagingSession
+from NWB_converter.ExportImagingSession import MIN_LAPS_FOR_POSITION, ExportImagingSession
 from Proc2P.Bruker.LoadRegistered import Source
 
 '''
@@ -410,7 +411,9 @@ class NWBExporter:
         self.check_length(position, 'position')
         self.get_behavioral_time_series().create_timeseries(
             name='position',
-            description='Position of animal on the belt, relative to lap length',
+            description=f'Position of the animal on the belt, in laps: the position within the lap (0-1) in sessions '
+                        f'with at least {MIN_LAPS_FOR_POSITION} laps; otherwise the distance run since the first frame '
+                        f'divided by {CONFIG.default_lap_length:g} cm',
             data=position,
             unit='lap',
             timestamps=self.frame_times,

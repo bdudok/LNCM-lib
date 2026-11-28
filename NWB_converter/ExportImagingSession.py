@@ -6,11 +6,11 @@ import numpy
 import pandas
 
 from BaserowAPI.BaserowRequests import GetSessions
+from envs.site_config import CONFIG
 from Proc2P.Analysis.ImagingSession import ImagingSession
 from Proc2P.Analysis.LoadPolys import load_roi_file
 from Proc2P.Analysis.PullSignals import pull_signals
 from Proc2P.Analysis.CaTrace import CaTrace
-from Proc2P.Analysis.AnalysisClasses.Spatial import Spatial
 from Proc2P.Bruker.LoadEphys import Ephys
 from Proc2P.Analysis.Ripples import ripple_folder
 
@@ -31,6 +31,8 @@ LFP_TABLES = (
 )
 # detection settings saved next to the LFP tables, stored in the notes json
 LFP_SETTINGS_FILES = ('_Ch{n}_SpikeSzDet.json',)
+# export_position: fewer laps than this give the distance run in default lap lengths instead of the position in the lap
+MIN_LAPS_FOR_POSITION = 3
 # lfp.event_tags in the export config: the spike tag whose LFP tables were saved last
 LATEST_TAG = 'latest'
 
@@ -203,15 +205,21 @@ class ExportImagingSession(ImagingSession):
 
     def export_position(self):
         '''
-        Absolute position of the animal on the belt, relative to lap length
+        Position of the animal on the belt, in laps. With at least MIN_LAPS_FOR_POSITION laps, the position within the
+        lap (0-1, pos.relpos). With fewer (the mouse did not pass the lap tag often enough to know the lap), the distance
+        run since the first frame (cm) divided by default_lap_length of the site config, starting from 0.
+        NaN where the position is not known; all NaN if the session has no treadmill position.
         :return: 1D float numpy array, length n_frames
         '''
-        if self.has_behavior:
-            s = Spatial()
-            s.init_session(self)
-            s.set_pos()
-            return s.pos
-        raise NotImplementedError('export_position')
+        pos = self.ca.sync.load('pos')  # None without treadmill data (map_pos then fills pos.pos with zeros)
+        if pos is None or numpy.isnan(pos).all():
+            return numpy.full(self.ca.frames, numpy.nan)
+        laps = self.pos.laps
+        n_laps = 0 if laps is None or numpy.isnan(laps).all() else numpy.nanmax(laps)
+        if n_laps >= MIN_LAPS_FOR_POSITION:
+            return numpy.asarray(self.pos.relpos, dtype='float64')
+        pos = numpy.asarray(pos, dtype='float64')
+        return (pos - pos[numpy.isfinite(pos)][0]) / CONFIG.default_lap_length
 
     def export_lfp(self, channels=None):
         '''

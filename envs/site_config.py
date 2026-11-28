@@ -24,6 +24,7 @@ class SiteConfig:
     uv_env_dir: str #envs/update_env.bat builds each user's lncm env in <uv_env_dir>/<username>/lncm
     job_queue: dict #job queue manager: api_port (localhost), dashboard_port (lab network), data_dir (manager's database), server (host name of the shared manager; other computers start a local one)
     use_baserow: bool = False #False: code that can run without Baserow skips it silently (job queue Task updates, animal info of AnalysisResult)
+    default_lap_length: float = 200.0 #cm, belt length for the NWB export position of sessions with fewer than 3 laps
 
 def _load_config(fname) -> SiteConfig:
     this_package = Path(__file__).resolve().parent
