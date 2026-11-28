@@ -445,7 +445,7 @@ class ImagingSession(object):
             self.spiketime_channels.append(i + 1)
             if os.path.exists(fname):
                 stdat = read_excel(fname)
-                self.spiketimes.append(self.ephys.edat[0, (stdat[stfield].values * fs).astype('int64')])
+                self.spiketimes.append(self.ephys.frames[(stdat[stfield].values * fs).astype('int64')])
             else:
                 self.spiketimes.append(numpy.array([]))
 
@@ -475,7 +475,7 @@ class ImagingSession(object):
                     stdat = read_excel(fname)
                     if do_filter:
                         stdat = stdat.loc[~stdat['Included'].eq(False)]
-                    sztimes = [self.ephys.edat[0, (stdat[x].values * fs).astype('int64')] for x in stfield] #start and stop
+                    sztimes = [self.ephys.frames[(stdat[x].values * fs).astype('int64')] for x in stfield] #start and stop
                     self.sztimes.append(sztimes)
                 else:
                     self.sztimes.append([[], []])
